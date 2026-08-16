@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Статус** | Draft v2 (замещает v1 «goWidgets») |
-| **Репозиторий** | `goWidgets`; модуль и импорт-путь — `.../goWidgets` (см. ADR-0001) |
+| **Репозиторий** | `goWidgets`; модуль и импорт-путь — `.../goWidgets` |
 | **Аудитория** | LLM-исполнители (в т.ч. без доступа к сети) + ревьюер-человек |
 | **Методология** | RUP, итеративно, риск-ориентированно (сначала — самый рискованный слой) |
 
@@ -369,12 +369,11 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 
 ### Фаза 0. Inception: каркас, CI и разведка рисков
 * Репозиторий, модуль, `.golangci.yml` с правилами слоёв, CI-матрица (win/mac/linux/wasm).
-* **Спайк-проверки** (по 50–100 строк, результат — ADR): Ebiten без CGO на каждой ОС;
-  версия GTK у `puregotk`; `objc_msgSend` через `purego` — создать `NSWindow` и закрыть;
-  лимиты `windows.NewCallback`; статус и лицензия `kiwi-go`.
+* **Спайк-проверки** (по 50–100 строк, результат — ADR): `objc_msgSend` через `purego` —
+  создать `NSWindow` и закрыть; лимиты `windows.NewCallback`.
 * **`backends/headless`** — эталонный драйвер: детерминированные `MeasureIntrinsic`,
   запись всех `ApplyLayout` в лог для golden-тестов.
-* **DoD:** CI зелёный на 4 платформах; ADR-0002 подтверждает или корректирует «no CGO».
+* **DoD:** CI зелёный на 4 платформах.
 
 ### Фаза 1. Reactive Core
 * `vreactive`: `Property`, `Event`, `Scope`, `Batch`, `Bind`, `Computed`, защита от циклов.
