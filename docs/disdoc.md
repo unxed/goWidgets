@@ -1,226 +1,493 @@
-# goWidgets
+# Design Document: `goWidgets` (Cross-Platform Go Native UI) — v2
 
-Этот дизайн-документ (Design Document) составлен специально как исчерпывающее техническое задание. Он структурирован так, чтобы даже базовая LLM без доступа к интернету могла шаг за шагом реализовывать архитектуру, не сбиваясь с курса.
+| | |
+|---|---|
+| **Статус** | Draft v2 (замещает v1 «goWidgets») |
+| **Репозиторий** | `goWidgets`; модуль и импорт-путь — `.../goWidgets` (см. ADR-0001) |
+| **Аудитория** | LLM-исполнители (в т.ч. без доступа к сети) + ревьюер-человек |
+| **Методология** | RUP, итеративно, риск-ориентированно (сначала — самый рискованный слой) |
 
-Документ строго следует **итеративной методологии RUP (Rational Unified Process)**: мы не пишем весь фреймворк целиком, а развиваем его через вертикальные срезы (от Inception до Transition).
-
----
-
-# Design Document: `goWidgets` (Cross-Platform Go Native UI)
-
-## 1. Концепция и Позиционирование
-**`goWidgets`** — это кроссплатформенная GUI-библиотека для Go.
-**Главная цель:** дать Go-разработчикам инструмент для создания десктопных и веб-приложений без боли с `CGO` и зависимостями, сохраняя нативный опыт и высокую производительность на ключевых платформах.
-
-### 1.1. Вдохновение и интеграция с QML / `vtui`
-Мы вдохновляемся сильными сторонами QML: реактивные свойства (`Property[T]`), автоматические биндинги (`Bind`/`Computed`), декларативные анимации (`Behavior`) и состояния (`StateMachine`).
-Публичный API `goWidgets` проектируется максимально близким к TUI-библиотеке `vtui`. Один и тот же декларативный код UI должен с минимальными изменениями работать в терминале (`vtui`), на десктопе (`goWidgets` Win32/GTK/Cocoa) и в браузере (`goWidgets` Web).
-
-### 1.2. Базовые принципы (Строгие правила для ИИ)
-1. **Никакого `CGO` (`CGO_ENABLED=0`).** Это абсолютное правило. Весь FFI реализуется через `syscall` (Windows, Web/WASM) или `purego` (macOS, Linux/GTK). Библиотека `qt.go` **исключается** из проекта.
-2. **Публичный API скрывает платформу и построен на реактивных свойствах.** Пользователь работает с `goWidgets.Button`, у которой свойства (`Text`, `Enabled`, `Width`, `Height`) являются реактивными объектами (`vreactive.Property[T]`).
-3. **Единый Layout-движок.** Платформенные менеджеры компоновки (Sizers в GTK, AutoLayout в Cocoa) **не используются**. Ядро `goWidgets` само считает координаты через решатель Cassowary (библиотека `kiwi-go`) и передает бэкенду готовые абсолютные координаты `(X, Y, Width, Height)`.
-4. **Приоритет нативных контролов.** На всех платформах (Win32, GTK, Cocoa, Web/DOM) используются родные системные элементы управления.
-5. **Canvas / Ebiten — равноправная опция.** Используется как fallback, для создания графических canvas-виджетов и в ситуациях, когда нативные контролы недоступны.
-6. **Реактивность и анимации — часть Core.** Все биндинги, цепочки пересчётов и контроллеры анимаций живут в ядре (`vreactive` / Core), а бэкенды получают уже готовые высчитанные значения.
-7. **Итеративность (Showcase-driven).** Мы пишем только те виджеты и функции, которые нужны для работы целевого приложения-демонстратора (клона FastStone Image Viewer).
+> **Как читать этот документ.** Разделы 3–7 — **нормативные контракты**. LLM не имеет права
+> их менять; при конфликте задачи и контракта — задача останавливается и фиксируется в
+> «Открытых вопросах» (§12). Разделы 8–9 — процесс. Раздел 11 — реестр рисков.
 
 ---
 
-## 2. Архитектура (Уровни системы)
+## 0. Глоссарий, условия, журнал решений
 
-Система делится на 3 строгих слоя + общий реактивный пакет. LLM не должна допускать протекания абстракций между ними.
+**Глоссарий (обязателен к единообразному использованию):**
 
-### Реактивный пакет: `vreactive`
-Вынесен в отдельный пакет и используется совместно `goWidgets` и `vtui`:
-* **`Property[T]`:** Реактивное свойство с подписками и уведомлением об изменениях.
-* **`Bind` / `Computed`:** Автоматический пересчёт зависимостей.
-* **`Behavior`:** Перехват изменения свойства с запуском анимации (интерполяции).
-* **`StateMachine`:** Декларативные состояния виджета и правила переходов.
-* **`Animator`:** Интерфейс анимаций (дискретный для TUI, плавный для GUI/Web).
+* **Node** — внутреннее представление виджета в Core (не путать с публичным `Widget`).
+* **Handle** — непрозрачный `uint64`-идентификатор Node, общий язык Core↔Backend.
+* **DIP** — device-independent pixel (логическая единица, `float64`). Все координаты в
+  Core — в DIP. Перевод в физические пиксели — **только в бэкенде**.
+* **Intrinsic size** — «естественный» размер виджета, который умеет посчитать **только**
+  платформа (метрики шрифта, паддинги темы).
+* **Frame** — один проход конвейера §6.
+* **Driver** — реализация `PlatformDriver` (win32 / gtk / cocoa / web / ebiten / headless).
 
-### Уровень 1: Frontend (Public API)
-Декларативный/компонентный интерфейс, унифицированный с `vtui`. Ничего не знает о бэкендах, FFI или `syscall`.
-* **Сущности:** `App`, `Window`, виджеты (`Button`, `Label`, `TextInput`, `CheckBox`, `Splitter`, `TreeView`, `GridView`, `Canvas`).
-* **Layout:** Пользователь задает констрейнты и контейнеры (`VBox`, `HBox`, `Anchor`, `AutoLayout`), транслируемые в Cassowary.
-* **События:** Гибридный подход — колбэки (`OnClick`) + команды.
+**Изначально заданные условия:**
 
-### Уровень 2: Core (Диспетчер, Реактивность и Вычислитель)
-Скрыт от пользователя. Связывает Frontend и Backend.
-* **Layout Solver:** Интеграция алгоритма Cassowary (`github.com/unxed/kiwi-go`). При изменении свойств окна или виджетов решает систему уравнений, отдает плоские координаты.
-* **Animation Engine & Behavior Manager:** Управляет тиками анимаций, вычисляет промежуточные значения `Behavior` и обновляет реактивные свойства.
-* **Event Router:** Транслирует платформенные события в абстрактные (`goWidgets.MouseClick`, `goWidgets.KeyPress`).
-* **App Context:** Управляет Event Loop, гарантирует thread-safety и потокобезопасные обновления UI через Main Thread (`QueueUpdate`).
+* `CGO_ENABLED=0` как жёсткий инвариант. Внешние библиотеки - только через ffi.
+* Cassowary вместо нативных layout-менеджеров.
+* единицы измерения — DIP `float64`, DPI-скейлинг в бэкенде.
 
-### Уровень 3: Backends (Драйверы платформ)
-Слой реализации `PlatformDriver`. Каждая кнопка или окно в Frontend имеет своего двойника в Backend.
-* **Win32 Driver (`syscall`):** Для Windows. Нативные HWND контролы (`BUTTON`, `EDIT`, `SysTreeView32`).
-* **GTK Driver (`puregotk`):** Для Linux. Динамическая загрузка `libgtk-3.so` через `purego`.
-* **Cocoa Driver (`purego`):** Для macOS. Взаимодействие с `libobjc.dylib` через `objc_msgSend`.
-* **Web Driver (`syscall/js`):** Для Web/WASM. Создаёт нативные DOM-элементы (`<button>`, `<input>`, etc.). Core передаёт абсолютные координаты, бэкенд выставляет CSS-стили (`position: absolute; left: ...; top: ...; width: ...; height: ...`).
-* **Ebiten / Custom Renderer:** Отрисовка с нуля. Fallback-драйвер и бэкенд для графического `Canvas`.
+**ADR-лог (Architecture Decision Records).** Каждое архитектурное решение фиксируется файлом
+`docs/adr/NNNN-title.md` (контекст → решение → последствия → альтернативы).
 
 ---
 
-## 3. Интерфейсы ядра (Contract API для LLM)
+## 1. Концепция, цели и границы
 
-ИИ должен опираться на эти интерфейсы при проектировании слоев.
+**`goWidgets`** — кроссплатформенная GUI-библиотека для Go: десктоп и веб без `CGO`, с нативными
+контролами и реактивным QML-подобным API, унифицированным с TUI-библиотекой [vtui](https://github.com/unxed/vtui).
+
+### 1.1. Цели (что считаем успехом)
+
+1. Один и тот же декларативный UI-код работает в терминале (`vtui`), на Win32/GTK/Cocoa и в
+   браузере (WASM) — **без `//go:build`-веток в пользовательском коде**.
+2. Сборка `CGO_ENABLED=0` для всех целевых платформ.
+3. Реактивность (`Property`, `Bind`, `Computed`, `Behavior`, `StateMachine`) — в ядре.
+
+### 1.2. Non-goals (явно вне скоупа v1.0)
+
+Чтобы LLM не расползалась: в рамках этого документа **не делаем** мобильные платформы (Android/iOS),
+3D, встроенный HTML-рендер, темизацию «как в Qt Style Sheets», i18n/RTL-раскладку, плагинную систему,
+собственный векторный текстовый движок. Доступность (a11y) — минимальный уровень (§4.6),
+не полный.
+
+### 1.3. Нефункциональные требования (измеримые — иначе не проверить)
+
+| NFR | Целевое значение | Как измеряем |
+|---|---|---|
+| Cold start (пустое окно) | < 150 мс на desktop | `bench/startup` |
+| Размер бинаря showcase | < 25 МБ (desktop), < 8 МБ gzip (WASM) | CI-артефакт |
+| Пересчёт layout, 500 узлов | < 4 мс (p95) | `bench/layout` |
+| Простой UI (нет событий) | 0% CPU, 0 перерисовок | `bench/idle` |
+| Утечки подписок | 0 после уничтожения окна | `TestNoLeakedSubscriptions` |
+
+> **Правило:** любая фаза, ухудшающая NFR более чем на 20%, не закрывается.
+
+---
+
+## 2. Базовые принципы (строгие правила для ИИ)
+
+1. **Никакого `CGO`.** Весь FFI — `syscall`/`golang.org/x/sys/windows` (Windows),
+   `syscall/js` (Web), `purego` (macOS, Linux/GTK). `qt.go` исключён.
+2. **Публичный API скрывает платформу** и построен на `vreactive.Property[T]`.
+3. **Единый layout-движок.** Нативные sizers/AutoLayout не используются; Core решает
+   Cassowary и отдаёт абсолютные прямоугольники. **Но** — Core обязан спрашивать у бэкенда
+   intrinsic-размеры (§5.1), иначе текстовые виджеты нельзя разместить корректно.
+4. **Приоритет нативных контролов** там, где это не ломает контракт абсолютного позиционирования.
+5. **Canvas / Ebiten — равноправная опция** (fallback + графические виджеты).
+6. **Реактивность и анимации — в Core**; бэкенды получают готовые значения.
+7. **Итеративность (showcase-driven):** пишем только то, что нужно клону FastStone Image Viewer.
+8. **Ничего не изобретаем молча.** Любое отклонение от контрактов §4 — сначала ADR.
+
+---
+
+## 3. Архитектура
+
+Три слоя + два общих пакета. Протечки абстракций запрещены; проверяются линтером
+`depguard` (правила в `.golangci.yml`) — **архитектура должна быть исполняемой**.
+
+```
+   goWidgets (Public API, Уровень 1)      ← пользователь видит только это
+        │  Widget-дерево, декларативные констрейнты, Property
+   core (Уровень 2)                  ← Node-граф, Solver, Animator, EventRouter, Scheduler
+        │  Handle + Rect (DIP), батч-команды
+   backends/* (Уровень 3)            ← win32 | gtk | cocoa | web | ebiten | headless
+```
+
+Общие пакеты: **`vreactive`** (реактивность, разделяется с `vtui`) и **`vcontract`**
+(конформанс-тесты и общий словарь виджетов `vtui`↔`goWidgets`).
+
+### 3.1. `vreactive`
+
+* `Property[T]` — значение + подписки + батчинг.
+* `Bind` / `Computed` — производные значения с **явным** объявлением зависимостей
+  (авто-трекинг зависимостей запрещён в v1: слабая LLM его не отладит).
+* `Behavior[T]` — перехват изменения свойства и запуск интерполяции.
+* `StateMachine` — декларативные состояния и переходы.
+* `Animator` — интерфейс анимации (дискретный для TUI, плавный для GUI/Web).
+* `Event[T]` — мультикаст-сигнал c unsubscribe (заменяет одиночный `OnClick func()`).
+* `Scope` — владелец подписок; `scope.Close()` отписывает всё разом (борьба с утечками).
+
+### 3.2. Core
+
+* **Node Registry** — `Handle → Node`, дерево, порядок детей, z-order, жизненный цикл.
+* **Layout Solver** — Cassowary (`kiwi-go`), инкрементальный (edit-переменные), §5.
+* **Animation Engine** — тики, интерполяция, объединение с батчем свойств.
+* **Event Router** — платформенные события → абстрактные; фокус, tab-order, hit-test.
+* **Scheduler / App Context** — event loop, main-thread affinity, `QueueUpdate`, §6.
+
+### 3.3. Backends
+
+Каждый драйвер реализует `PlatformDriver` + `Capabilities()`. Обязательный минимум для
+всех: создание окна, создание/уничтожение виджета, `SetBounds`, `MeasureIntrinsic`,
+доставка событий. Остальное — опционально и объявляется через capability-флаги.
+
+**Порядок выбора драйвера** (детерминированный, тестируемый):
+
+1. `goWidgets_BACKEND=<name>` — жёсткий выбор; при неудаче **ошибка**, а не тихий fallback.
+2. Иначе — платформенный дефолт (windows→win32, darwin→cocoa, js→web, linux→gtk).
+3. При ошибке инициализации — `ebiten`, затем `headless` (в CI).
+4. Каждый шаг логируется в `goWidgets.Diagnostics()` — пользователь должен уметь ответить
+   на вопрос «почему у меня не нативный вид».
+
+---
+
+## 4. Контракты API (нормативно)
+
+### 4.1. Единицы измерения и DPI
 
 ```go
-// --- REACTIVE LAYER (vreactive) ---
+type Point struct{ X, Y float64 }   // DIP
+type Size  struct{ W, H float64 }   // DIP
+type Rect  struct{ X, Y, W, H float64 }
+type Insets struct{ L, T, R, B float64 }
 
+// Масштаб окна. Меняется при переносе окна между мониторами.
+type ScaleInfo struct {
+    Scale     float64 // 1.0, 1.5, 2.0 ...
+    FontScale float64 // системное укрупнение шрифта
+}
+```
+
+> В v1 `Rect` был `int` без DPI — это ломало Retina, per-monitor DPI на Windows и
+> `devicePixelRatio` в вебе. Округление до физических пикселей делает **бэкенд**.
+
+### 4.2. Реактивный слой
+
+```go
 type Property[T any] interface {
     Get() T
-    Set(val T)
-    OnChange(handler func(newVal T)) func() // возвращает unsubscribe
+    Set(v T)
+    Update(f func(T) T)                       // атомарное чтение-модификация
+    OnChange(s *Scope, h func(new, old T))    // подписка живёт в Scope
 }
 
-// --- PUBLIC API (Уровень 1) ---
+type Event[T any] interface {
+    Emit(v T)
+    On(s *Scope, h func(T))
+}
 
+// Батч: подписчики уведомляются один раз, после Commit — нет «глитчей».
+func Batch(f func())
+```
+
+**Инварианты `vreactive`:**
+* `Set` вне main-thread — паника в debug-сборке (`-tags goWidgets_debug`), см. §4.5.
+* Уведомления — после завершения батча, в топологическом порядке зависимостей.
+* Глубина каскада ограничена (`MaxPropagationDepth = 64`) → ошибка, а не зависание.
+* Повторный `Set` тем же значением (`==`-сравнимые типы) не порождает уведомления.
+
+### 4.3. Публичный API
+
+```go
 type Widget interface {
-    SetID(id string)
     ID() string
-    SetConstraints(c ...Constraint)
+    SetID(string)
+    Constraints() []Constraint
+    SetConstraints(...Constraint)
+    Children() []Widget
+    Scope() *vreactive.Scope
 }
 
 type Button struct {
-    IDVal   string
-    Text    vreactive.Property[string]
-    Width   vreactive.Property[float64]
-    Height  vreactive.Property[float64]
-    Enabled vreactive.Property[bool]
-    OnClick func()
+    Text    Property[string]
+    Enabled Property[bool]
+    Visible Property[bool]
+    Clicked Event[ClickInfo]   // вместо OnClick func()
 }
 
 type Window interface {
     Widget
-    Title   vreactive.Property[string]
-    Content vreactive.Property[Widget]
+    Title   Property[string]
+    Content Property[Widget]
+    Scale   Property[ScaleInfo] // read-only для пользователя
     Show()
+    Close()
+    Closing Event[*CloseRequest] // возможность отменить закрытие
 }
 
 type App interface {
-    Run(mainWindow Window) error
-    QueueUpdate(f func()) // Безопасное обновление UI из горутин
-}
-
-
-// --- BACKEND API (Уровень 3 - Скрыто от пользователя) ---
-
-type PlatformDriver interface {
-    Init() error
-    RunMainLoop() error
-    CreateWindow(title string, width, height int) (BackendWindow, error)
-}
-
-type BackendWindow interface {
-    SetTitle(title string)
-    Show()
-    // Метод, через который Core передает готовые координаты
-    UpdateLayout(rects map[string]Rect)
-}
-
-type Rect struct { X, Y, W, H int }
-
-// BackendWidget — обертка над HWND, GtkWidget*, NSView* или DOM HTMLElement
-type BackendWidget interface {
-    SetBounds(r Rect)
-    SetVisible(v bool)
+    Run(main Window) error
+    QueueUpdate(f func())              // из любой горутины
+    Post(d time.Duration, f func()) Cancel
+    Diagnostics() DriverInfo
 }
 ```
 
----
+### 4.4. Backend API (скрыт от пользователя)
 
-## 4. План реализации: Итерации RUP
+```go
+type Handle uint64
 
-Работу с LLM нужно выстраивать **строго по этим фазам**. Запрещается переходить к следующей итерации, пока не закрыта текущая.
+type PlatformDriver interface {
+    Init() error
+    Capabilities() Caps
+    RunMainLoop(ctx context.Context) error
+    CreateWindow(spec WindowSpec) (BackendWindow, error)
+    Shutdown()
+}
 
-### Фаза 1: Inception & Reactive Core (`vreactive`)
-**Цель:** Создать базовый реактивный слой и доказать жизнеспособность связки "Реактивное свойство -> Core -> Драйвер".
-* **Задача 1:** Выделить и реализовать пакет `vreactive` (`Property[T]`, `Bind`, базовые подписки).
-* **Задача 2:** Создать скелет проекта (`core`, `goWidgets`, `backends/ebiten`).
-* **Задача 3:** Реализовать `goWidgets.Button` с реактивными свойствами `Text`, `Width`, `Height`, `Enabled`.
-* **Задача 4:** Написать Ebiten-бэкенд для первого виджета и проверить отклик на клик и изменение `Text.Set(...)`.
-* **Результат:** Приложение "Hello World", открывающее окно Ebiten с реактивной кнопкой.
+type BackendWindow interface {
+    SetTitle(string)
+    Show(); Close()
+    Scale() ScaleInfo
 
-### Фаза 2: Elaboration 1 (GTK Backend и FFI)
-**Цель:** Проверить работу реактивных свойств на нативном тулките Linux.
-* **Задача 1:** Добавить `backends/gtk` с использованием `puregotk`.
-* **Задача 2:** Настроить автовыбор бэкенда на Linux (GTK -> при ошибке fallback на Ebiten).
-* **Задача 3:** Реализовать `goWidgets.Button` через `puregotk`, связав реактивные свойства `Property[T]` с нативными свойствами `GtkButton`.
-* **Результат:** Тот же `main.go` компилируется и запускается на GTK без изменения кода UI.
+    // Жизненный цикл виджетов — в v1 этого не было вовсе.
+    CreateWidget(kind WidgetKind, parent Handle) (Handle, error)
+    DestroyWidget(h Handle)
+    SetParent(child, parent Handle, index int)
 
-### Фаза 3: Elaboration 2 (Layout & Animation Engine)
-**Цель:** Внедрить решатель констрейнтов Cassowary и систему анимаций `Behavior`.
-* **Задача 1:** Интегрировать `kiwi-go` (Cassowary solver) в Core.
-* **Задача 2:** Реализовать `VBox`, `HBox` и `Anchor`. При изменении размеров или свойств виджета Core автоматически пересчитывает координаты.
-* **Задача 3:** Реализовать `Behavior[T]` и `Animator` в Core для плавного/дискретного изменения свойств (ширина, цвет, прозрачность).
-* **Задача 4:** Изменить логику бэкендов: при обновлении `UpdateLayout` все `BackendWidget` получают `SetBounds(x, y, w, h)`. GTK использует `GtkFixed`.
-* **Результат:** Окно с 3 реактивными кнопками, меняющими размер и положение с анимациями при растягивании окна и кликах.
+    // Свойства: типизированный, но узкий канал (без reflect).
+    SetString(h Handle, p PropKey, v string)
+    SetBool(h Handle, p PropKey, v bool)
+    SetFloat(h Handle, p PropKey, v float64)
 
-### Фаза 4: Construction 1 (Windows MVP)
-**Цель:** Нативный опыт на Windows без CGO.
-* **Задача 1:** Написать `backends/win32` (пакет `golang.org/x/sys/windows`).
-* **Задача 2:** Регистрация `WNDCLASSEX`, цикл `GetMessage`/`DispatchMessage`.
-* **Задача 3:** Обернуть системные классы `BUTTON`, реагировать на `WM_COMMAND`. Интегрировать `MoveWindow` под управление Cassowary solver.
-* **Результат:** Приложение работает нативно на Windows (`CGO_ENABLED=0`).
+    // Измерение: единственный источник правды о «естественном» размере.
+    MeasureIntrinsic(h Handle, avail Size) (min, natural Size)
 
-### Фаза 5: Construction 2 (Базовые элементы и StateMachine)
-**Цель:** Виджеты для диалога настроек и поддержка декларативных состояний.
-* **Задача 1:** Добавить виджеты: `Label`, `TextInput`, `CheckBox`, `Splitter` (сплиттер генерирует новые констрейнты при перетаскивании).
-* **Задача 2:** Реализовать `StateMachine` в `vreactive` для описания состояний UI (Active/Inactive, Expanded/Collapsed).
-* **Задача 3:** Реализовать новые виджеты для GTK, Win32 и Ebiten.
-* **Результат:** "Окно настроек" с реактивными чекбоксами, инпутами и состояниями на 3 бэкендах.
+    // Применение layout — батчем и только для изменившихся узлов.
+    ApplyLayout(changes []BoundsChange)
 
-### Фаза 6: Construction 3 (Тяжелые виджеты)
-**Цель:** Каркас FastStone (Дерево, Грид, Канвас).
-* **Задача 1:** `TreeView` (Win32: `SysTreeView32`, GTK: `GtkTreeView`).
-* **Задача 2:** `GridView` / `IconView` (для отображения миниатюр).
-* **Задача 3:** `Canvas` — виджет для прямой отрисовки пикселей/картинок (Win32: `BitBlt`/GDI+, GTK: `cairo_paint`, Ebiten).
-* **Результат:** Готовый UI-каркас: слева дерево каталогов, справа иконки, внизу превью.
+    Events() <-chan BackendEvent
+}
 
-### Фаза 7: Construction 4 (macOS Cocoa)
-**Цель:** Нативный бэкенд для macOS.
-* **Задача 1:** Написать `backends/cocoa` через `purego` и `objc_msgSend`.
-* **Задача 2:** Инициализация `NSApplication`, `NSWindow`, `NSButton`.
-* **Задача 3:** Отключить AutoLayout (`setTranslatesAutoresizingMaskIntoConstraints:NO`) и двигать контролы через `setFrame:` согласно Cassowary solver.
-* **Результат:** Нативная работа на macOS без CGO.
+type BoundsChange struct { H Handle; R Rect; Visible bool }
 
-### Фаза 8: Construction 5 (Web Backend / WASM)
-**Цель:** Выход в браузер с сохранением нативной модели.
-* **Задача 1:** Написать `backends/web` через `syscall/js`.
-* **Задача 2:** Маппинг виджетов `goWidgets` на нативные DOM-элементы (`<button>`, `<input>`, `<select>`).
-* **Задача 3:** Применение координат из Core через CSS-стили (`position: absolute`).
-* **Задача 4:** Опциональная отрисовка через Canvas/Ebiten WebGL.
-* **Результат:** Тот же самый UI работает в браузере под WASM.
+type Caps struct {
+    NativeControls bool
+    TreeView, GridView, FileDialog, Menus, Clipboard, IME, A11y bool
+    SmoothAnimation bool
+    MaxCallbacks   int
+}
+```
 
-### Фаза 9: Transition (Полировка Showcase и Унификация)
-**Цель:** Релиз-кандидат и финальная унификация с `vtui`.
-* **Задача 1:** Сборка showcase-приложения (клон FastStone Lite). Полноценная работа с файловой системой через `Canvas` и `TreeView`.
-* **Задача 2:** Реализация механизма "Авто-fallback на Linux" (GTK -> Диалог установки / Fallback на Ebiten).
-* **Задача 3:** Финальная сверка API виджетов и реактивного слоя между `vtui` и `goWidgets`.
-* **Результат:** Проект полностью кроссплатформенный (Win, Mac, Lin, Web, Terminal) с единым QML-подобным реактивным API.
+> Ключевые исправления против v1: появились `CreateWidget`/`DestroyWidget`,
+> `MeasureIntrinsic`, `Caps`; `UpdateLayout(map[string]Rect)` заменён на батч-диф по
+> `Handle` (строковые ID хрупки и требуют уникальности во всём приложении).
+
+### 4.5. Потоковая модель (в v1 отсутствовала — источник 90% будущих багов)
+
+1. Main goroutine пинится `runtime.LockOSThread()` до `Init()` — обязательно для Cocoa и Win32.
+2. **Весь** доступ к `Property` и виджетам — только из main-thread.
+3. Горутины взаимодействуют через `App.QueueUpdate`. Очередь — неблокирующая, с бэкпрешером.
+4. WASM однопоточен: `QueueUpdate` = микротаск; блокирующие вызовы запрещены.
+5. Debug-сборка проверяет affinity и падает с понятным сообщением.
+
+### 4.6. Ввод, фокус и минимальная доступность
+
+Обязательный минимум v1: клавиатурный фокус и tab-order (Core, не платформа), Enter/Escape
+как default/cancel, hit-test с учётом z-order, колесо мыши/скролл, буфер обмена (текст),
+системные диалоги открытия файла (нужны showcase). IME и полноценный a11y — за
+capability-флагом, допускается «не поддерживается» в v1.
 
 ---
 
-## 5. Инструкции по промптингу для слабых моделей
+## 5. Layout: контракт вычислений
 
-Когда вы будете давать задачи модели без доступа к сети, используйте следующий формат:
+### 5.1. Двухфазность (measure → solve)
 
-1. **Контекст фазы:** "Мы сейчас находимся в *Фазе 4: Construction 1*. Наш фокус — только Windows Win32 API. Не используй CGO. Используй `golang.org/x/sys/windows`."
-2. **Изоляция:** "Не пытайся сейчас реализовать macOS или GTK. Твоя задача реализовать только файл `backend_windows.go` интерфейса `PlatformDriver`."
-3. **Ограничение скоупа:** "Не пиши сразу всю систему окон. Напиши только функцию `RegisterClassEx` и `CreateWindowEx` для главного окна."
-4. **Контроль архитектуры:** "Помни про Cassowary и `vreactive`. Win32-код не должен сам вычислять размеры или хранить бизнес-логику. Он должен подписываться на изменение `vreactive.Property` и вызывать `MoveWindow` при обновлении `Rect`."
+Cassowary не знает, сколько места занимает надпись «Отмена» шрифтом системной темы при
+150% DPI. Поэтому цикл строго двухфазный:
+
+1. **Measure.** Для узлов с флагом `DirtyMeasure` Core вызывает `MeasureIntrinsic` и
+   кэширует `(min, natural)`. Кэш инвалидируется при смене текста, шрифта, темы, DPI.
+2. **Solve.** `min`/`natural` входят в систему как констрейнты:
+   `w >= min.W` (required), `w == natural.W` (strength: weak).
+3. **Apply.** Диф прямоугольников → `ApplyLayout`.
+
+### 5.2. Инкрементальность и производительность
+
+* Размеры окна и анимируемые величины подаются через **edit-переменные** (`suggestValue`),
+  без пересборки системы уравнений.
+* Анимация свойства, не влияющего на геометрию (цвет, прозрачность), **не запускает** solve.
+* Поддеревья с фиксированной геометрией кэшируются (`LayoutBoundary`).
+
+### 5.3. Конфликты констрейнтов
+
+Иерархия strength: `required > strong > medium > weak`. Пользовательские констрейнты по
+умолчанию `strong`, естественные размеры — `weak`. При неразрешимой системе:
+в debug — паника с текстовым дампом конфликтующего набора; в release — конфликтующий
+констрейнт отбрасывается, событие уходит в `Diagnostics()`. **Молчаливое зависание запрещено.**
+
+### 5.4. Скролл и клиппинг
+
+Абсолютное позиционирование + нативные контролы плохо дружат с прокруткой. Решение:
+`ScrollArea` — узел-граница layout (`LayoutBoundary`), внутри которого координаты
+считаются относительно контента, а бэкенд применяет клиппинг (Win32: child-окно;
+GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: translate`).
+Виртуализация (только видимые элементы) обязательна для `GridView` миниатюр.
 
 ---
 
-## 6. Риски и их локализация (Для ИИ)
+## 6. Конвейер кадра (нормативный порядок)
 
-* **Риск:** Циклические зависимости в реактивных подписках `vreactive.Property`.
-* **Решение:** `vreactive` должен содержать защиту от зацикливания при уведомлениях (guard flag / evaluation depth limit).
-* **Риск:** Ebiten (игровой движок) сожрет батарею на перерисовках.
-* **Решение:** Ebiten бэкенд должен использовать `ebiten.SetRunGameMode(ebiten.RunGameModeEventDriven)` (отрисовка только при наступлении событий, а не 60 FPS).
-* **Риск:** Избыточная нагрузка на DOM при частых анимациях в Web-бэкенде.
-* **Решение:** Web-бэкенд должен группировать DOM-обновления через `requestAnimationFrame`.
-* **Риск:** Objective-C runtime слишком сложен для LLM.
-* **Решение (для Фазы 7):** Разбить фазу 7 на микро-шаги. Сначала написать хелперы `msgSend` для строк, потом для классов, потом только создавать `NSWindow`.
+```
+1. Backend events      → EventRouter → абстрактные события
+2. Обработчики         → Property.Set внутри Batch
+3. Animation tick      → Behavior интерполирует → Property.Set
+4. Propagate           → Computed/Bind, dirty-флаги (Value|Measure|Layout|Paint)
+5. Measure             → MeasureIntrinsic только для DirtyMeasure
+6. Solve               → Cassowary, только если есть DirtyLayout
+7. Apply               → ApplyLayout(diff)
+8. Paint               → только Canvas-узлы
+```
+
+**Idle-правило:** нет событий и нет активных анимаций → шагов 3–8 не происходит,
+цикл блокируется на ожидании события (не 60 FPS).
+
+---
+
+## 7. Расположение кода
+
+```
+/vreactive         — общий с vtui, без импортов goWidgets
+/vcontract         — конформанс-тесты и общий словарь виджетов
+/core              — node registry, solver, router, scheduler
+/goWidgets              — публичный API
+/backends/headless — референс + тесты (Фаза 0!)
+/backends/{win32,gtk,cocoa,web,ebiten}
+/showcase/faststone
+/docs/adr
+/bench
+```
+
+Правило импортов: `backends/* → core` разрешено, `core → backends/*` **запрещено**
+(регистрация драйверов через `init()` + build-tags).
+
+---
+
+## 8. План реализации: итерации RUP с критериями выхода
+
+> **Изменение против v1:** добавлена Фаза 0; порядок пересобран по риску — самый опасный
+> элемент (FFI без CGO + intrinsic-измерения) проверяется спайком **до** массовой разработки,
+> а не в Фазе 7. Каждая фаза имеет проверяемый Definition of Done.
+
+### Фаза 0. Inception: каркас, CI и разведка рисков
+* Репозиторий, модуль, `.golangci.yml` с правилами слоёв, CI-матрица (win/mac/linux/wasm).
+* **Спайк-проверки** (по 50–100 строк, результат — ADR): Ebiten без CGO на каждой ОС;
+  версия GTK у `puregotk`; `objc_msgSend` через `purego` — создать `NSWindow` и закрыть;
+  лимиты `windows.NewCallback`; статус и лицензия `kiwi-go`.
+* **`backends/headless`** — эталонный драйвер: детерминированные `MeasureIntrinsic`,
+  запись всех `ApplyLayout` в лог для golden-тестов.
+* **DoD:** CI зелёный на 4 платформах; ADR-0002 подтверждает или корректирует «no CGO».
+
+### Фаза 1. Reactive Core
+* `vreactive`: `Property`, `Event`, `Scope`, `Batch`, `Bind`, `Computed`, защита от циклов.
+* `core`: node registry, dirty-флаги, scheduler, конвейер §6 (без Cassowary — фиксированные размеры).
+* `goWidgets.Button`, Ebiten-бэкенд.
+* **DoD:** `Text.Set()` из горутины через `QueueUpdate` меняет надпись; тест на утечки
+  подписок зелёный; headless-golden-тест конвейера.
+
+### Фаза 2. Layout Engine
+* `kiwi-go`, двухфазность measure→solve, edit-переменные, `VBox`/`HBox`/`Anchor`,
+  стратегия конфликтов §5.3.
+* **DoD:** `bench/layout` укладывается в NFR; тест «неразрешимая система → диагностика, не паника».
+
+### Фаза 3. Первый нативный бэкенд (Win32 **или** GTK — выбрать по доступности CI)
+* `PlatformDriver`, `WNDCLASSEX`/`GetMessage` или GTK4 + `GtkFixed`, `MeasureIntrinsic`
+  через реальные метрики темы, DPI-скейлинг.
+* **DoD:** тот же `main.go`, что в Фазе 1, запускается нативно; `ApplyLayout` совпадает с
+  headless-golden в пределах допуска; смена DPI перерисовывает корректно.
+
+### Фаза 4. Второй нативный бэкенд + анимации
+* `Behavior`, `Animator`, `StateMachine`; второй драйвер из пары Win32/GTK.
+* **DoD:** анимация ширины 60 FPS без пересборки системы уравнений; idle = 0% CPU.
+
+### Фаза 5. Базовые виджеты
+* `Label`, `TextInput`, `CheckBox`, `Splitter`, фокус/tab-order, буфер обмена, файловый диалог.
+* **DoD:** «Окно настроек» идентично на 3 бэкендах (скриншот-диф + golden layout).
+
+### Фаза 6. Тяжёлые виджеты
+* `TreeView`, `GridView` (виртуализация), `Canvas`, `ScrollArea`.
+* **DoD:** 10 000 миниатюр — плавный скролл, память < заданного порога.
+
+### Фаза 7. Cocoa (микро-шагами)
+* Хелперы `msgSend` (строки → классы → селекторы) → `NSApplication` → `NSWindow` → `NSButton`
+  → отключение AutoLayout → `setFrame:`.
+* **DoD:** showcase запускается на macOS, `CGO_ENABLED=0`.
+
+### Фаза 8. Web / WASM
+* `syscall/js`, DOM-маппинг, координаты через `transform: translate3d` (дешевле, чем `left/top`),
+  батчинг в `requestAnimationFrame`, `devicePixelRatio`.
+* **DoD:** размер бандла в пределах NFR; тот же UI работает в браузере.
+
+### Фаза 9. Transition
+* Showcase FastStone Image Viewer, унификация API с `vtui` через `vcontract`, документация,
+  политика fallback §3.3, релизная сборка.
+* **DoD:** конформанс-набор `vcontract` проходит одинаково на `vtui` и `goWidgets`.
+
+---
+
+## 9. Тестирование (в v1 раздела не было)
+
+1. **Golden layout tests** — headless-драйвер пишет `[]BoundsChange`, сравнение с эталоном.
+   Это главный инструмент самопроверки LLM: изменение поведения layout видно мгновенно.
+2. **Конформанс-набор `vcontract`** — один и тот же сценарий гоняется на всех драйверах;
+   отличия допустимы только там, где `Caps` объявляет отсутствие фичи.
+3. **Property-based тесты `vreactive`** — случайные графы биндингов: нет глитчей, нет циклов,
+   нет утечек `Scope`.
+4. **Fuzz на Cassowary-вход** — случайные наборы констрейнтов не должны вешать solver.
+5. **CI-матрица** — сборка `CGO_ENABLED=0` для всех GOOS/GOARCH на каждом PR.
+
+---
+
+## 10. Инструкции по промптингу слабых моделей
+
+Шаблон задачи (заполнять целиком, не сокращать):
+
+```
+[ФАЗА]      Фаза 3, задача 2.
+[ФАЙЛЫ]     Разрешено менять только backends/win32/window.go. Остальное — read-only.
+[КОНТРАКТ]  Реализуй PlatformDriver.CreateWindow и BackendWindow.CreateWidget (см. §4.4).
+            Сигнатуры менять запрещено.
+[ЗАПРЕТЫ]   Без CGO. Без вычисления размеров внутри бэкенда. Без хранения бизнес-логики.
+            Не трогай macOS/GTK/Web.
+[ИНВАРИАНТЫ] Координаты приходят готовыми в DIP; масштабирование в px — здесь.
+            Все вызовы — из main-thread.
+[ПРИЁМКА]   go build CGO_ENABLED=0 GOOS=windows; тест TestWin32CreateWindow зелёный;
+            golden-тест layout не изменился.
+[ФОРМАТ]    Верни только полный текст изменённого файла и список новых импортов.
+```
+
+Дополнительные правила:
+* **Одна задача — один файл.** Если модель хочет менять контракт — она обязана остановиться
+  и написать заявку в §12, а не «немного поправить интерфейс».
+* Перед кодом модель формулирует 3–5 строк плана; после кода — самопроверку по «Приёмке».
+* Запрещено вводить новые зависимости без ADR.
+
+---
+
+## 11. Реестр рисков
+
+| # | Риск | Триггер / как заметим | Митигация | План B |
+|---|---|---|---|---|
+| R1 | Зависимость тянет CGO | CI-сборка `CGO_ENABLED=0` падает | Спайк в Фазе 0 | Замена библиотеки / build-tag `goWidgets_cgo`, драйвер вне fallback-цепочки |
+| R2 | Циклы в реактивных подписках | `MaxPropagationDepth` превышен | Батчинг + топологический порядок + лимит глубины | Ошибка с дампом цепочки, а не зависание |
+| R3 | Нет intrinsic-размеров → «поехавший» текст | Golden-тесты расходятся между драйверами | `MeasureIntrinsic` как обязательный контракт §5.1 | Fallback-метрики моноширинного шрифта |
+| R4 | Cassowary тормозит на анимациях | `bench/layout` вне NFR | Edit-переменные, `LayoutBoundary`, отделение не-геометрических анимаций | Прямой `SetBounds` мимо solver для анимируемых поддеревьев |
+| R5 | Ebiten жрёт батарею | `bench/idle` > 0% | Event-driven режим отрисовки | Ограничение FPS + ручная инвалидация |
+| R6 | DOM-шторм в Web | Профиль браузера | Батч в `requestAnimationFrame`, `transform` вместо `left/top` | Переход на Canvas-рендер для «горячих» областей |
+| R7 | Objective-C runtime слишком сложен для LLM | Фаза 7 буксует > 2 итераций | Микро-шаги §8 | Временный Ebiten-драйвер на macOS |
+| R8 | Абсолютное позиционирование ломает скролл/a11y | Ручная проверка с клавиатуры и скринридером | `ScrollArea` §5.4, фокус в Core §4.6 | Явное объявление ограничений в `Caps` |
+| R9 | API `vtui` и `goWidgets` расходятся | Конформанс-тесты `vcontract` краснеют | Общий пакет + тесты с Фазы 1 | Слой адаптеров |
+| R10 | Утечки подписок при уничтожении виджетов | `TestNoLeakedSubscriptions` | `Scope` владеет подписками | — |
+| R11 | Незрелость `puregotk`/`kiwi-go` (форк, мало коммитов) | Баг без апстрим-фикса | Пин версий + vendoring + ADR | Вендоринг и локальный форк в `third_party/` |
+
+---
+
+## 12. Открытые вопросы (заполняется по ходу, не игнорируется)
+
+1. GTK3 или GTK4 — зависит от результата спайка Фазы 0.
+- GTK4
+
+2. Нужна ли темизация/стилизация нативных контролов в v1 или это v2?
+- не в первую очередь
+
+3. Формат ресурсов (иконки, изображения) и их встраивание в WASM-бандл.
+4. Модель рисования `Canvas`: единый immediate-mode API или per-backend?
+5. Стратегия многооконности и модальных диалогов.
