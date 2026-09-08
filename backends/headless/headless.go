@@ -291,3 +291,15 @@ func ClickByText(text string) bool {
 	}
 	return false
 }
+
+// Embedded: there is no panel here, and never will be.
+func (noTray) Embedded() bool { return false }
+
+// noTray exists only to keep the BackendTray interface satisfiable in tests
+// that construct one; CreateTray on this driver always fails.
+type noTray struct{}
+
+func (noTray) SetTooltip(string)                {}
+func (noTray) SetMenu([]core.MenuItem)          {}
+func (noTray) Destroy()                         {}
+func (noTray) Events() <-chan core.BackendEvent { return nil }

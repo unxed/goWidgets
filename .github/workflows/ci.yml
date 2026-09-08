@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      # GTK is loaded at run time through purego, so it is needed for the tests
+      # but never linked. stalonetray is a standalone panel: it is what turns
+      # "does the icon dock?" from a question for a human into an assertion.
+      - name: Install GTK and a tray manager
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0 libglib2.0-0 xvfb stalonetray
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go vet
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+
+      # Xvfb gives a display, stalonetray gives a panel, so the GTK backend and
+      # the tray are exercised for real rather than skipped.
+      - name: Tests with a display and a panel
+        run: xvfb-run -a go test -race ./...
+
+      - name: Cross-compile
+        run: |
+          set -e
+          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            flags="-s -w"
+            [ "$os" = windows ] && flags="$flags -H windowsgui"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags="$flags" -o /tmp/out ./showcase/crescent
+            echo "  $target ok"
+          done
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: go vet
+        run: go vet ./...
+
+      # The Win32 backend cannot be exercised without a desktop session, but the
+      # headless driver runs everywhere and covers the whole layout pipeline.
+      - name: Tests
+        run: go test ./...
+
+      - name: Build as a GUI application
+        run: go build -ldflags="-H windowsgui" -o crescent.exe ./showcase/crescent
+        env:
+          CGO_ENABLED: 0

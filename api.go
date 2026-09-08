@@ -329,3 +329,8 @@ func (t *TrayIcon) SetMenu(items ...*MenuItem) {
 	t.items = items
 	t.app.eng.SetTrayMenu(t.spec())
 }
+
+// Embedded reports whether a panel actually accepted the icon. Creating a tray
+// icon succeeds even where nothing displays it, so an application that wants to
+// warn "this desktop has no status area" asks rather than assumes.
+func (t *TrayIcon) Embedded() bool { return t.app.eng.TrayEmbedded() }

@@ -384,3 +384,6 @@ func (a *App) SetTrayMenu(items []MenuItem) {
 		a.tray.SetMenu(items)
 	}
 }
+
+// TrayEmbedded reports whether a panel accepted the status-area icon.
+func (a *App) TrayEmbedded() bool { return a.tray != nil && a.tray.Embedded() }

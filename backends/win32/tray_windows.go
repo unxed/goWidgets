@@ -183,6 +183,11 @@ func (t *tray) Destroy() {
 
 func (t *tray) Events() <-chan core.BackendEvent { return t.events }
 
+// Embedded: on Windows the notification area is part of the shell, so a
+// successful NIM_ADD means the icon is in it. There is no separate docking
+// step to wait for, unlike X11.
+func (t *tray) Embedded() bool { return t.data.hWnd != 0 }
+
 func (t *tray) emit(ev core.BackendEvent) {
 	select {
 	case t.events <- ev:

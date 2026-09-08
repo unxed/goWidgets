@@ -159,6 +159,12 @@ type BackendTray interface {
 	SetMenu([]MenuItem)
 	Destroy()
 	Events() <-chan BackendEvent
+
+	// Embedded reports whether a panel has actually accepted the icon.
+	// Creating one succeeds even when no status area is running, so this is
+	// what separates "no panel here" from "our code is broken" — and it is
+	// what makes the tray assertable in a test instead of by eye.
+	Embedded() bool
 }
 
 // WindowSpec describes a window to create.
