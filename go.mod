@@ -9,4 +9,4 @@ require (
 
 require github.com/go-webgpu/goffi v0.6.2 // indirect
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.16
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.19
