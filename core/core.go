@@ -72,6 +72,7 @@ type App struct {
 	dirtyLayout bool
 	cancel      context.CancelFunc
 	onClose     closeHandler
+	onKey       func(KeyEvent)
 	tray        BackendTray
 }
 
@@ -281,6 +282,10 @@ func (a *App) dispatch(ev BackendEvent) {
 			n.measured = false
 		}
 		a.dirtyLayout = true
+	case EventKey:
+		if a.onKey != nil {
+			a.onKey(ev.Key)
+		}
 	case EventCloseRequested:
 		if a.onClose != nil && !a.onClose() {
 			return
@@ -402,3 +407,6 @@ func (a *App) SetPrefHeight(n *Node, h float64) {
 	n.PrefHeight = h
 	a.Invalidate()
 }
+
+// SetKeyHandler installs the handler for keystrokes on the main window.
+func (a *App) SetKeyHandler(fn func(KeyEvent)) { a.onKey = fn }

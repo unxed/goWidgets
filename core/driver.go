@@ -125,6 +125,8 @@ const (
 	EventScaleChanged
 	EventResized
 
+	// EventKey is a key pressed or released while a window has focus.
+	EventKey
 	// EventTrayActivated is a left click on the tray icon.
 	EventTrayActivated
 	// EventMenuItem carries the id of the chosen menu entry in H.
@@ -133,12 +135,38 @@ const (
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a
 // driver may queue it from a native callback without touching Go memory rules.
+// KeyEvent describes one keystroke.
+//
+// The shape is winkeys.InputEvent — the Win32 INPUT_RECORD layout that
+// unxed/vtinput already uses in production. Reusing it costs the Win32 backend
+// no conversion at all, lets terminal and GUI code share one vocabulary, and
+// borrows a tested table of key codes instead of inventing another. GTK maps
+// its keyvals onto the same codes.
+type KeyEvent struct {
+	VirtualKeyCode  uint16
+	VirtualScanCode uint16
+	Char            rune
+	KeyDown         bool
+	ControlKeyState uint32
+	RepeatCount     uint16
+}
+
+// Ctrl reports whether either control key was held.
+func (k KeyEvent) Ctrl() bool { return k.ControlKeyState&(0x0004|0x0008) != 0 }
+
+// Alt reports whether either alt key was held.
+func (k KeyEvent) Alt() bool { return k.ControlKeyState&(0x0001|0x0002) != 0 }
+
+// Shift reports whether shift was held.
+func (k KeyEvent) Shift() bool { return k.ControlKeyState&0x0010 != 0 }
+
 type BackendEvent struct {
 	Kind  EventKind
 	H     Handle
 	Size  Size
 	Scale ScaleInfo
-	Bool  bool // EventToggled: the control's new state
+	Bool  bool     // EventToggled: the control's new state
+	Key   KeyEvent // EventKey: the keystroke
 }
 
 // MenuItem is one entry of the tray menu. A separator ignores Label.

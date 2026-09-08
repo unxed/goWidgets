@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/ebitengine/purego v0.9.0
+	github.com/unxed/winkeys v0.1.1
 	golang.org/x/sys v0.31.0
 )
 

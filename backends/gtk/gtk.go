@@ -73,6 +73,8 @@ type driver struct {
 
 	cbClicked      uintptr
 	cbToggled      uintptr
+	cbKeyPress     uintptr
+	cbKeyRelease   uintptr
 	cbTrayActivate uintptr
 	cbTrayPopup    uintptr
 	cbMenuItem     uintptr
@@ -177,6 +179,17 @@ func (d *driver) Init() error {
 		emit(core.BackendEvent{Kind: core.EventClicked, H: core.Handle(data)})
 		return 0
 	})
+	// The handler signature is gboolean(GtkWidget*, GdkEventKey*, gpointer);
+	// returning 0 lets the key travel on to the focused control, so adding a
+	// listener never steals typing from a widget.
+	d.cbKeyPress = purego.NewCallback(func(widget, event, data uintptr) uintptr {
+		d.emitKey(event, true)
+		return 0
+	})
+	d.cbKeyRelease = purego.NewCallback(func(widget, event, data uintptr) uintptr {
+		d.emitKey(event, false)
+		return 0
+	})
 	d.cbTrayActivate = purego.NewCallback(func(icon, data uintptr) uintptr {
 		trayEmit(core.BackendEvent{Kind: core.EventTrayActivated})
 		return 0
@@ -279,6 +292,24 @@ func (d *driver) Wake() {
 	}
 }
 
+// emitKey turns a GdkEventKey into a backend event on the current window.
+func (d *driver) emitKey(event uintptr, down bool) {
+	vk, ch, state, ok := keyFromGdk(event, down)
+	if !ok {
+		return
+	}
+	emit(core.BackendEvent{
+		Kind: core.EventKey,
+		Key: core.KeyEvent{
+			VirtualKeyCode:  vk,
+			Char:            ch,
+			KeyDown:         down,
+			ControlKeyState: state,
+			RepeatCount:     1,
+		},
+	})
+}
+
 func (d *driver) Shutdown() {}
 
 func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) {
@@ -308,6 +339,8 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 	evMu.Unlock()
 
 	gSignalConnect(h, "delete-event", d.cbDelete, 0, 0, 0)
+	gSignalConnect(h, "key-press-event", d.cbKeyPress, 0, 0, 0)
+	gSignalConnect(h, "key-release-event", d.cbKeyRelease, 0, 0, 0)
 	gSignalConnect(fixed, "size-allocate", d.cbAlloc, 0, 0, 0)
 
 	gtkWidgetShow(fixed)

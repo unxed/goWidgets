@@ -100,6 +100,7 @@ type Window struct {
 	app     *App
 	Title   *vreactive.Property[string]
 	Closing *vreactive.Event[*CloseRequest]
+	keys    *vreactive.Event[Key]
 	hidden  bool
 }
 
@@ -114,11 +115,13 @@ func (a *App) NewWindow(title string, w, h float64) (*Window, error) {
 	}
 	win := &Window{
 		app:     a,
+		keys:    vreactive.NewEvent[Key](),
 		Title:   vreactive.NewProperty(title),
 		Closing: vreactive.NewEvent[*CloseRequest](),
 		hidden:  true,
 	}
 	win.Title.OnChange(a.scope, func(v, _ string) { a.eng.Window().SetTitle(v) })
+	a.eng.SetKeyHandler(func(k core.KeyEvent) { win.keys.Emit(k) })
 	a.eng.SetCloseHandler(func() bool {
 		req := &CloseRequest{}
 		win.Closing.Emit(req)
@@ -249,6 +252,16 @@ func (w *Window) AddCheckBox(text string, checked bool) (*CheckBox, error) {
 	}
 	return cb, nil
 }
+
+// Key is a keystroke, in the winkeys vocabulary shared with unxed/vtinput.
+type Key = core.KeyEvent
+
+// KeyPressed fires for every key pressed or released while the window has
+// focus. Handlers run on the UI thread like every other event.
+//
+// The event is delivered rather than consumed: a handler that ignores a key
+// leaves it to the focused control, so listening never breaks typing.
+func (w *Window) KeyPressed() *vreactive.Event[Key] { return w.keys }
 
 // AddTextView appends a scrolling text area of the given height in DIP.
 func (w *Window) AddTextView(height float64) (*TextView, error) {

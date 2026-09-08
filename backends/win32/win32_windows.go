@@ -43,6 +43,7 @@ var (
 	pSendMessageW       = user32.NewProc("SendMessageW")
 	pShowWindow         = user32.NewProc("ShowWindow")
 	pSetWindowTextW     = user32.NewProc("SetWindowTextW")
+	pGetKeyState        = user32.NewProc("GetKeyState")
 	pSetWindowPos       = user32.NewProc("SetWindowPos")
 	pGetClientRect      = user32.NewProc("GetClientRect")
 	pEnableWindow       = user32.NewProc("EnableWindow")
@@ -73,6 +74,10 @@ const (
 	ssLeftNoWordWrap   = 0x0000000C
 
 	wmDestroy    = 0x0002
+	wmKeyDown    = 0x0100
+	wmKeyUp      = 0x0101
+	wmSysKeyDown = 0x0104
+	wmSysKeyUp   = 0x0105
 	wmSize       = 0x0005
 	wmClose      = 0x0010
 	wmSetFont    = 0x0030
@@ -606,6 +611,31 @@ func (w *window) emit(ev core.BackendEvent) {
 	}
 }
 
+// modifierState reads the modifier keys into the winkeys ControlKeyState bits.
+func modifierState() uint32 {
+	var state uint32
+	held := func(vk int) bool {
+		r, _, _ := pGetKeyState.Call(uintptr(vk))
+		return int16(r) < 0
+	}
+	const (
+		vkShift, vkControl, vkMenu, vkCapital = 0x10, 0x11, 0x12, 0x14
+	)
+	if held(vkShift) {
+		state |= 0x0010 // ShiftPressed
+	}
+	if held(vkControl) {
+		state |= 0x0008 // LeftCtrlPressed
+	}
+	if held(vkMenu) {
+		state |= 0x0002 // LeftAltPressed
+	}
+	if r, _, _ := pGetKeyState.Call(vkCapital); r&1 != 0 {
+		state |= 0x0080 // CapsLockOn
+	}
+	return state
+}
+
 func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	d := theDrv
 	if d == nil {
@@ -671,6 +701,25 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			d.win.emit(core.BackendEvent{Kind: core.EventScaleChanged, Scale: d.win.Scale()})
 		}
 		return 0
+
+	case wmKeyDown, wmKeyUp, wmSysKeyDown, wmSysKeyUp:
+		// Nothing to translate: wParam is already the virtual key code, which
+		// is the vocabulary KeyEvent speaks. lParam carries the repeat count in
+		// its low word and the scan code in bits 16-23.
+		if d.win != nil && hwnd == d.win.hwnd {
+			down := msg == wmKeyDown || msg == wmSysKeyDown
+			d.win.emit(core.BackendEvent{
+				Kind: core.EventKey,
+				Key: core.KeyEvent{
+					VirtualKeyCode:  uint16(wParam),
+					VirtualScanCode: uint16((lParam >> 16) & 0xff),
+					KeyDown:         down,
+					ControlKeyState: modifierState(),
+					RepeatCount:     uint16(lParam & 0xffff),
+				},
+			})
+		}
+		// Fall through to the default handler so menus and controls still work.
 
 	case wmClose:
 		if d.win != nil && hwnd == d.win.hwnd {
