@@ -225,9 +225,11 @@ type App interface {
 type Handle uint64
 
 type PlatformDriver interface {
+    Name() string
     Init() error
     Capabilities() Caps
-    RunMainLoop(ctx context.Context) error
+    RunMainLoop(ctx context.Context, pump func()) error  // ADR-0002
+    Wake()                                               // ADR-0002
     CreateWindow(spec WindowSpec) (BackendWindow, error)
     Shutdown()
 }
@@ -262,6 +264,7 @@ type Caps struct {
     NativeControls bool
     TreeView, GridView, FileDialog, Menus, Clipboard, IME, A11y bool
     SmoothAnimation bool
+    TrayIcon       bool   // ADR-0004: нужен showcase-у relay
     MaxCallbacks   int
 }
 ```
@@ -345,13 +348,13 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 ## 7. Расположение кода
 
 ```
+/                  — публичный API, пакет goWidgets (ADR-0001)
 /vreactive         — общий с vtui, без импортов goWidgets
 /vcontract         — конформанс-тесты и общий словарь виджетов
 /core              — node registry, solver, router, scheduler
-/goWidgets              — публичный API
 /backends/headless — референс + тесты (Фаза 0!)
 /backends/{win32,gtk,cocoa,web,ebiten}
-/showcase/faststone
+/showcase/relay    — менеджер целей Codex, текущий showcase (ADR-0004)
 /docs/adr
 /bench
 ```
@@ -366,6 +369,11 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 > **Изменение против v1:** добавлена Фаза 0; порядок пересобран по риску — самый опасный
 > элемент (FFI без CGO + intrinsic-измерения) проверяется спайком **до** массовой разработки,
 > а не в Фазе 7. Каждая фаза имеет проверяемый Definition of Done.
+
+> **Статус на 2026-09-08 (см. ADR-0004).** Порядок фаз пересобран по риску:
+> нативные бэкенды подняты выше Cassowary и Ebiten. Закрыто: Фаза 0 целиком,
+> Фаза 1 без Ebiten, бэкенды Фаз 3 и 4 (GTK 3 и Win32). Открыто: Cassowary
+> (Фаза 2), анимации, фокус/tab-order, трей, Cocoa, Web.
 
 ### Фаза 0. Inception: каркас, CI и разведка рисков
 * Репозиторий, модуль, `.golangci.yml` с правилами слоёв, CI-матрица (win/mac/linux/wasm).

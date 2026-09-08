@@ -1,0 +1,193 @@
+// Package core holds the platform-independent engine: geometry types, the node
+// registry, the scheduler and the backend contract.
+//
+// Layering rule (§7): backends may import core; core must never import a
+// backend. Drivers register themselves through init() + build tags.
+package core
+
+import "context"
+
+// ------------------------------------------------------------- §4.1 geometry
+
+// All coordinates in core are DIP (device-independent pixels, float64).
+// Rounding to physical pixels happens in the backend and nowhere else.
+type (
+	// Point is a position in DIP.
+	Point struct{ X, Y float64 }
+	// Size is an extent in DIP.
+	Size struct{ W, H float64 }
+	// Rect is a rectangle in DIP.
+	Rect struct{ X, Y, W, H float64 }
+	// Insets are per-edge paddings in DIP.
+	Insets struct{ L, T, R, B float64 }
+)
+
+// ScaleInfo describes a window's scaling. It changes when the window moves
+// between monitors with different DPI.
+type ScaleInfo struct {
+	Scale     float64 // 1.0, 1.5, 2.0 …
+	FontScale float64 // system font enlargement
+}
+
+// ------------------------------------------------------------- §4.4 backend
+
+// Handle is an opaque node identifier — the shared vocabulary between core and
+// a backend. Zero is never a valid handle.
+type Handle uint64
+
+// WidgetKind enumerates the widget types a backend must be able to create.
+type WidgetKind uint8
+
+// Widget kinds. Iteration 1 covers only what the codex-relay showcase needs.
+const (
+	KindLabel WidgetKind = iota + 1
+	KindButton
+	KindCheckBox
+)
+
+func (k WidgetKind) String() string {
+	switch k {
+	case KindLabel:
+		return "Label"
+	case KindButton:
+		return "Button"
+	case KindCheckBox:
+		return "CheckBox"
+	}
+	return "Unknown"
+}
+
+// PropKey names a settable backend property. Deliberately a narrow, typed
+// channel — no reflect (§4.4).
+type PropKey uint8
+
+// Property keys.
+const (
+	PropText PropKey = iota + 1
+	PropEnabled
+	PropVisible
+	PropChecked
+)
+
+func (p PropKey) String() string {
+	switch p {
+	case PropText:
+		return "Text"
+	case PropEnabled:
+		return "Enabled"
+	case PropVisible:
+		return "Visible"
+	case PropChecked:
+		return "Checked"
+	}
+	return "Unknown"
+}
+
+// BoundsChange is one entry of a layout batch.
+type BoundsChange struct {
+	H       Handle
+	R       Rect
+	Visible bool
+}
+
+// Caps declares what a driver can do. Anything not declared here may be
+// answered with "unsupported" — see §3.3 and the vcontract suite.
+type Caps struct {
+	NativeControls  bool
+	TreeView        bool
+	GridView        bool
+	FileDialog      bool
+	Menus           bool
+	Clipboard       bool
+	IME             bool
+	A11y            bool
+	SmoothAnimation bool
+	TrayIcon        bool // added for the codex-relay showcase, see ADR-0003
+	MaxCallbacks    int
+}
+
+// EventKind classifies a backend event.
+type EventKind uint8
+
+// Backend event kinds.
+const (
+	EventClicked EventKind = iota + 1
+	EventToggled
+	EventCloseRequested
+	EventScaleChanged
+	EventResized
+)
+
+// BackendEvent travels from the platform to core. It carries no pointers, so a
+// driver may queue it from a native callback without touching Go memory rules.
+type BackendEvent struct {
+	Kind  EventKind
+	H     Handle
+	Size  Size
+	Scale ScaleInfo
+	Bool  bool // EventToggled: the control's new state
+}
+
+// WindowSpec describes a window to create.
+type WindowSpec struct {
+	Title  string
+	Size   Size
+	Hidden bool
+}
+
+// DriverInfo answers "why do I not see native controls?" (§3.3.4).
+type DriverInfo struct {
+	Name     string
+	Caps     Caps
+	Attempts []string // every driver tried, in order, with the outcome
+}
+
+// PlatformDriver is the contract every backend implements.
+//
+// Deviation from §4.4, recorded in ADR-0002: Wake is added and RunMainLoop
+// takes a pump callback. A native loop blocks inside GetMessage/gtk_main, so
+// QueueUpdate (§4.5.3) needs a platform-specific nudge to interrupt it, and the
+// woken loop needs a way to run the queued work on the UI thread it owns.
+type PlatformDriver interface {
+	Name() string
+	Init() error
+	Capabilities() Caps
+
+	// RunMainLoop owns the UI thread until ctx is cancelled. It must call pump
+	// once before blocking and again after every Wake.
+	RunMainLoop(ctx context.Context, pump func()) error
+
+	// Wake is safe to call from any goroutine.
+	Wake()
+
+	CreateWindow(spec WindowSpec) (BackendWindow, error)
+	Shutdown()
+}
+
+// BackendWindow is one native top-level window plus the widgets inside it.
+type BackendWindow interface {
+	SetTitle(string)
+	Show()
+	Close()
+	Scale() ScaleInfo
+
+	CreateWidget(kind WidgetKind, parent Handle) (Handle, error)
+	DestroyWidget(h Handle)
+	SetParent(child, parent Handle, index int)
+
+	SetString(h Handle, p PropKey, v string)
+	SetBool(h Handle, p PropKey, v bool)
+	SetFloat(h Handle, p PropKey, v float64)
+
+	// MeasureIntrinsic is the only source of truth about a widget's natural
+	// size: only the platform knows its font metrics and theme padding (§5.1).
+	MeasureIntrinsic(h Handle, avail Size) (min, natural Size)
+
+	// ApplyLayout receives absolute rectangles for changed nodes only.
+	ApplyLayout(changes []BoundsChange)
+
+	// RootHandle identifies the window's content area as a layout parent.
+	RootHandle() Handle
+
+	Events() <-chan BackendEvent
+}
