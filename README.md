@@ -53,15 +53,15 @@ go build ./...
 go test ./...
 
 # Windows: -H windowsgui убирает консольное окно
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" ./showcase/relay
-CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w"               ./showcase/relay
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H windowsgui" ./showcase/crescent
+CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w"               ./showcase/crescent
 ```
 
 Бэкенд выбирается автоматически (§3.3); принудительно — через переменную
 окружения, и тогда ошибка инициализации не заглушается фолбэком:
 
 ```sh
-goWidgets_BACKEND=headless go run ./showcase/relay
+goWidgets_BACKEND=headless go run ./showcase/crescent
 ```
 
 `app.Diagnostics()` показывает, какой драйвер выиграл и что было испробовано —

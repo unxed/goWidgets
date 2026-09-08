@@ -264,7 +264,7 @@ type Caps struct {
     NativeControls bool
     TreeView, GridView, FileDialog, Menus, Clipboard, IME, A11y bool
     SmoothAnimation bool
-    TrayIcon       bool   // ADR-0004: нужен showcase-у relay
+    TrayIcon       bool   // ADR-0004: нужен showcase-у crescent
     MaxCallbacks   int
 }
 ```
@@ -354,7 +354,7 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 /core              — node registry, solver, router, scheduler
 /backends/headless — референс + тесты (Фаза 0!)
 /backends/{win32,gtk,cocoa,web,ebiten}
-/showcase/relay    — менеджер целей Codex, текущий showcase (ADR-0004)
+/showcase/crescent — менеджер фоновых задач Codex, текущий showcase (ADR-0004)
 /docs/adr
 /bench
 ```

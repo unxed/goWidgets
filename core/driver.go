@@ -38,7 +38,7 @@ type Handle uint64
 // WidgetKind enumerates the widget types a backend must be able to create.
 type WidgetKind uint8
 
-// Widget kinds. Iteration 1 covers only what the codex-relay showcase needs.
+// Widget kinds. Iteration 1 covers only what the crescent showcase needs.
 const (
 	KindLabel WidgetKind = iota + 1
 	KindButton
@@ -102,7 +102,7 @@ type Caps struct {
 	IME             bool
 	A11y            bool
 	SmoothAnimation bool
-	TrayIcon        bool // added for the codex-relay showcase, see ADR-0003
+	TrayIcon        bool // added for the crescent showcase, see ADR-0003
 	MaxCallbacks    int
 }
 

@@ -1,12 +1,12 @@
-// Command relay is the goWidgets showcase.
+// Command crescent is the goWidgets showcase.
 //
-// It is the window shell of codex-relay: the supervisor that keeps Codex goal
-// sessions moving, restarting them once a usage limit resets. Per §2.7 the
-// library only grows what this showcase needs — right now that is a status
-// line, a run toggle, and a list of goals you can tick off and remove.
+// It is the window shell of crescent (github.com/unxed/crescent): the manager
+// that keeps Codex goal sessions moving, restarting them once a usage limit
+// resets. Per §2.7 the library only grows what this showcase needs — right now
+// that is a status line, a run toggle, and a list of goals to tick off.
 //
-//	go run ./showcase/relay                            # native: GTK 3 or Win32
-//	goWidgets_BACKEND=headless go run ./showcase/relay # no window system
+//	go run ./showcase/crescent                            # native: GTK 3 or Win32
+//	goWidgets_BACKEND=headless go run ./showcase/crescent # no window system
 package main
 
 import (
@@ -20,7 +20,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/win32"
 )
 
-// goal is a Codex session the relay watches. The real thing reads these out of
+// goal is a Codex session crescent watches. The real thing reads these out of
 // ~/.codex/sessions; here they are literals so the showcase stays a UI probe.
 type goal struct {
 	title string
@@ -35,7 +35,7 @@ func main() {
 	d := app.Diagnostics()
 	log.Printf("driver=%s native=%v attempts=%v", d.Name, d.Caps.NativeControls, d.Attempts)
 
-	win, err := app.NewWindow("codex-relay", 460, 320)
+	win, err := app.NewWindow("crescent", 460, 320)
 	if err != nil {
 		log.Fatal(err)
 	}

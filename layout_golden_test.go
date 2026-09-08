@@ -33,7 +33,7 @@ func newHeadlessApp(t *testing.T) *goWidgets.App {
 
 func TestGoldenStackLayout(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, err := app.NewWindow("relay", 400, 300)
+	win, err := app.NewWindow("crescent", 400, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestGoldenStackLayout(t *testing.T) {
 // BoundsChange at all. What must happen is the re-measure itself.
 func TestTextChangeRemeasures(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("relay", 400, 300)
+	win, _ := app.NewWindow("crescent", 400, 300)
 	lbl, _ := win.AddLabel("x")
 	pumpUntilIdle(t, app)
 
@@ -77,7 +77,7 @@ func TestTextChangeRemeasures(t *testing.T) {
 // Hiding a row must take it out of the flow, so everything below moves up.
 func TestHiddenWidgetLeavesTheStack(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("relay", 400, 300)
+	win, _ := app.NewWindow("crescent", 400, 300)
 	lbl, _ := win.AddLabel("Статус")
 	btn, _ := win.AddButton("Гнать")
 	pumpUntilIdle(t, app)
@@ -99,7 +99,7 @@ Button("Гнать") x=8.0 y=8.0 w=384.0 h=36.0 visible=true`
 // QueueUpdate, landing on the UI thread.
 func TestClickReachesHandler(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("relay", 400, 300)
+	win, _ := app.NewWindow("crescent", 400, 300)
 	btn, _ := win.AddButton("Гнать")
 
 	clicks := 0
@@ -192,7 +192,7 @@ func pumpUntilIdle(t *testing.T, app *goWidgets.App) {
 // echo back into the other.
 func TestCheckBoxBindsBothWays(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("relay", 400, 300)
+	win, _ := app.NewWindow("crescent", 400, 300)
 	cb, err := win.AddCheckBox("Цель: починить CI", false)
 	if err != nil {
 		t.Fatal(err)

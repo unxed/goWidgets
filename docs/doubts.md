@@ -23,8 +23,8 @@
 ## Открыто
 
 - [ ] Трей на Linux: `GtkStatusIcon` устарел, нужен `StatusNotifierItem` по D-Bus
-      (на Windows — `Shell_NotifyIcon`). Блокирует showcase relay.
-- [ ] `ListView` с колонками и галочками — следующий виджет для relay.
+      (на Windows — `Shell_NotifyIcon`). Блокирует showcase crescent.
+- [ ] `ListView` с колонками и галочками — следующий виджет для crescent.
 - [ ] Cassowary (Фаза 2): текущий layout — вертикальный стек с фиксированными
       размерами, интерфейс `func(*App) []BoundsChange` уже тот, что нужен солверу.
 - [ ] Фокус и tab-order живут в Core, но пока не реализованы; на Win32 у контролов
