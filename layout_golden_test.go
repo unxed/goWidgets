@@ -250,3 +250,36 @@ func TestTrayIsOptionalOnBackendsWithoutOne(t *testing.T) {
 	// Everything else must keep working.
 	pumpUntilIdle(t, app)
 }
+
+// A text view is a viewport, not a line of text: its height is chosen, not
+// measured, and it must take that height in the layout so the widgets below it
+// are not pushed off screen.
+func TestTextViewTakesItsChosenHeight(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, err := app.NewWindow("crescent", 400, 400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tv, err := win.AddTextView(150)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tv.SetText("строка один\nстрока два")
+	below, _ := win.AddButton("ниже")
+	_ = below
+
+	pumpUntilIdle(t, app)
+
+	log := headless.Golden()
+	if !strings.Contains(log, "TextView") {
+		t.Fatalf("text view not laid out:\n%s", log)
+	}
+	// The chosen height (150) must appear, not a measured near-zero one.
+	if !strings.Contains(log, "h=150.0") {
+		t.Errorf("text view did not take its chosen height:\n%s", log)
+	}
+	// The button must sit below it, not on top of it — y greater than 150.
+	if !strings.Contains(log, `Button("ниже")`) {
+		t.Errorf("button below the text view was not placed:\n%s", log)
+	}
+}

@@ -84,6 +84,11 @@ const (
 
 	bcmGetIdealSize = 0x1601
 	bsAutoCheckBox  = 0x00000003
+	esMultiline     = 0x00000004
+	esReadonly      = 0x00000800
+	esAutoVScroll   = 0x00000040
+	wsVScroll       = 0x00200000
+	wsBorder        = 0x00800000
 	bmGetCheck      = 0x00F0
 	bmSetCheck      = 0x00F1
 
@@ -421,6 +426,12 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// BS_AUTOCHECKBOX makes the control own its state; we read it back on
 		// BN_CLICKED rather than tracking it ourselves.
 		class, style = "BUTTON", wsChild|wsVisible|wsTabStop|bsAutoCheckBox
+	case core.KindTextView:
+		// A read-only multiline EDIT with a vertical scrollbar is the native
+		// log view on Windows — no extra control needed.
+		class = "EDIT"
+		style = wsChild | wsVisible | wsBorder | wsVScroll |
+			esMultiline | esReadonly | esAutoVScroll
 	}
 	clsp, _ := windows.UTF16PtrFromString(class)
 	txtp, _ := windows.UTF16PtrFromString("")
@@ -459,9 +470,27 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	if n == nil || p != core.PropText {
 		return
 	}
+	// A multiline EDIT wants CRLF line breaks; a bare LF shows as one long
+	// line. Normalise here so callers can use plain "\n".
+	if n.kind == core.KindTextView {
+		v = crlf(v)
+	}
 	if s, err := windows.UTF16PtrFromString(v); err == nil {
 		pSetWindowTextW.Call(n.hwnd, uintptr(unsafe.Pointer(s)))
 	}
+}
+
+// crlf converts lone LF to CRLF without doubling existing CRLF.
+func crlf(s string) string {
+	var b []byte
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' && (i == 0 || s[i-1] != '\r') {
+			b = append(b, '\r', '\n')
+			continue
+		}
+		b = append(b, s[i])
+	}
+	return string(b)
 }
 
 func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {

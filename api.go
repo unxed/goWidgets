@@ -185,6 +185,14 @@ func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
 // Label is static text.
 type Label struct{ *widget }
 
+// TextView is a multi-line, scrolling, read-only text area — a native control
+// on every backend. It is for showing text the user reads but does not edit: a
+// log, an output pane.
+type TextView struct{ *widget }
+
+// SetText replaces the whole contents.
+func (t *TextView) SetText(s string) { t.Text.Set(s) }
+
 // CheckBox is a native check box. Checked is two-way: setting it moves the
 // control, and the user moving the control updates it.
 type CheckBox struct {
@@ -240,6 +248,18 @@ func (w *Window) AddCheckBox(text string, checked bool) (*CheckBox, error) {
 		cb.Toggled.Emit(v)
 	}
 	return cb, nil
+}
+
+// AddTextView appends a scrolling text area of the given height in DIP.
+func (w *Window) AddTextView(height float64) (*TextView, error) {
+	wd, err := w.newWidget(core.KindTextView, "")
+	if err != nil {
+		return nil, err
+	}
+	if height > 0 {
+		w.app.eng.SetPrefHeight(wd.node, height)
+	}
+	return &TextView{widget: wd}, nil
 }
 
 // AddButton appends a push-button row.

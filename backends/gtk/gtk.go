@@ -25,35 +25,42 @@ import (
 func init() { core.RegisterDriver("gtk", func() core.PlatformDriver { return &driver{} }) }
 
 var (
-	gtkInitCheck   func(argc, argv uintptr) int32
-	gtkMain        func()
-	gtkMainQuit    func()
-	gtkWindowNew   func(kind int32) uintptr
-	gtkWinSetTitle func(win uintptr, title string)
-	gtkWinSetSize  func(win uintptr, w, h int32)
-	gtkContAdd     func(container, child uintptr)
-	gtkFixedNew    func() uintptr
-	gtkFixedPut    func(fixed, child uintptr, x, y int32)
-	gtkFixedMove   func(fixed, child uintptr, x, y int32)
-	gtkSetSizeReq  func(w uintptr, width, height int32)
-	gtkButtonNew   func(label string) uintptr
-	gtkButtonLabel func(button uintptr, label string)
-	gtkCheckNew    func(label string) uintptr
-	gtkToggleGet   func(w uintptr) int32
-	gtkToggleSet   func(w uintptr, active int32)
-	gtkLabelNew    func(text string) uintptr
-	gtkLabelText   func(label uintptr, text string)
-	gtkLabelXAlign func(label uintptr, x float32)
-	gtkWidgetShow  func(w uintptr)
-	gtkWidgetHide  func(w uintptr)
-	gtkWidgetDestr func(w uintptr)
-	gtkSetSensit   func(w uintptr, sensitive int32)
-	gtkPreferred   func(w uintptr, min, nat unsafe.Pointer)
-	gtkScaleFactor func(w uintptr) int32
-	gtkAllocW      func(w uintptr) int32
-	gtkAllocH      func(w uintptr) int32
-	gSignalConnect func(inst uintptr, sig string, handler, data, destroy uintptr, flags uint32) uint64
-	gIdleAdd       func(fn, data uintptr) uint32
+	gtkInitCheck    func(argc, argv uintptr) int32
+	gtkMain         func()
+	gtkMainQuit     func()
+	gtkWindowNew    func(kind int32) uintptr
+	gtkWinSetTitle  func(win uintptr, title string)
+	gtkWinSetSize   func(win uintptr, w, h int32)
+	gtkContAdd      func(container, child uintptr)
+	gtkFixedNew     func() uintptr
+	gtkFixedPut     func(fixed, child uintptr, x, y int32)
+	gtkFixedMove    func(fixed, child uintptr, x, y int32)
+	gtkSetSizeReq   func(w uintptr, width, height int32)
+	gtkButtonNew    func(label string) uintptr
+	gtkButtonLabel  func(button uintptr, label string)
+	gtkCheckNew     func(label string) uintptr
+	gtkToggleGet    func(w uintptr) int32
+	gtkToggleSet    func(w uintptr, active int32)
+	gtkLabelNew     func(text string) uintptr
+	gtkLabelText    func(label uintptr, text string)
+	gtkLabelXAlign  func(label uintptr, x float32)
+	gtkTextViewNew  func() uintptr
+	gtkTextViewBuf  func(tv uintptr) uintptr
+	gtkTextViewEdit func(tv uintptr, editable int32)
+	gtkTextViewWrap func(tv uintptr, mode int32)
+	gtkTextBufSet   func(buf uintptr, text string, length int32)
+	gtkScrollNew    func(h, v uintptr) uintptr
+	gtkScrollPolicy func(sw uintptr, h, v int32)
+	gtkWidgetShow   func(w uintptr)
+	gtkWidgetHide   func(w uintptr)
+	gtkWidgetDestr  func(w uintptr)
+	gtkSetSensit    func(w uintptr, sensitive int32)
+	gtkPreferred    func(w uintptr, min, nat unsafe.Pointer)
+	gtkScaleFactor  func(w uintptr) int32
+	gtkAllocW       func(w uintptr) int32
+	gtkAllocH       func(w uintptr) int32
+	gSignalConnect  func(inst uintptr, sig string, handler, data, destroy uintptr, flags uint32) uint64
+	gIdleAdd        func(fn, data uintptr) uint32
 )
 
 // requisition mirrors GtkRequisition.
@@ -140,6 +147,13 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkLabelNew, lib, "gtk_label_new")
 	purego.RegisterLibFunc(&gtkLabelText, lib, "gtk_label_set_text")
 	purego.RegisterLibFunc(&gtkLabelXAlign, lib, "gtk_label_set_xalign")
+	purego.RegisterLibFunc(&gtkTextViewNew, lib, "gtk_text_view_new")
+	purego.RegisterLibFunc(&gtkTextViewBuf, lib, "gtk_text_view_get_buffer")
+	purego.RegisterLibFunc(&gtkTextViewEdit, lib, "gtk_text_view_set_editable")
+	purego.RegisterLibFunc(&gtkTextViewWrap, lib, "gtk_text_view_set_wrap_mode")
+	purego.RegisterLibFunc(&gtkTextBufSet, lib, "gtk_text_buffer_set_text")
+	purego.RegisterLibFunc(&gtkScrollNew, lib, "gtk_scrolled_window_new")
+	purego.RegisterLibFunc(&gtkScrollPolicy, lib, "gtk_scrolled_window_set_policy")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
 	purego.RegisterLibFunc(&gtkWidgetHide, lib, "gtk_widget_hide")
 	purego.RegisterLibFunc(&gtkWidgetDestr, lib, "gtk_widget_destroy")
@@ -302,7 +316,8 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 }
 
 type node struct {
-	handle uintptr
+	handle uintptr // the widget placed in the layout (scrolled window for a text view)
+	inner  uintptr // the text view itself, when different from handle
 	kind   core.WidgetKind
 }
 
@@ -346,6 +361,23 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindLabel:
 		g = gtkLabelNew("")
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
+	case core.KindTextView:
+		// A text view goes inside a scrolled window: the scroller is what the
+		// layout places and sizes, the view is what holds the text. Read-only
+		// with word wrap, since this shows a log, not an editor.
+		const wrapWordChar = 3
+		tv := gtkTextViewNew()
+		gtkTextViewEdit(tv, 0)
+		gtkTextViewWrap(tv, wrapWordChar)
+		sw := gtkScrollNew(0, 0)
+		const policyAutomatic = 1
+		gtkScrollPolicy(sw, policyAutomatic, policyAutomatic)
+		gtkContAdd(sw, tv)
+		gtkWidgetShow(tv)
+		w.nodes[h] = &node{handle: sw, inner: tv, kind: kind}
+		gtkFixedPut(w.fixed, sw, 0, 0)
+		gtkWidgetShow(sw)
+		return h, nil
 	default:
 		return 0, fmt.Errorf("gtk: unsupported widget kind %v", kind)
 	}
@@ -382,6 +414,8 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		return
 	}
 	switch n.kind {
+	case core.KindTextView:
+		gtkTextBufSet(gtkTextViewBuf(n.inner), v, -1)
 	case core.KindButton, core.KindCheckBox:
 		gtkButtonLabel(n.handle, v) // GtkCheckButton is a GtkButton subclass
 	default:

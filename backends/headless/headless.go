@@ -177,6 +177,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindButton:
 		s := core.Size{W: textW + 2*ButtonPadX, H: LineHeight + 2*ButtonPadY}
 		return core.Size{W: 2 * ButtonPadX, H: s.H}, s
+	case core.KindTextView:
+		// A fixed, tall rectangle — the layout gives it a definite height.
+		return core.Size{W: 0, H: 120}, core.Size{W: textW, H: 120}
 	case core.KindCheckBox:
 		s := core.Size{W: CheckBoxBox + CheckBoxGap + textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: CheckBoxBox, H: s.H}, s

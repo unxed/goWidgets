@@ -46,6 +46,9 @@ const (
 	KindLabel WidgetKind = iota + 1
 	KindButton
 	KindCheckBox
+	// KindTextView is a multi-line, read-only, scrolling text area — a native
+	// GtkTextView on GTK and a multiline EDIT on Win32.
+	KindTextView
 )
 
 func (k WidgetKind) String() string {
@@ -56,6 +59,8 @@ func (k WidgetKind) String() string {
 		return "Button"
 	case KindCheckBox:
 		return "CheckBox"
+	case KindTextView:
+		return "TextView"
 	}
 	return "Unknown"
 }

@@ -24,6 +24,10 @@ type Node struct {
 	// Cached measurement, invalidated by dirtyMeasure.
 	minSize, natSize Size
 	measured         bool
+	// PrefHeight, when >0, overrides the measured height. A text view has no
+	// natural height worth having — it is a viewport whose size the caller
+	// chooses — so this is how a log area gets to be tall.
+	PrefHeight float64
 
 	OnClicked func()
 	OnToggled func(bool)
@@ -342,12 +346,16 @@ func stackLayout(a *App) []BoundsChange {
 			n.minSize, n.natSize = a.win.MeasureIntrinsic(n.H, avail)
 			n.measured = true
 		}
-		r := Rect{X: pad, Y: y, W: avail.W, H: n.natSize.H}
+		height := n.natSize.H
+		if n.PrefHeight > 0 {
+			height = n.PrefHeight
+		}
+		r := Rect{X: pad, Y: y, W: avail.W, H: height}
 		if r != n.Bounds {
 			n.Bounds = r
 			changes = append(changes, BoundsChange{H: n.H, R: r, Visible: n.Visible})
 		}
-		y += n.natSize.H + pad
+		y += height + pad
 	}
 	return changes
 }
@@ -387,3 +395,10 @@ func (a *App) SetTrayMenu(items []MenuItem) {
 
 // TrayEmbedded reports whether a panel accepted the status-area icon.
 func (a *App) TrayEmbedded() bool { return a.tray != nil && a.tray.Embedded() }
+
+// SetPrefHeight fixes a node's height, overriding measurement. Used for a text
+// view, whose height is a choice, not a property of its content.
+func (a *App) SetPrefHeight(n *Node, h float64) {
+	n.PrefHeight = h
+	a.Invalidate()
+}
