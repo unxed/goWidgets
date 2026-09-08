@@ -598,6 +598,10 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		pPostQuitMessage.Call(0)
 		return 0
 
+	case wmTrayIcon:
+		handleTrayMessage(lParam)
+		return 0
+
 	case wmCommand:
 		if d.win != nil {
 			id := uint32(wParam & 0xFFFF)

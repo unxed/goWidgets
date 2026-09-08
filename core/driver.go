@@ -5,7 +5,10 @@
 // backend. Drivers register themselves through init() + build tags.
 package core
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // ------------------------------------------------------------- §4.1 geometry
 
@@ -116,6 +119,11 @@ const (
 	EventCloseRequested
 	EventScaleChanged
 	EventResized
+
+	// EventTrayActivated is a left click on the tray icon.
+	EventTrayActivated
+	// EventMenuItem carries the id of the chosen menu entry in H.
+	EventMenuItem
 )
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a
@@ -126,6 +134,31 @@ type BackendEvent struct {
 	Size  Size
 	Scale ScaleInfo
 	Bool  bool // EventToggled: the control's new state
+}
+
+// MenuItem is one entry of the tray menu. A separator ignores Label.
+type MenuItem struct {
+	ID        Handle
+	Label     string
+	Separator bool
+}
+
+// TraySpec describes the tray icon to create.
+type TraySpec struct {
+	Tooltip string
+	// IconName is a themed icon name on platforms that have an icon theme.
+	// Empty means the backend picks something neutral.
+	IconName string
+	Menu     []MenuItem
+}
+
+// BackendTray is a status-area icon. It is owned by the driver rather than by a
+// window: an application that has hidden its window must keep its tray icon.
+type BackendTray interface {
+	SetTooltip(string)
+	SetMenu([]MenuItem)
+	Destroy()
+	Events() <-chan BackendEvent
 }
 
 // WindowSpec describes a window to create.
@@ -161,8 +194,15 @@ type PlatformDriver interface {
 	Wake()
 
 	CreateWindow(spec WindowSpec) (BackendWindow, error)
+
+	// CreateTray returns ErrNoTray on drivers that have no status area.
+	CreateTray(spec TraySpec) (BackendTray, error)
+
 	Shutdown()
 }
+
+// ErrNoTray is returned by CreateTray on a driver without a status area.
+var ErrNoTray = errors.New("core: this backend has no tray")
 
 // BackendWindow is one native top-level window plus the widgets inside it.
 type BackendWindow interface {

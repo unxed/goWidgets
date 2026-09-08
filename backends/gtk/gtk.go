@@ -64,15 +64,18 @@ const windowToplevel = 0
 type driver struct {
 	win *window
 
-	cbClicked  uintptr
-	cbToggled  uintptr
-	cbDelete   uintptr
-	cbAlloc    uintptr
-	cbWake     uintptr
-	cbQuit     uintptr
-	pump       func()
-	pumpMu     sync.Mutex
-	initedOnce bool
+	cbClicked      uintptr
+	cbToggled      uintptr
+	cbTrayActivate uintptr
+	cbTrayPopup    uintptr
+	cbMenuItem     uintptr
+	cbDelete       uintptr
+	cbAlloc        uintptr
+	cbWake         uintptr
+	cbQuit         uintptr
+	pump           func()
+	pumpMu         sync.Mutex
+	initedOnce     bool
 }
 
 func (d *driver) Name() string { return "gtk" }
@@ -84,8 +87,8 @@ func (d *driver) Capabilities() core.Caps {
 		FileDialog:      true,
 		Menus:           true,
 		SmoothAnimation: true,
-		TrayIcon:        false, // GtkStatusIcon is deprecated; see ADR-0003
-		MaxCallbacks:    2000,  // purego's callback pool
+		TrayIcon:        true, // GtkStatusIcon; see the note in tray_linux.go
+		MaxCallbacks:    2000, // purego's callback pool
 	}
 }
 
@@ -147,6 +150,7 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkAllocH, lib, "gtk_widget_get_allocated_height")
 	purego.RegisterLibFunc(&gSignalConnect, gobj, "g_signal_connect_data")
 	purego.RegisterLibFunc(&gIdleAdd, glib, "g_idle_add")
+	d.registerTray(lib, gobj)
 
 	if gtkInitCheck(0, 0) == 0 {
 		return fmt.Errorf("gtk_init_check failed (no display?)")
@@ -157,6 +161,24 @@ func (d *driver) Init() error {
 	// pointer, which the runtime forbids handing to C.
 	d.cbClicked = purego.NewCallback(func(w, data uintptr) uintptr {
 		emit(core.BackendEvent{Kind: core.EventClicked, H: core.Handle(data)})
+		return 0
+	})
+	d.cbTrayActivate = purego.NewCallback(func(icon, data uintptr) uintptr {
+		trayEmit(core.BackendEvent{Kind: core.EventTrayActivated})
+		return 0
+	})
+	// popup-menu carries (icon, button, activate_time, data).
+	d.cbTrayPopup = purego.NewCallback(func(icon, button, when, data uintptr) uintptr {
+		trayMu.Lock()
+		t := trayCurrent
+		trayMu.Unlock()
+		if t != nil {
+			t.popup()
+		}
+		return 0
+	})
+	d.cbMenuItem = purego.NewCallback(func(item, data uintptr) uintptr {
+		trayEmit(core.BackendEvent{Kind: core.EventMenuItem, H: core.Handle(data)})
 		return 0
 	})
 	d.cbToggled = purego.NewCallback(func(w, data uintptr) uintptr {

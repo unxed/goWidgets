@@ -22,8 +22,15 @@
 
 ## Открыто
 
-- [ ] Трей на Linux: `GtkStatusIcon` устарел, нужен `StatusNotifierItem` по D-Bus
-      (на Windows — `Shell_NotifyIcon`). Блокирует showcase crescent.
+- [x] Трей сделан: на Windows `Shell_NotifyIcon`, на Linux `GtkStatusIcon`.
+      Последний устарел с GTK 3.14, но присутствует и работает в 3.24, и панели
+      Cinnamon, XFCE, MATE, KDE его принимают. `StatusNotifierItem` правильнее,
+      но это D-Bus-протокол, который пришлось бы писать руками, ему нужен живой
+      StatusNotifierWatcher, а на GNOME он без расширения всё равно не виден.
+      Замена затрагивает один файл, если панель откажется.
+- [ ] Проверить трей на живой панели: под Xvfb проверяется только то, что иконка
+      создаётся. `gtk_status_icon_is_embedded` отличает «панель не приняла» от
+      ошибки в коде.
 - [ ] `ListView` с колонками и галочками — следующий виджет для crescent.
 - [ ] Cassowary (Фаза 2): текущий layout — вертикальный стек с фиксированными
       размерами, интерфейс `func(*App) []BoundsChange` уже тот, что нужен солверу.

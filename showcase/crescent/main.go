@@ -58,6 +58,11 @@ func main() {
 	drop, _ := win.AddButton("Убрать отмеченные")
 	quit, _ := win.AddButton("Выход")
 
+	// Declared before the closures that use them: refresh() updates the
+	// tooltip, and Closing decides between hiding and quitting.
+	var tray *goWidgets.TrayIcon
+	hasTray := false
+
 	live := func() int {
 		n := 0
 		for _, g := range goals {
@@ -73,8 +78,12 @@ func main() {
 		if running {
 			verb = "Работаю"
 		}
-		status.Text.Set(fmt.Sprintf("%s. Целей в очереди: %d", verb, live()))
+		line := fmt.Sprintf("%s. Целей в очереди: %d", verb, live())
+		status.Text.Set(line)
 		drop.Enabled.Set(anyChecked(goals))
+		if hasTray {
+			tray.Tooltip.Set(line)
+		}
 	}
 
 	for _, g := range goals {
@@ -99,9 +108,29 @@ func main() {
 	})
 	quit.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { app.Quit() })
 
-	// Closing the window will eventually mean "hide to tray"; the veto path
-	// that makes that possible is already in place.
-	win.Closing.On(app.Scope(), func(req *goWidgets.CloseRequest) { app.Quit() })
+	// Closing hides to the tray rather than quitting — the veto path exists
+	// exactly for this. Without an icon there would be no way back, so the
+	// window only hides when one was actually created.
+	win.Closing.On(app.Scope(), func(req *goWidgets.CloseRequest) {
+		if hasTray {
+			req.CancelClose()
+			win.Hide()
+			return
+		}
+		app.Quit()
+	})
+
+	show := goWidgets.NewMenuItem("Показать окно")
+	quitItem := goWidgets.NewMenuItem("Выход")
+	tray, err = app.NewTrayIcon("crescent", show, goWidgets.Separator(), quitItem)
+	if err != nil {
+		log.Printf("трей недоступен (%v) — работаем окном", err)
+	} else {
+		hasTray = true
+		show.Clicked.On(app.Scope(), func(struct{}) { win.Show() })
+		quitItem.Clicked.On(app.Scope(), func(struct{}) { app.Quit() })
+		tray.Activated.On(app.Scope(), func(struct{}) { win.Show() })
+	}
 
 	// A background goroutine touching the UI only through QueueUpdate (§4.5.3),
 	// standing in for the poller that watches for the usage-limit reset.

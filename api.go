@@ -252,3 +252,80 @@ func (w *Window) AddButton(text string) (*Button, error) {
 	wd.node.OnClicked = func() { b.Clicked.Emit(ClickInfo{}) }
 	return b, nil
 }
+
+// MenuItem is one entry of a tray menu.
+type MenuItem struct {
+	Label     string
+	Separator bool
+	Clicked   *vreactive.Event[struct{}]
+}
+
+// NewMenuItem returns a clickable entry.
+func NewMenuItem(label string) *MenuItem {
+	return &MenuItem{Label: label, Clicked: vreactive.NewEvent[struct{}]()}
+}
+
+// Separator returns a divider.
+func Separator() *MenuItem { return &MenuItem{Separator: true} }
+
+// TrayIcon is an icon in the system status area.
+//
+// It belongs to the application rather than to a window, so hiding the window
+// does not take the icon away — which is the entire point of having one.
+type TrayIcon struct {
+	app *App
+
+	// Tooltip is what the status area shows on hover.
+	Tooltip *vreactive.Property[string]
+	// Activated fires on a left click.
+	Activated *vreactive.Event[struct{}]
+
+	items []*MenuItem
+}
+
+// NewTrayIcon puts an icon in the status area. It returns an error wrapping
+// core.ErrNoTray on backends that have none, which callers should treat as
+// "run without an icon" rather than as a fatal condition.
+func (a *App) NewTrayIcon(tooltip string, items ...*MenuItem) (*TrayIcon, error) {
+	t := &TrayIcon{
+		app:       a,
+		Tooltip:   vreactive.NewProperty(tooltip),
+		Activated: vreactive.NewEvent[struct{}](),
+		items:     items,
+	}
+	if err := a.eng.OpenTray(tooltip, t.spec(), t.dispatch); err != nil {
+		return nil, err
+	}
+	t.Tooltip.OnChange(a.scope, func(v, _ string) { a.eng.SetTrayTooltip(v) })
+	return t, nil
+}
+
+func (t *TrayIcon) spec() []core.MenuItem {
+	out := make([]core.MenuItem, 0, len(t.items))
+	for i, it := range t.items {
+		out = append(out, core.MenuItem{
+			ID:        core.Handle(i + 1),
+			Label:     it.Label,
+			Separator: it.Separator,
+		})
+	}
+	return out
+}
+
+func (t *TrayIcon) dispatch(kind core.EventKind, h core.Handle) {
+	switch kind {
+	case core.EventTrayActivated:
+		t.Activated.Emit(struct{}{})
+	case core.EventMenuItem:
+		i := int(h) - 1
+		if i >= 0 && i < len(t.items) && t.items[i].Clicked != nil {
+			t.items[i].Clicked.Emit(struct{}{})
+		}
+	}
+}
+
+// SetMenu replaces the menu.
+func (t *TrayIcon) SetMenu(items ...*MenuItem) {
+	t.items = items
+	t.app.eng.SetTrayMenu(t.spec())
+}

@@ -89,6 +89,9 @@ func (d *driver) Wake() {
 	}
 }
 
+// CreateTray: a driver with no window system has no status area either.
+func (d *driver) CreateTray(core.TraySpec) (core.BackendTray, error) { return nil, core.ErrNoTray }
+
 func (d *driver) Shutdown() {}
 
 type node struct {

@@ -1,12 +1,14 @@
 package goWidgets_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/unxed/goWidgets"
 	"github.com/unxed/goWidgets/backends/headless"
+	"github.com/unxed/goWidgets/core"
 	"github.com/unxed/goWidgets/vreactive"
 )
 
@@ -224,4 +226,27 @@ func TestCheckBoxBindsBothWays(t *testing.T) {
 	if got, _ := headless.CheckedByText("Цель: починить CI"); got {
 		t.Fatal("state echoed back to the platform — binding loop")
 	}
+}
+
+// The tray is optional by contract: a backend without a status area must say so
+// rather than fail, and an application must be able to carry on without one.
+func TestTrayIsOptionalOnBackendsWithoutOne(t *testing.T) {
+	app := newHeadlessApp(t)
+	if _, err := app.NewWindow("crescent", 400, 300); err != nil {
+		t.Fatal(err)
+	}
+
+	tray, err := app.NewTrayIcon("crescent", goWidgets.NewMenuItem("Выход"))
+	if err == nil {
+		t.Fatal("the headless driver claimed to have a tray")
+	}
+	if !errors.Is(err, core.ErrNoTray) {
+		t.Errorf("err = %v, want it to wrap core.ErrNoTray", err)
+	}
+	if tray != nil {
+		t.Error("a tray was returned alongside the error")
+	}
+
+	// Everything else must keep working.
+	pumpUntilIdle(t, app)
 }

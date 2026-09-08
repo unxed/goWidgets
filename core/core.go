@@ -68,6 +68,7 @@ type App struct {
 	dirtyLayout bool
 	cancel      context.CancelFunc
 	onClose     closeHandler
+	tray        BackendTray
 }
 
 // ErrNoDriver reports that no backend could be initialised.
@@ -349,4 +350,37 @@ func stackLayout(a *App) []BoundsChange {
 		y += n.natSize.H + pad
 	}
 	return changes
+}
+
+// OpenTray creates the status-area icon and starts routing its events.
+func (a *App) OpenTray(tooltip string, menu []MenuItem, on func(EventKind, Handle)) error {
+	t, err := a.driver.CreateTray(TraySpec{Tooltip: tooltip, Menu: menu})
+	if err != nil {
+		return err
+	}
+	a.tray = t
+
+	// Same shape as window events: read on a helper goroutine, re-enter through
+	// QueueUpdate so every handler still runs on the UI thread (§4.5.2).
+	go func() {
+		for ev := range t.Events() {
+			ev := ev
+			a.QueueUpdate(func() { on(ev.Kind, ev.H) })
+		}
+	}()
+	return nil
+}
+
+// SetTrayTooltip updates the status-area tooltip, if there is an icon.
+func (a *App) SetTrayTooltip(s string) {
+	if a.tray != nil {
+		a.tray.SetTooltip(s)
+	}
+}
+
+// SetTrayMenu replaces the status-area menu, if there is an icon.
+func (a *App) SetTrayMenu(items []MenuItem) {
+	if a.tray != nil {
+		a.tray.SetMenu(items)
+	}
 }
