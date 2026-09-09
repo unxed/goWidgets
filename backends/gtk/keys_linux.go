@@ -70,6 +70,19 @@ var gdkKeyToVK = map[uint32]uint16{
 	0xffc7: winkeys.VK_F10,
 	0xffc8: winkeys.VK_F11,
 	0xffc9: winkeys.VK_F12,
+
+	// Modifiers. They arrive as key events of their own, and without these a
+	// press of Shift or Ctrl came through as virtual key zero — a keystroke
+	// that names no key.
+	0xffe1: winkeys.VK_SHIFT,
+	0xffe2: winkeys.VK_SHIFT,
+	0xffe3: winkeys.VK_CONTROL,
+	0xffe4: winkeys.VK_CONTROL,
+	0xffe9: winkeys.VK_MENU,
+	0xffea: winkeys.VK_MENU,
+	0xffeb: winkeys.VK_LWIN,
+	0xffec: winkeys.VK_RWIN,
+	0xffe5: winkeys.VK_CAPITAL,
 }
 
 // keyFromGdk builds a KeyEvent from a GdkEventKey pointer.
