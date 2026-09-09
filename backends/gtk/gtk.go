@@ -51,6 +51,7 @@ var (
 	gtkTextBufSet   func(buf uintptr, text string, length int32)
 	gtkScrollNew    func(h, v uintptr) uintptr
 	gtkScrollPolicy func(sw uintptr, h, v int32)
+	gtkTextViewMono func(tv uintptr, mono int32)
 	gtkWidgetShow   func(w uintptr)
 	gtkWidgetHide   func(w uintptr)
 	gtkWidgetDestr  func(w uintptr)
@@ -156,6 +157,7 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkTextBufSet, lib, "gtk_text_buffer_set_text")
 	purego.RegisterLibFunc(&gtkScrollNew, lib, "gtk_scrolled_window_new")
 	purego.RegisterLibFunc(&gtkScrollPolicy, lib, "gtk_scrolled_window_set_policy")
+	purego.RegisterLibFunc(&gtkTextViewMono, lib, "gtk_text_view_set_monospace")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
 	purego.RegisterLibFunc(&gtkWidgetHide, lib, "gtk_widget_hide")
 	purego.RegisterLibFunc(&gtkWidgetDestr, lib, "gtk_widget_destroy")
@@ -398,10 +400,17 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// A text view goes inside a scrolled window: the scroller is what the
 		// layout places and sizes, the view is what holds the text. Read-only
 		// with word wrap, since this shows a log, not an editor.
-		const wrapWordChar = 3
+		// Monospace, and no wrapping. A log is columns — time, source, message —
+		// and a proportional font destroys the columns while wrapping destroys
+		// the line structure, so the two together make it unreadable. Long
+		// lines get a horizontal scrollbar instead of being folded.
+		const wrapNone = 0
 		tv := gtkTextViewNew()
 		gtkTextViewEdit(tv, 0)
-		gtkTextViewWrap(tv, wrapWordChar)
+		gtkTextViewWrap(tv, wrapNone)
+		if gtkTextViewMono != nil {
+			gtkTextViewMono(tv, 1)
+		}
 		sw := gtkScrollNew(0, 0)
 		const policyAutomatic = 1
 		gtkScrollPolicy(sw, policyAutomatic, policyAutomatic)

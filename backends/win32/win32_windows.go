@@ -92,7 +92,9 @@ const (
 	esMultiline     = 0x00000004
 	esReadonly      = 0x00000800
 	esAutoVScroll   = 0x00000040
+	esAutoHScroll   = 0x00000080
 	wsVScroll       = 0x00200000
+	wsHScroll       = 0x00100000
 	wsBorder        = 0x00800000
 	bmGetCheck      = 0x00F0
 	bmSetCheck      = 0x00F1
@@ -192,6 +194,7 @@ type driver struct {
 	className *uint16
 	msgWnd    windows.Handle
 	font      windows.Handle
+	monoFont  windows.Handle
 	win       *window
 
 	pumpMu sync.Mutex
@@ -265,6 +268,7 @@ func (d *driver) Init() error {
 		return fmt.Errorf("RegisterClassExW: %v", e)
 	}
 	d.font = uiFont()
+	d.monoFont = monoFont()
 
 	name, _ := windows.UTF16PtrFromString("goWidgetsMsg")
 	mh, _, e := pCreateWindowExW.Call(0,
@@ -306,6 +310,31 @@ func enableVisualStyles() {
 	var cookie uintptr
 	pActivateActCtx.Call(h, uintptr(unsafe.Pointer(&cookie)))
 	// Never deactivated: it stays in force for the process lifetime.
+}
+
+// monoFont returns the system fixed-pitch UI font, sized like the message font
+// so a log pane does not jump out from the rest of the window.
+func monoFont() windows.Handle {
+	const spiGetNonClientMetrics = 0x0029
+	ncm := nonClientMetricsW{cbSize: uint32(unsafe.Sizeof(nonClientMetricsW{}))}
+	if r, _, _ := pSysParamsInfoW.Call(spiGetNonClientMetrics,
+		uintptr(ncm.cbSize), uintptr(unsafe.Pointer(&ncm)), 0); r == 0 {
+		return 0
+	}
+	lf := ncm.lfMessageFont
+	const fixedPitchFontFamily = 0x01 | 0x30 // FIXED_PITCH | FF_MODERN
+	lf.lfPitchAndFamily = fixedPitchFontFamily
+	// Consolas ships with every supported Windows; an empty face name would
+	// let GDI pick whatever it liked.
+	name, err := windows.UTF16FromString("Consolas")
+	if err == nil {
+		for i := range lf.lfFaceName {
+			lf.lfFaceName[i] = 0
+		}
+		copy(lf.lfFaceName[:], name)
+	}
+	f, _, _ := pCreateFontIndirectW.Call(uintptr(unsafe.Pointer(&lf)))
+	return windows.Handle(f)
 }
 
 func uiFont() windows.Handle {
@@ -435,8 +464,11 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// A read-only multiline EDIT with a vertical scrollbar is the native
 		// log view on Windows — no extra control needed.
 		class = "EDIT"
-		style = wsChild | wsVisible | wsBorder | wsVScroll |
-			esMultiline | esReadonly | esAutoVScroll
+		// Both scrollbars, and no wrapping: a multiline EDIT wraps unless it
+		// is given a horizontal scrollbar, and a wrapped log loses the column
+		// structure that makes it readable at all.
+		style = wsChild | wsVisible | wsBorder | wsVScroll | wsHScroll |
+			esMultiline | esReadonly | esAutoVScroll | esAutoHScroll
 	}
 	clsp, _ := windows.UTF16PtrFromString(class)
 	txtp, _ := windows.UTF16PtrFromString("")
@@ -447,8 +479,14 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	if hwnd == 0 {
 		return 0, fmt.Errorf("CreateWindowExW(%s): %v", class, e)
 	}
-	if w.drv.font != 0 {
-		pSendMessageW.Call(hwnd, wmSetFont, uintptr(w.drv.font), 1)
+	// A text view shows a log: columns of time, source and message. In a
+	// proportional font the columns do not line up and it reads as a mess.
+	f := w.drv.font
+	if kind == core.KindTextView && w.drv.monoFont != 0 {
+		f = w.drv.monoFont
+	}
+	if f != 0 {
+		pSendMessageW.Call(hwnd, wmSetFont, uintptr(f), 1)
 	}
 	w.nodes[h] = &node{hwnd: hwnd, id: id, kind: kind}
 
