@@ -370,10 +370,10 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 > элемент (FFI без CGO + intrinsic-измерения) проверяется спайком **до** массовой разработки,
 > а не в Фазе 7. Каждая фаза имеет проверяемый Definition of Done.
 
-> **Статус на 2026-09-10 (см. ADR-0004, ADR-0005).** Порядок фаз пересобран по риску:
+> **Статус на 2026-09-10 (см. ADR-0004, ADR-0005, ADR-0006).** Порядок фаз пересобран по риску:
 > нативные бэкенды подняты выше Cassowary и Ebiten. Закрыто: Фаза 0 целиком,
-> Фаза 1 без Ebiten, бэкенды Фаз 3 и 4 (GTK 3 и Win32), трей, Фаза 2 в части
-> solver'а и публичного API (ADR-0005; без `LayoutBoundary` и `bench/layout`).
+> Фаза 1 без Ebiten, бэкенды Фаз 3 и 4 (GTK 3 и Win32), трей, Фаза 2 (ADR-0005,
+> ADR-0006; `LayoutBoundary` отложен до `ScrollArea` — NFR выполнен без него).
 > Открыто: анимации, фокус/tab-order, Cocoa, Web.
 
 ### Фаза 0. Inception: каркас, CI и разведка рисков

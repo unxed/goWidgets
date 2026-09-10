@@ -35,6 +35,11 @@ jobs:
       - name: Tests with a display and a panel
         run: xvfb-run -a go test -race ./...
 
+      # The debug build turns affinity and constraint violations into panics;
+      # it has to stay green too, or the diagnostics rot unnoticed.
+      - name: Tests, debug build
+        run: xvfb-run -a go test -tags goWidgets_debug ./...
+
       - name: Cross-compile
         run: |
           set -e

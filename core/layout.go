@@ -329,3 +329,18 @@ func equalHandles(a, b []Handle) bool {
 	}
 	return true
 }
+
+// NewGuide creates a rectangle that exists only in the solver: no backend
+// widget, no flow membership, nothing drawn. It is the nesting primitive of
+// a single-solver layout — a container is just a Box other boxes are
+// constrained to, and since every coordinate is absolute already there is
+// no tree to keep, no relative-to-parent conversion, no second engine. A
+// guide only refuses to be negative in size.
+func (a *App) NewGuide() *Vars {
+	a.nextGuide++
+	v := newVars(Handle(1<<62 + a.nextGuide)) // names only; never a backend handle
+	s := a.lay.solver
+	must(s.AddConstraint(kiwi.NewConstraint(v.Width, kiwi.OpGe, 0, StrengthRequired)))
+	must(s.AddConstraint(kiwi.NewConstraint(v.Height, kiwi.OpGe, 0, StrengthRequired)))
+	return v
+}

@@ -123,7 +123,13 @@ func TestClickReachesHandler(t *testing.T) {
 }
 
 // NFR "Утечки подписок": closing a scope must drop every subscription.
+//
+// This test and the next build no App, so nothing binds the UI goroutine for
+// them — but a test before them did, to its own goroutine, and under
+// -tags goWidgets_debug the affinity check would fire on ours. This goroutine
+// is the whole application here, so it is the UI goroutine.
 func TestNoLeakedSubscriptions(t *testing.T) {
+	vreactive.BindMainThread()
 	scope := vreactive.NewScope()
 	p := vreactive.NewProperty("a")
 	e := vreactive.NewEvent[int]()
@@ -151,6 +157,7 @@ func TestNoLeakedSubscriptions(t *testing.T) {
 
 // Batch must be glitch-free: subscribers observe the committed state once.
 func TestBatchIsGlitchFree(t *testing.T) {
+	vreactive.BindMainThread()
 	scope := vreactive.NewScope()
 	defer scope.Close()
 
@@ -465,4 +472,43 @@ func TestUnconstrainReturnsToFlow(t *testing.T) {
 		t.Errorf("button did not return to the flow under the label:\n%s", headless.Golden())
 	}
 	_ = lbl
+}
+
+// Nesting: a guide is a container that lives only in the solver. A button
+// bar pinned to the bottom of the window, two buttons splitting it — the
+// guide gets no rectangle of its own in the log, only its contents do.
+func TestGuideNestsLayout(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	ok, _ := win.AddButton("OK")
+	cancel, _ := win.AddButton("Отмена")
+
+	bar := win.NewGuide()
+	var cs []*goWidgets.Constraint
+	cs = append(cs,
+		bar.Left().Eq(win.Left().Plus(8)),
+		bar.Right().Eq(win.Right().Minus(8)),
+		bar.Bottom().Eq(win.Bottom().Minus(8)),
+		bar.Height().Is(36),
+
+		ok.Left().Eq(bar.Left()),
+		ok.Top().Eq(bar.Top()),
+		ok.Bottom().Eq(bar.Bottom()),
+		cancel.Right().Eq(bar.Right()),
+		cancel.Top().Eq(bar.Top()),
+		cancel.Bottom().Eq(bar.Bottom()),
+	)
+	cs = append(cs, goWidgets.Row(8, ok, cancel)...)
+	cs = append(cs, goWidgets.EqualWidths(ok, cancel)...)
+	if err := win.Constrain(cs...); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+
+	got := strings.TrimSpace(headless.Golden())
+	want := `Button("OK") x=8.0 y=256.0 w=188.0 h=36.0 visible=true
+Button("Отмена") x=204.0 y=256.0 w=188.0 h=36.0 visible=true`
+	if got != want {
+		t.Errorf("guide did not nest the bar:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
 }

@@ -77,6 +77,8 @@ type App struct {
 	scope *vreactive.Scope
 	lay   *layoutEngine
 
+	nextGuide uint64 // counter for naming layout guides
+
 	queueMu sync.Mutex
 	queue   []func()
 

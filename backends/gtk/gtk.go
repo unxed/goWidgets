@@ -22,7 +22,26 @@ import (
 	"github.com/unxed/goWidgets/core"
 )
 
-func init() { core.RegisterDriver("gtk", func() core.PlatformDriver { return &driver{} }) }
+func init() {
+	core.RegisterDriver("gtk", func() core.PlatformDriver {
+		current = &driver{}
+		return current
+	})
+}
+
+// current is the driver most recently created, kept for WindowHandle.
+var current *driver
+
+// WindowHandle returns the GtkWindow* of the current window, or 0. It exists
+// for tests that inject native events; an application has no use for it.
+// Tests that need it live in their own package directory: GTK keeps
+// process-global state, and two applications in one test binary crash.
+func WindowHandle() uintptr {
+	if current == nil || current.win == nil {
+		return 0
+	}
+	return current.win.handle
+}
 
 var (
 	gtkInitCheck    func(argc, argv uintptr) int32
@@ -184,11 +203,14 @@ func (d *driver) Init() error {
 	// The handler signature is gboolean(GtkWidget*, GdkEventKey*, gpointer);
 	// returning 0 lets the key travel on to the focused control, so adding a
 	// listener never steals typing from a widget.
-	d.cbKeyPress = purego.NewCallback(func(widget, event, data uintptr) uintptr {
+	// The event arrives as a typed pointer: the FFI layer converts the C
+	// address itself, so no uintptr→unsafe.Pointer cast is needed here (and
+	// vet's unsafeptr check has nothing to object to).
+	d.cbKeyPress = purego.NewCallback(func(widget uintptr, event *gdkEventKey, data uintptr) uintptr {
 		d.emitKey(event, true)
 		return 0
 	})
-	d.cbKeyRelease = purego.NewCallback(func(widget, event, data uintptr) uintptr {
+	d.cbKeyRelease = purego.NewCallback(func(widget uintptr, event *gdkEventKey, data uintptr) uintptr {
 		d.emitKey(event, false)
 		return 0
 	})
@@ -295,7 +317,7 @@ func (d *driver) Wake() {
 }
 
 // emitKey turns a GdkEventKey into a backend event on the current window.
-func (d *driver) emitKey(event uintptr, down bool) {
+func (d *driver) emitKey(event *gdkEventKey, down bool) {
 	vk, ch, state, ok := keyFromGdk(event, down)
 	if !ok {
 		return

@@ -252,6 +252,30 @@ func (w *Window) CenterX() Anchor { return w.anchors().CenterX() }
 // CenterY is the content area's vertical centre line.
 func (w *Window) CenterY() Anchor { return w.anchors().CenterY() }
 
+// Guide is a rectangle that takes part in layout and nothing else: no native
+// control, not drawn, not in the flow. It is how dialogs nest — a button bar,
+// a two-column area, an inset panel — without a container widget or a second
+// layout engine. Constrain the guide to the window and the widgets to the
+// guide:
+//
+//	bar := win.NewGuide()
+//	win.Constrain(
+//		bar.Left().Eq(win.Left().Plus(8)),
+//		bar.Right().Eq(win.Right().Minus(8)),
+//		bar.Bottom().Eq(win.Bottom().Minus(8)),
+//		bar.Height().Is(36),
+//	)
+//	win.Constrain(goWidgets.Fill(ok, bar, 0)...)
+//
+// A guide has no size of its own: what its edges are not pinned to, the
+// widgets inside it (or nothing) decide.
+type Guide struct{ anchors }
+
+// NewGuide creates a layout guide in the window.
+func (w *Window) NewGuide() *Guide {
+	return &Guide{anchors{w.app, nil, w.app.eng.NewGuide()}}
+}
+
 // ---------------------------------------------------------------- helpers
 //
 // These build ordinary constraints — nothing here the caller could not write

@@ -3,8 +3,6 @@
 package gtk
 
 import (
-	"unsafe"
-
 	"github.com/unxed/winkeys"
 )
 
@@ -85,12 +83,13 @@ var gdkKeyToVK = map[uint32]uint16{
 	0xffe5: winkeys.VK_CAPITAL,
 }
 
-// keyFromGdk builds a KeyEvent from a GdkEventKey pointer.
-func keyFromGdk(p uintptr, down bool) (vk uint16, ch rune, state uint32, ok bool) {
-	if p == 0 {
+// keyFromGdk builds a KeyEvent from a GdkEventKey. The pointer is typed on
+// the way in (see the callback in gtk.go), so this reads a struct GTK owns for
+// the duration of the callback and nothing more.
+func keyFromGdk(ev *gdkEventKey, down bool) (vk uint16, ch rune, state uint32, ok bool) {
+	if ev == nil {
 		return 0, 0, 0, false
 	}
-	ev := (*gdkEventKey)(unsafe.Pointer(p))
 
 	if v, found := gdkKeyToVK[ev.keyval]; found {
 		vk = v

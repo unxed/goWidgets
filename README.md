@@ -103,6 +103,25 @@ win.Constrain(goWidgets.EqualWidths(run, drop, quit)...)
 Скрытый виджет (`Visible.Set(false)`) в цепочке схлопывается до нуля по
 свободной оси, и всё под ним поднимается; зазор цепочки остаётся.
 
+Вложенность — через `Guide`: прямоугольник, который есть только в solver'е
+(без контрола, не рисуется, вне потока). Панель кнопок, две колонки, отступ
+внутри окна — это guide, к которому привязаны виджеты:
+
+```go
+bar := win.NewGuide()
+win.Constrain(
+	bar.Left().Eq(win.Left().Plus(8)),
+	bar.Right().Eq(win.Right().Minus(8)),
+	bar.Bottom().Eq(win.Bottom().Minus(8)),
+	bar.Height().Is(36),
+)
+win.Constrain(goWidgets.Fill(ok, bar, 0)...)
+```
+
+Производительность: resize окна с 500 связанными узлами — 1.1–1.5 мс
+(`go test -run xxx -bench Layout .`), NFR 4 мс выполнен; первое построение
+такой системы — 0.3–0.5 с, это внутри kiwi-go (ADR-0006).
+
 ## Сборка
 
 ```sh
@@ -186,7 +205,10 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
   подписок, тест glitch-free `Batch`.
 * `CGO_ENABLED=0` сборка под `windows/amd64`, `windows/arm64`, `linux/amd64`,
   `linux/arm64`, `darwin/arm64` (последняя уходит на headless — драйвера Cocoa ещё нет).
-* `go vet` чистый под обе платформы.
+* GTK 3: клавиатурное событие, построенное через `gdk_event_new` и поданное в
+  `gtk_widget_event`, доходит до `KeyPressed` как Ctrl+A (тест под Xvfb).
+* `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
+  проходит тесты и проверяется в CI.
 
 Win32-драйвер собирается и проходит `vet`, но вживую пока не запускался.
 
