@@ -155,11 +155,18 @@ type widget struct {
 	Enabled *vreactive.Property[bool]
 	Visible *vreactive.Property[bool]
 
-	// syncing suppresses the property → backend echo while a change that
-	// originated on the platform is being mirrored into the property. Without
-	// it, a keystroke the platform reported would be written straight back
-	// over whatever the user has typed since (§ CheckBox has the same guard).
-	syncing bool
+	// platformText is the text the platform is known to hold: what was last
+	// written to it, or what it last reported. A property change that lands
+	// on this value is the platform's own edit coming round, not something
+	// to write back — writing it back resets the caret, and a fast typist's
+	// next character then lands at the start of the field (seen under Wine:
+	// "novaya" arrived as "ayavon").
+	//
+	// A flag set around Property.Set does not work for this: QueueUpdate
+	// runs under vreactive.Batch, so OnChange fires after the batch commits,
+	// long after any such flag was cleared. Comparing values has no window
+	// to get wrong.
+	platformText string
 }
 
 func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
@@ -176,12 +183,14 @@ func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
 	}
 	bw := w.app.eng.Window()
 	bw.SetString(n.H, core.PropText, text)
+	wd.platformText = text
 
 	s := w.app.scope
 	wd.Text.OnChange(s, func(v, _ string) {
-		if wd.syncing {
+		if v == wd.platformText {
 			return
 		}
+		wd.platformText = v
 		bw.SetString(n.H, core.PropText, v)
 		// Text changes the intrinsic size of a label or a button. A text
 		// field's size is a choice, not a function of its contents, and a
@@ -210,6 +219,10 @@ type TextView struct{ *widget }
 // SetText replaces the whole contents.
 func (t *TextView) SetText(s string) { t.Text.Set(s) }
 
+// Focus moves keyboard focus to the widget. Tab and Shift+Tab move it on
+// from there in creation order, on every backend.
+func (w *widget) Focus() { w.app.eng.Focus(w.node) }
+
 // Entry is a single-line native text field. Text is two-way: setting it
 // changes the field, and typing updates it. Changed fires per edit with the
 // whole contents; Activated fires on Enter.
@@ -231,9 +244,13 @@ func (w *Window) AddEntry(text string) (*Entry, error) {
 		Activated: vreactive.NewEvent[string](),
 	}
 	wd.node.OnTextChanged = func(v string) {
-		wd.syncing = true
+		if v == wd.platformText {
+			// GTK and Win32 both report a text the program just wrote as a
+			// change; that is our own write coming back, not an edit.
+			return
+		}
+		wd.platformText = v
 		e.Text.Set(v)
-		wd.syncing = false
 		e.Changed.Emit(v)
 	}
 	wd.node.OnActivated = func(v string) { e.Activated.Emit(v) }
@@ -247,10 +264,9 @@ type CheckBox struct {
 	Checked *vreactive.Property[bool]
 	Toggled *vreactive.Event[bool]
 
-	// syncing suppresses the echo when a property change originates from the
-	// platform. Without it, backend → property → backend is an infinite loop on
-	// any toolkit that reports the state it was just told about.
-	syncing bool
+	// platformChecked is the state the platform is known to hold; see
+	// widget.platformText for why it is a value and not a flag.
+	platformChecked bool
 }
 
 // Button is a native push button.
@@ -281,17 +297,18 @@ func (w *Window) AddCheckBox(text string, checked bool) (*CheckBox, error) {
 	}
 	bw := w.app.eng.Window()
 	bw.SetBool(wd.node.H, core.PropChecked, checked)
+	cb.platformChecked = checked
 
 	cb.Checked.OnChange(w.app.scope, func(v, _ bool) {
-		if cb.syncing {
+		if v == cb.platformChecked {
 			return
 		}
+		cb.platformChecked = v
 		bw.SetBool(wd.node.H, core.PropChecked, v)
 	})
 	wd.node.OnToggled = func(v bool) {
-		cb.syncing = true
+		cb.platformChecked = v
 		cb.Checked.Set(v)
-		cb.syncing = false
 		cb.Toggled.Emit(v)
 	}
 	return cb, nil

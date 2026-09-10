@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -24,6 +25,22 @@ import (
 )
 
 func init() { core.RegisterDriver("win32", func() core.PlatformDriver { return &driver{} }) }
+
+// WidgetHandle returns the HWND of the first widget of the given kind in the
+// current window, or 0. A test hook (see backends/win32/win32test); an
+// application has no use for it.
+func WidgetHandle(kind core.WidgetKind) uintptr {
+	d := theDrv
+	if d == nil || d.win == nil {
+		return 0
+	}
+	for h := core.Handle(1); h <= d.win.nextH; h++ {
+		if n := d.win.nodes[h]; n != nil && n.kind == kind {
+			return n.hwnd
+		}
+	}
+	return 0
+}
 
 var (
 	user32   = windows.NewLazySystemDLL("user32.dll")
@@ -36,6 +53,11 @@ var (
 	pDestroyWindow      = user32.NewProc("DestroyWindow")
 	pDefWindowProcW     = user32.NewProc("DefWindowProcW")
 	pGetMessageW        = user32.NewProc("GetMessageW")
+	pIsDialogMessageW   = user32.NewProc("IsDialogMessageW")
+	pSetFocus           = user32.NewProc("SetFocus")
+	pGetFocus           = user32.NewProc("GetFocus")
+	pGetNextDlgTabItem  = user32.NewProc("GetNextDlgTabItem")
+	pIsWindowVisible    = user32.NewProc("IsWindowVisible")
 	pTranslateMessage   = user32.NewProc("TranslateMessage")
 	pDispatchMessageW   = user32.NewProc("DispatchMessageW")
 	pPostQuitMessage    = user32.NewProc("PostQuitMessage")
@@ -76,6 +98,8 @@ const (
 	wmDestroy    = 0x0002
 	wmKeyDown    = 0x0100
 	vkReturn     = 0x0D
+	wmSetFocus   = 0x0007
+	wmActivate   = 0x0006
 	wmKeyUp      = 0x0101
 	wmSysKeyDown = 0x0104
 	wmSysKeyUp   = 0x0105
@@ -104,6 +128,8 @@ const (
 	swShow        = 5
 	swpNoZOrder   = 0x0004
 	swpNoActivate = 0x0010
+	swpNoSize     = 0x0001
+	swpNoMove     = 0x0002
 	swpHideWindow = 0x0080
 	swpShowWindow = 0x0040
 
@@ -368,6 +394,27 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 		if int32(r) <= 0 { // 0 = WM_QUIT, -1 = error
 			return nil
 		}
+		// Keys are reported for the whole window, whichever control has
+		// focus: with focus living in controls (as it does once there is a
+		// text field), a WM_KEYDOWN reaches the control's window, never the
+		// toplevel, so a window-level shortcut has to be caught here. Same
+		// vantage point as GTK's key-press-event on the toplevel.
+		switch m.message {
+		case wmKeyDown, wmKeyUp, wmSysKeyDown, wmSysKeyUp:
+			if d.win != nil && d.win.isOurs(uintptr(m.hwnd)) {
+				down := m.message == wmKeyDown || m.message == wmSysKeyDown
+				d.win.emit(core.BackendEvent{
+					Kind: core.EventKey,
+					Key: core.KeyEvent{
+						VirtualKeyCode:  uint16(m.wParam),
+						VirtualScanCode: uint16((m.lParam >> 16) & 0xff),
+						KeyDown:         down,
+						ControlKeyState: modifierState(),
+						RepeatCount:     uint16(m.lParam & 0xffff),
+					},
+				})
+			}
+		}
 		// Enter in a text field is the field's activation. A single-line
 		// EDIT does nothing with the key itself (in a dialog the dialog
 		// manager would turn it into the default button), so it is taken
@@ -378,6 +425,16 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 				d.win.emit(core.BackendEvent{
 					Kind: core.EventActivated, H: h, Text: d.win.text(n.hwnd),
 				})
+				continue
+			}
+		}
+		// Tab, Shift+Tab and mnemonics between controls are the dialog
+		// manager's job; IsDialogMessage does it for any window with
+		// controls. It also turns Enter into a WM_COMMAND with IDOK (1) and
+		// Esc into IDCANCEL (2), which no control id matches, so those fall
+		// through wndProc harmlessly.
+		if d.win != nil {
+			if r, _, _ := pIsDialogMessageW.Call(d.win.hwnd, uintptr(unsafe.Pointer(&m))); r != 0 {
 				continue
 			}
 		}
@@ -422,9 +479,20 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 }
 
 type node struct {
-	hwnd uintptr
-	id   uint32
-	kind core.WidgetKind
+	hwnd    uintptr
+	id      uint32
+	kind    core.WidgetKind
+	rect    core.Rect // last applied, in DIP; for tab order
+	visible bool
+}
+
+// isOurs reports whether hwnd is the window or one of its controls.
+func (w *window) isOurs(hwnd uintptr) bool {
+	if hwnd == w.hwnd {
+		return true
+	}
+	_, n := w.nodeByHwnd(hwnd)
+	return n != nil
 }
 
 type window struct {
@@ -435,6 +503,15 @@ type window struct {
 	nextID uint32
 	nodes  map[core.Handle]*node
 	events chan core.BackendEvent
+
+	// focus is the control that should own keyboard focus: what Focus()
+	// asked for, or the control that had it when the window was last
+	// deactivated. A plain window does not restore focus to a child by
+	// itself; a dialog manager does, and this is that part of one.
+	focus uintptr
+
+	// tabOrder is the Z-order last established by sortTabOrder.
+	tabOrder []uintptr
 }
 
 func (w *window) SetTitle(s string) {
@@ -573,6 +650,32 @@ func crlf(s string) string {
 	return string(b)
 }
 
+// Focus moves keyboard focus to a control. Before the window is visible
+// SetFocus would have nothing to attach to, so the request is kept and
+// applied when the window first takes focus (WM_SETFOCUS).
+func (w *window) Focus(h core.Handle) {
+	n := w.nodes[h]
+	if n == nil {
+		return
+	}
+	w.focus = n.hwnd
+	if vis, _, _ := pIsWindowVisible.Call(w.hwnd); vis != 0 {
+		pSetFocus.Call(n.hwnd)
+	}
+}
+
+// focusChild hands focus to the remembered control, or to the first
+// tab stop when nothing was asked for.
+func (w *window) focusChild() {
+	target := w.focus
+	if target == 0 {
+		target, _, _ = pGetNextDlgTabItem.Call(w.hwnd, 0, 0)
+	}
+	if target != 0 && target != w.hwnd {
+		pSetFocus.Call(target)
+	}
+}
+
 func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 	n := w.nodes[h]
 	if n == nil {
@@ -681,6 +784,45 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		pSetWindowPos.Call(n.hwnd, 0,
 			uintptr(int32(c.R.X*s)), uintptr(int32(c.R.Y*s)),
 			uintptr(int32(c.R.W*s)), uintptr(int32(c.R.H*s)), flags)
+		n.rect, n.visible = c.R, c.Visible
+	}
+	if len(changes) > 0 {
+		w.sortTabOrder()
+	}
+}
+
+// sortTabOrder makes Tab follow the layout. On Win32 the tab order is the
+// Z-order, which is creation order unless something changes it; GTK's
+// GtkFixed sorts its focus chain by position instead. Creation order is an
+// accident of the program's structure (a list that grows at run time ends up
+// after the buttons created before it), so the Z-order is re-sorted after
+// every layout: by top edge, then left — the same rule GTK applies.
+func (w *window) sortTabOrder() {
+	var ns []*node
+	for _, n := range w.nodes {
+		if n.visible {
+			ns = append(ns, n)
+		}
+	}
+	sort.Slice(ns, func(i, j int) bool {
+		if ns[i].rect.Y != ns[j].rect.Y {
+			return ns[i].rect.Y < ns[j].rect.Y
+		}
+		return ns[i].rect.X < ns[j].rect.X
+	})
+	same := len(ns) == len(w.tabOrder)
+	for i := 0; same && i < len(ns); i++ {
+		same = ns[i].hwnd == w.tabOrder[i]
+	}
+	if same {
+		return
+	}
+	w.tabOrder = w.tabOrder[:0]
+	var prev uintptr // 0 = HWND_TOP
+	for _, n := range ns {
+		pSetWindowPos.Call(n.hwnd, prev, 0, 0, 0, 0, swpNoMove|swpNoSize|swpNoActivate)
+		prev = n.hwnd
+		w.tabOrder = append(w.tabOrder, n.hwnd)
 	}
 }
 
@@ -792,24 +934,21 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		}
 		return 0
 
-	case wmKeyDown, wmKeyUp, wmSysKeyDown, wmSysKeyUp:
-		// Nothing to translate: wParam is already the virtual key code, which
-		// is the vocabulary KeyEvent speaks. lParam carries the repeat count in
-		// its low word and the scan code in bits 16-23.
+	case wmSetFocus:
+		// The toplevel took focus (first show, or back from another
+		// window): pass it on to a control, or Tab has nothing to move.
 		if d.win != nil && hwnd == d.win.hwnd {
-			down := msg == wmKeyDown || msg == wmSysKeyDown
-			d.win.emit(core.BackendEvent{
-				Kind: core.EventKey,
-				Key: core.KeyEvent{
-					VirtualKeyCode:  uint16(wParam),
-					VirtualScanCode: uint16((lParam >> 16) & 0xff),
-					KeyDown:         down,
-					ControlKeyState: modifierState(),
-					RepeatCount:     uint16(lParam & 0xffff),
-				},
-			})
+			d.win.focusChild()
+			return 0
 		}
-		// Fall through to the default handler so menus and controls still work.
+
+	case wmActivate:
+		// Deactivating: remember which control had focus so it gets it back.
+		if d.win != nil && hwnd == d.win.hwnd && uint16(wParam) == 0 {
+			if f, _, _ := pGetFocus.Call(); f != 0 && f != d.win.hwnd && d.win.isOurs(f) {
+				d.win.focus = f
+			}
+		}
 
 	case wmClose:
 		if d.win != nil && hwnd == d.win.hwnd {

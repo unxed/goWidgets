@@ -45,6 +45,10 @@ field, _ := win.AddEntry("")
 field.Activated.On(app.Scope(), func(s string) { addGoal(s); field.Text.Set("") })
 ```
 
+Фокус: `widget.Focus()` ставит клавиатурный фокус (можно до показа окна);
+Tab и Shift+Tab дальше ходят сами, в порядке раскладки — сверху вниз, слева
+направо — на обеих платформах.
+
 Из фоновой горутины трогать виджеты нельзя — только через `app.QueueUpdate`:
 
 ```go
@@ -225,9 +229,11 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 * `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
   проходит тесты и проверяется в CI.
 
-Win32-драйвер собирается и проходит `vet`, но вживую пока не запускался;
-в частности, Enter в `Entry` (снимается в цикле сообщений) на Windows не
-проверялся.
+* Win32 под Wine (`backends/win32/win32test`: `GOOS=windows go test -c`, потом
+  `wine`): фокус, набор, Enter, Tab против настоящего окна; showcase под Wine
+  с клавиатуры.
+
+На настоящем Windows пока не запускалось — только Wine и CI.
 
 ## Лицензия
 

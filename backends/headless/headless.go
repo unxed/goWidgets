@@ -107,13 +107,15 @@ type node struct {
 }
 
 type window struct {
-	drv    *driver
-	title  string
-	size   core.Size
-	root   core.Handle
-	nextH  core.Handle
-	nodes  map[core.Handle]*node
-	events chan core.BackendEvent
+	drv        *driver
+	title      string
+	size       core.Size
+	root       core.Handle
+	nextH      core.Handle
+	nodes      map[core.Handle]*node
+	events     chan core.BackendEvent
+	focused    core.Handle
+	textWrites int
 
 	mu       sync.Mutex
 	log      []string
@@ -145,7 +147,41 @@ func (w *window) SetParent(child, parent core.Handle, index int) {
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	if n := w.nodes[h]; n != nil && p == core.PropText {
 		n.text = v
+		w.textWrites++
+		// Both real platforms report a programmatic write to a text field as
+		// a change (GTK "changed", Win32 EN_CHANGE); so does this one, so the
+		// core's handling of that echo is what the tests exercise.
+		if n.kind == core.KindEntry {
+			select {
+			case w.events <- core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: v}:
+			default:
+			}
+		}
 	}
+}
+
+// TextWrites counts every SetString the core has issued: a platform-side
+// edit must not produce one.
+func TextWrites() int {
+	if current == nil {
+		return 0
+	}
+	return current.textWrites
+}
+
+// Focus records the request; Focused reports it.
+func (w *window) Focus(h core.Handle) { w.focused = h }
+
+// Focused returns the text of the widget that last asked for focus, and
+// whether any did.
+func Focused() (text string, ok bool) {
+	if current == nil || current.focused == 0 {
+		return "", false
+	}
+	if n := current.nodes[current.focused]; n != nil {
+		return n.text, true
+	}
+	return "", false
 }
 
 func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {

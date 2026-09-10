@@ -281,6 +281,10 @@ type BackendWindow interface {
 	// ApplyLayout receives absolute rectangles for changed nodes only.
 	ApplyLayout(changes []BoundsChange)
 
+	// Focus moves keyboard focus to a widget. Before the window is shown the
+	// backend remembers the request and applies it when it can.
+	Focus(h Handle)
+
 	// RootHandle identifies the window's content area as a layout parent.
 	RootHandle() Handle
 

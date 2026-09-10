@@ -67,6 +67,7 @@ func main() {
 		log.Fatal(err)
 	}
 	add.HugWidth() // the field takes the slack, not the button
+	entry.Focus()  // typing a goal is the first thing to do here
 
 	// Goals are a column that grows at run time: each new box is chained
 	// under the previous one (or under the field, for the first). Removing

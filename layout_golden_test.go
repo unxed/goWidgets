@@ -538,9 +538,16 @@ func TestEntryBindsBothWays(t *testing.T) {
 	// platform → property, two edits queued before the first is handled:
 	// the property must end on the later one and the field must be left alone.
 	measured := headless.MeasureCount()
+	writes := headless.TextWrites()
 	headless.TypeIntoEntry("починить C")
 	headless.TypeIntoEntry("починить")
 	pumpUntilIdle(t, app)
+	if headless.TextWrites() != writes {
+		// The write would carry the right text and still be wrong: on Win32
+		// SetWindowText moves the caret to the start, so the next character
+		// typed lands in front of the previous ones.
+		t.Errorf("a platform edit was written back to the platform (%d writes)", headless.TextWrites()-writes)
+	}
 	if got := e.Text.Get(); got != "починить" {
 		t.Fatalf("Text = %q, want the last edit", got)
 	}
@@ -548,7 +555,7 @@ func TestEntryBindsBothWays(t *testing.T) {
 		t.Fatalf("an earlier edit was echoed back over the field: %q", got)
 	}
 	if len(changes) != 2 || changes[1] != "починить" {
-		t.Fatalf("Changed fired with %v, want the two edits", changes)
+		t.Fatalf("Changed fired with %v, want the two edits and not the program's own write", changes)
 	}
 	if headless.MeasureCount() != measured {
 		t.Error("typing re-measured the window; a field's size does not depend on its text")
@@ -611,5 +618,18 @@ func TestHugWidthDecidesWhoStretches(t *testing.T) {
 Button("Добавить") x=304.0 y=8.0 w=88.0 h=36.0 visible=true`
 	if got != want {
 		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+// Focus() reaches the platform; the platform then owns Tab from there.
+func TestFocusReachesPlatform(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	win.AddButton("Гнать")
+	e, _ := win.AddEntry("цель")
+	e.Focus()
+	pumpUntilIdle(t, app)
+	if got, ok := headless.Focused(); !ok || got != "цель" {
+		t.Fatalf("focused = %q (%v), want the entry", got, ok)
 	}
 }

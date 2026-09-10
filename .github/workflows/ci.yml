@@ -63,8 +63,9 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # The Win32 backend cannot be exercised without a desktop session, but the
-      # headless driver runs everywhere and covers the whole layout pipeline.
+      # backends/win32/win32test opens a real window (focus, typing, Enter,
+      # Tab) and skips if the runner has no desktop session; the headless
+      # driver covers the layout pipeline everywhere.
       - name: Tests
         run: go test ./...
 

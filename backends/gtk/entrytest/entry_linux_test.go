@@ -35,10 +35,16 @@ func TestEntryAgainstGTK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	btn, err := win.AddButton("Гнать")
+	if err != nil {
+		t.Fatal(err)
+	}
 	e, err := win.AddEntry("start")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Focus asked for before the window is shown must still land.
+	e.Focus()
 
 	lib, err := purego.Dlopen("libgtk-3.so.0", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
@@ -48,7 +54,9 @@ func TestEntryAgainstGTK(t *testing.T) {
 		gtkEntrySetText func(e uintptr, text string)
 		gtkEntryGetText func(e uintptr) string
 		gtkWidgetAct    func(w uintptr) int32
+		gtkIsFocus      func(w uintptr) int32
 	)
+	purego.RegisterLibFunc(&gtkIsFocus, lib, "gtk_widget_is_focus")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetAct, lib, "gtk_widget_activate")
@@ -64,14 +72,25 @@ func TestEntryAgainstGTK(t *testing.T) {
 		}
 	})
 
-	var widgetText string
+	var widgetText, programText string
+	var entryFocused, buttonFocused bool
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		app.QueueUpdate(func() {
 			h := gtk.WidgetHandle(core.KindEntry)
 			widgetText = gtkEntryGetText(h)
+			entryFocused = gtkIsFocus(h) != 0
+			btn.Focus()
+			buttonFocused = gtkIsFocus(gtk.WidgetHandle(core.KindButton)) != 0
 			// Property → widget.
 			e.Text.Set("из программы")
+		})
+		// A separate turn: QueueUpdate runs under Batch, so the property's
+		// write reaches the widget when the batch commits — an edit made on
+		// the widget in the same batch would be ordered before it.
+		app.QueueUpdate(func() {
+			h := gtk.WidgetHandle(core.KindEntry)
+			programText = gtkEntryGetText(h)
 			// Widget → property, as typing would.
 			gtkEntrySetText(h, "из виджета")
 			// Enter: gtk_widget_activate emits GtkEntry's activate signal.
@@ -93,14 +112,22 @@ func TestEntryAgainstGTK(t *testing.T) {
 	if widgetText != "start" {
 		t.Errorf("initial text did not reach the widget: %q", widgetText)
 	}
+	if !entryFocused {
+		t.Error("Focus() before Show did not make the entry the focus widget")
+	}
+	if !buttonFocused {
+		t.Error("Focus() after Show did not move focus to the button")
+	}
+	if programText != "из программы" {
+		t.Errorf("property write did not reach the widget: %q", programText)
+	}
 	if got := e.Text.Get(); got != "из виджета" {
 		t.Errorf("Text = %q, want the widget-side edit", got)
 	}
-	// gtk_entry_set_text emits "changed" for both writes; only the field's
-	// final contents matter to a listener, and the property must not have
-	// pushed "из программы" back over "из виджета".
-	if len(changed) == 0 || changed[len(changed)-1] != "из виджета" {
-		t.Errorf("Changed = %v, want it to end on the widget-side edit", changed)
+	// gtk_entry_set_text emits "changed" for the program's writes too; those
+	// are the program's own text coming back and are not edits.
+	if len(changed) != 1 || changed[0] != "из виджета" {
+		t.Errorf("Changed = %v, want exactly the widget-side edit", changed)
 	}
 	if len(activated) != 1 || activated[0] != "из виджета" {
 		t.Errorf("Activated = %v, want [из виджета]", activated)

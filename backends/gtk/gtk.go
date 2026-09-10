@@ -86,6 +86,7 @@ var (
 	gtkScrollPolicy func(sw uintptr, h, v int32)
 	gtkTextViewMono func(tv uintptr, mono int32)
 	gtkEntryNew     func() uintptr
+	gtkGrabFocus    func(w uintptr)
 	gtkEntrySetText func(e uintptr, text string)
 	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
@@ -197,6 +198,7 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkScrollPolicy, lib, "gtk_scrolled_window_set_policy")
 	purego.RegisterLibFunc(&gtkTextViewMono, lib, "gtk_text_view_set_monospace")
 	purego.RegisterLibFunc(&gtkEntryNew, lib, "gtk_entry_new")
+	purego.RegisterLibFunc(&gtkGrabFocus, lib, "gtk_widget_grab_focus")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
@@ -525,6 +527,14 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		gtkEntrySetText(n.handle, v)
 	default:
 		gtkLabelText(n.handle, v)
+	}
+}
+
+// Focus: gtk_widget_grab_focus works before the window is shown too — it
+// records the toplevel's focus widget, which takes effect on map.
+func (w *window) Focus(h core.Handle) {
+	if n := w.nodes[h]; n != nil {
+		gtkGrabFocus(n.handle)
 	}
 }
 

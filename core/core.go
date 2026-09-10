@@ -384,6 +384,13 @@ func (a *App) SetTrayMenu(items []MenuItem) {
 // TrayEmbedded reports whether a panel accepted the status-area icon.
 func (a *App) TrayEmbedded() bool { return a.tray != nil && a.tray.Embedded() }
 
+// Focus asks the platform to move keyboard focus to a node.
+func (a *App) Focus(n *Node) {
+	if a.win != nil {
+		a.win.Focus(n.H)
+	}
+}
+
 // SetHug records which dimensions of a node hold their natural size strongly.
 func (a *App) SetHug(n *Node, w, h bool) {
 	n.HugW, n.HugH = w, h
