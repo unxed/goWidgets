@@ -512,3 +512,104 @@ Button("Отмена") x=204.0 y=256.0 w=188.0 h=36.0 visible=true`
 		t.Errorf("guide did not nest the bar:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
+
+// A text field is the first widget whose contents the user owns: what they
+// type must reach the property, what the program sets must reach the field,
+// and a platform-reported edit must never be written back over the field —
+// that echo is how a fast typist loses characters.
+func TestEntryBindsBothWays(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	e, err := win.AddEntry("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changes []string
+	e.Changed.On(app.Scope(), func(v string) { changes = append(changes, v) })
+	pumpUntilIdle(t, app)
+
+	// program → platform
+	e.Text.Set("починить CI")
+	pumpUntilIdle(t, app)
+	if got, ok := headless.EntryText(); !ok || got != "починить CI" {
+		t.Fatalf("property write did not reach the field (found=%v text=%q)", ok, got)
+	}
+
+	// platform → property, two edits queued before the first is handled:
+	// the property must end on the later one and the field must be left alone.
+	measured := headless.MeasureCount()
+	headless.TypeIntoEntry("починить C")
+	headless.TypeIntoEntry("починить")
+	pumpUntilIdle(t, app)
+	if got := e.Text.Get(); got != "починить" {
+		t.Fatalf("Text = %q, want the last edit", got)
+	}
+	if got, _ := headless.EntryText(); got != "починить" {
+		t.Fatalf("an earlier edit was echoed back over the field: %q", got)
+	}
+	if len(changes) != 2 || changes[1] != "починить" {
+		t.Fatalf("Changed fired with %v, want the two edits", changes)
+	}
+	if headless.MeasureCount() != measured {
+		t.Error("typing re-measured the window; a field's size does not depend on its text")
+	}
+}
+
+// Enter in a text field is the field's activation, with its contents.
+func TestEntryActivates(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	e, _ := win.AddEntry("")
+	var got []string
+	e.Activated.On(app.Scope(), func(v string) { got = append(got, v) })
+	pumpUntilIdle(t, app)
+
+	headless.TypeIntoEntry("новая цель")
+	headless.PressEnterInEntry()
+	pumpUntilIdle(t, app)
+	if len(got) != 1 || got[0] != "новая цель" {
+		t.Fatalf("Activated = %v, want [новая цель]", got)
+	}
+}
+
+// A field in the flow takes its chosen width when nothing else says
+// otherwise — here the flow stretches it, and the golden pins its height.
+func TestEntryGolden(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	win.AddEntry("x")
+	pumpUntilIdle(t, app)
+	want := `Entry("x") x=8.0 y=8.0 w=384.0 h=24.0 visible=true`
+	if got := strings.TrimSpace(headless.Golden()); got != want {
+		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+// Two widgets sharing a row both prefer their natural width equally weakly,
+// so which one stretches is the solver's pick. HugWidth settles it.
+func TestHugWidthDecidesWhoStretches(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	entry, _ := win.AddEntry("")
+	add, _ := win.AddButton("Добавить")
+	if err := win.Constrain(
+		entry.Left().Eq(win.Left().Plus(8)),
+		entry.Top().Eq(win.Top().Plus(8)),
+		add.Right().Eq(win.Right().Minus(8)),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := win.Constrain(goWidgets.Row(8, entry, add)...); err != nil {
+		t.Fatal(err)
+	}
+	add.HugWidth()
+	pumpUntilIdle(t, app)
+
+	got := strings.TrimSpace(headless.Golden())
+	// "Добавить" is 8 chars: 8·7 + 2·16 = 88 wide; the field gets the rest.
+	want := `Entry("") x=8.0 y=8.0 w=288.0 h=36.0 visible=true
+Button("Добавить") x=304.0 y=8.0 w=88.0 h=36.0 visible=true`
+	if got != want {
+		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}

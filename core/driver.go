@@ -49,6 +49,9 @@ const (
 	// KindTextView is a multi-line, read-only, scrolling text area — a native
 	// GtkTextView on GTK and a multiline EDIT on Win32.
 	KindTextView
+	// KindEntry is a single-line text field — GtkEntry on GTK, a single-line
+	// EDIT on Win32.
+	KindEntry
 )
 
 func (k WidgetKind) String() string {
@@ -61,6 +64,8 @@ func (k WidgetKind) String() string {
 		return "CheckBox"
 	case KindTextView:
 		return "TextView"
+	case KindEntry:
+		return "Entry"
 	}
 	return "Unknown"
 }
@@ -131,6 +136,11 @@ const (
 	EventTrayActivated
 	// EventMenuItem carries the id of the chosen menu entry in H.
 	EventMenuItem
+	// EventTextChanged reports that the user edited a text field; Text is the
+	// field's whole new contents.
+	EventTextChanged
+	// EventActivated is Enter pressed in a text field; Text is its contents.
+	EventActivated
 )
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a
@@ -167,6 +177,7 @@ type BackendEvent struct {
 	Scale ScaleInfo
 	Bool  bool     // EventToggled: the control's new state
 	Key   KeyEvent // EventKey: the keystroke
+	Text  string   // EventTextChanged, EventActivated: the field's contents
 }
 
 // MenuItem is one entry of the tray menu. A separator ignores Label.

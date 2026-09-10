@@ -96,6 +96,7 @@ type sizeKey struct {
 	min, nat   Size
 	prefHeight float64
 	visible    bool
+	hugW, hugH bool
 }
 
 // initRoot seeds the content area: its origin is pinned, its size is edited.
@@ -237,7 +238,7 @@ func dip(v float64) float64 {
 // hidden node instead prefers zero size, so a chain through it closes up
 // along the axis the chain runs in, while alignment rules (strong) still hold.
 func (a *App) syncSize(n *Node) {
-	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible}
+	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible, hugW: n.HugW, hugH: n.HugH}
 	if n.sizeCns != nil && key == n.sizeKey {
 		return
 	}
@@ -265,11 +266,11 @@ func (a *App) syncSize(n *Node) {
 	}
 	add(kiwi.NewConstraint(v.Width, kiwi.OpGe, n.minSize.W, StrengthRequired))
 	add(kiwi.NewConstraint(v.Height, kiwi.OpGe, n.minSize.H, StrengthRequired))
-	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, StrengthWeak))
+	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, hugStrength(n.HugW)))
 	if n.PrefHeight > 0 {
 		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.PrefHeight, StrengthMedium))
 	} else {
-		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, StrengthWeak))
+		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, hugStrength(n.HugH)))
 	}
 }
 
@@ -316,6 +317,15 @@ func (a *App) syncFlow(root *Node) {
 	if l.flow == nil {
 		l.flow = []*kiwi.Constraint{} // non-nil: "built, and empty"
 	}
+}
+
+// hugStrength is how firmly a natural size is held: a preference by
+// default, a rule when the widget hugs its content.
+func hugStrength(hug bool) float64 {
+	if hug {
+		return StrengthStrong
+	}
+	return StrengthWeak
 }
 
 func equalHandles(a, b []Handle) bool {

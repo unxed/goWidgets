@@ -198,6 +198,17 @@ func (x anchors) CenterY() Anchor { return x.at(x.vars.CenterY()) }
 
 func (w *widget) anchors() anchors { return anchors{w.app, w.node, w.node.Vars} }
 
+// HugWidth makes the widget hold its natural width as a strong rule instead
+// of a weak preference: in a row where something has to stretch, the hugged
+// widget is not it. HugHeight is the same for height.
+//
+//	win.Constrain(goWidgets.Row(8, entry, add)...)
+//	add.HugWidth() // the field grows, the button stays a button
+func (w *widget) HugWidth() { w.app.eng.SetHug(w.node, true, w.node.HugH) }
+
+// HugHeight makes the widget hold its natural height as a strong rule.
+func (w *widget) HugHeight() { w.app.eng.SetHug(w.node, w.node.HugW, true) }
+
 // Left is the widget's left edge.
 func (w *widget) Left() Anchor { return w.anchors().Left() }
 

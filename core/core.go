@@ -29,9 +29,16 @@ type Node struct {
 	// natural height worth having — it is a viewport whose size the caller
 	// chooses — so this is how a log area gets to be tall.
 	PrefHeight float64
+	// HugW/HugH raise the natural-size preference from weak to strong, so a
+	// widget keeps its measured size while its neighbours stretch. Without
+	// one, two widgets sharing a row both want their natural width equally
+	// weakly and the solver picks which one grows.
+	HugW, HugH bool
 
-	OnClicked func()
-	OnToggled func(bool)
+	OnClicked     func()
+	OnToggled     func(bool)
+	OnTextChanged func(string)
+	OnActivated   func(string)
 
 	// Vars are the node's Cassowary variables (core/layout.go).
 	Vars *Vars
@@ -288,6 +295,14 @@ func (a *App) dispatch(ev BackendEvent) {
 		if n := a.nodes[ev.H]; n != nil && n.OnToggled != nil {
 			n.OnToggled(ev.Bool)
 		}
+	case EventTextChanged:
+		if n := a.nodes[ev.H]; n != nil && n.OnTextChanged != nil {
+			n.OnTextChanged(ev.Text)
+		}
+	case EventActivated:
+		if n := a.nodes[ev.H]; n != nil && n.OnActivated != nil {
+			n.OnActivated(ev.Text)
+		}
 	case EventResized:
 		if n := a.nodes[a.root]; n != nil {
 			n.Bounds = Rect{W: ev.Size.W, H: ev.Size.H}
@@ -368,6 +383,12 @@ func (a *App) SetTrayMenu(items []MenuItem) {
 
 // TrayEmbedded reports whether a panel accepted the status-area icon.
 func (a *App) TrayEmbedded() bool { return a.tray != nil && a.tray.Embedded() }
+
+// SetHug records which dimensions of a node hold their natural size strongly.
+func (a *App) SetHug(n *Node, w, h bool) {
+	n.HugW, n.HugH = w, h
+	a.Invalidate()
+}
 
 // SetPrefHeight fixes a node's height, overriding measurement. Used for a text
 // view, whose height is a choice, not a property of its content.

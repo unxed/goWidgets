@@ -75,6 +75,7 @@ const (
 
 	wmDestroy    = 0x0002
 	wmKeyDown    = 0x0100
+	vkReturn     = 0x0D
 	wmKeyUp      = 0x0101
 	wmSysKeyDown = 0x0104
 	wmSysKeyUp   = 0x0105
@@ -367,6 +368,19 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 		if int32(r) <= 0 { // 0 = WM_QUIT, -1 = error
 			return nil
 		}
+		// Enter in a text field is the field's activation. A single-line
+		// EDIT does nothing with the key itself (in a dialog the dialog
+		// manager would turn it into the default button), so it is taken
+		// here, before translation, and not passed on — passing it on would
+		// only produce the "unhandled character" beep.
+		if m.message == wmKeyDown && m.wParam == vkReturn && d.win != nil {
+			if h, n := d.win.nodeByHwnd(uintptr(m.hwnd)); n != nil && n.kind == core.KindEntry {
+				d.win.emit(core.BackendEvent{
+					Kind: core.EventActivated, H: h, Text: d.win.text(n.hwnd),
+				})
+				continue
+			}
+		}
 		pTranslateMessage.Call(uintptr(unsafe.Pointer(&m)))
 		pDispatchMessageW.Call(uintptr(unsafe.Pointer(&m)))
 	}
@@ -460,6 +474,10 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// BS_AUTOCHECKBOX makes the control own its state; we read it back on
 		// BN_CLICKED rather than tracking it ourselves.
 		class, style = "BUTTON", wsChild|wsVisible|wsTabStop|bsAutoCheckBox
+	case core.KindEntry:
+		// A single-line EDIT. ES_AUTOHSCROLL lets text longer than the field
+		// scroll instead of stopping; WS_BORDER draws the box.
+		class, style = "EDIT", wsChild|wsVisible|wsTabStop|wsBorder|esAutoHScroll
 	case core.KindTextView:
 		// A read-only multiline EDIT with a vertical scrollbar is the native
 		// log view on Windows — no extra control needed.
@@ -521,6 +539,25 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	if s, err := windows.UTF16PtrFromString(v); err == nil {
 		pSetWindowTextW.Call(n.hwnd, uintptr(unsafe.Pointer(s)))
 	}
+}
+
+// text reads a control's current text.
+func (w *window) text(hwnd uintptr) string {
+	const wmGetTextLength, wmGetText = 0x000E, 0x000D
+	n, _, _ := pSendMessageW.Call(hwnd, wmGetTextLength, 0, 0)
+	buf := make([]uint16, n+1)
+	pSendMessageW.Call(hwnd, wmGetText, uintptr(len(buf)), uintptr(unsafe.Pointer(&buf[0])))
+	return windows.UTF16ToString(buf)
+}
+
+// nodeByHwnd finds the node owning a control window.
+func (w *window) nodeByHwnd(hwnd uintptr) (core.Handle, *node) {
+	for h, n := range w.nodes {
+		if n.hwnd == hwnd {
+			return h, n
+		}
+	}
+	return 0, nil
 }
 
 // crlf converts lone LF to CRLF without doubling existing CRLF.
@@ -589,6 +626,11 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 
 	tw, th := w.textExtent(n.hwnd)
 	switch n.kind {
+	case core.KindEntry:
+		// Width is a choice, not a function of the contents; the height is
+		// one line plus the border and padding of a themed EDIT.
+		h := (th + 8*s) / s
+		return core.Size{W: 40, H: h}, core.Size{W: 160, H: h}
 	case core.KindButton:
 		nat := core.Size{W: (tw + 32*s) / s, H: (th + 12*s) / s}
 		return core.Size{W: 0, H: nat.H}, nat
@@ -706,7 +748,17 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			h := ctlByID[id]
 			regMu.Unlock()
 			if n := d.win.nodes[h]; n != nil {
-				if n.kind == core.KindCheckBox {
+				if n.kind == core.KindEntry {
+					// EN_CHANGE arrives after the control has updated; the
+					// other EDIT notifications (focus, update, scroll) are
+					// not edits.
+					const enChange = 0x0300
+					if uint32(wParam>>16) == enChange {
+						d.win.emit(core.BackendEvent{
+							Kind: core.EventTextChanged, H: h, Text: d.win.text(n.hwnd),
+						})
+					}
+				} else if n.kind == core.KindCheckBox {
 					// BS_AUTOCHECKBOX has already flipped itself by now.
 					st, _, _ := pSendMessageW.Call(n.hwnd, bmGetCheck, 0, 0)
 					d.win.emit(core.BackendEvent{

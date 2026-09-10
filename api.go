@@ -154,6 +154,12 @@ type widget struct {
 	Text    *vreactive.Property[string]
 	Enabled *vreactive.Property[bool]
 	Visible *vreactive.Property[bool]
+
+	// syncing suppresses the property → backend echo while a change that
+	// originated on the platform is being mirrored into the property. Without
+	// it, a keystroke the platform reported would be written straight back
+	// over whatever the user has typed since (§ CheckBox has the same guard).
+	syncing bool
 }
 
 func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
@@ -173,8 +179,16 @@ func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
 
 	s := w.app.scope
 	wd.Text.OnChange(s, func(v, _ string) {
+		if wd.syncing {
+			return
+		}
 		bw.SetString(n.H, core.PropText, v)
-		w.app.eng.Invalidate() // text changes the intrinsic size
+		// Text changes the intrinsic size of a label or a button. A text
+		// field's size is a choice, not a function of its contents, and a
+		// re-measure of the whole window per keystroke would be wasted.
+		if kind != core.KindEntry {
+			w.app.eng.Invalidate()
+		}
 	})
 	wd.Enabled.OnChange(s, func(v, _ bool) { bw.SetBool(n.H, core.PropEnabled, v) })
 	wd.Visible.OnChange(s, func(v, _ bool) {
@@ -195,6 +209,36 @@ type TextView struct{ *widget }
 
 // SetText replaces the whole contents.
 func (t *TextView) SetText(s string) { t.Text.Set(s) }
+
+// Entry is a single-line native text field. Text is two-way: setting it
+// changes the field, and typing updates it. Changed fires per edit with the
+// whole contents; Activated fires on Enter.
+type Entry struct {
+	*widget
+	Changed   *vreactive.Event[string]
+	Activated *vreactive.Event[string]
+}
+
+// AddEntry appends a text field holding text.
+func (w *Window) AddEntry(text string) (*Entry, error) {
+	wd, err := w.newWidget(core.KindEntry, text)
+	if err != nil {
+		return nil, err
+	}
+	e := &Entry{
+		widget:    wd,
+		Changed:   vreactive.NewEvent[string](),
+		Activated: vreactive.NewEvent[string](),
+	}
+	wd.node.OnTextChanged = func(v string) {
+		wd.syncing = true
+		e.Text.Set(v)
+		wd.syncing = false
+		e.Changed.Emit(v)
+	}
+	wd.node.OnActivated = func(v string) { e.Activated.Emit(v) }
+	return e, nil
+}
 
 // CheckBox is a native check box. Checked is two-way: setting it moves the
 // control, and the user moving the control updates it.

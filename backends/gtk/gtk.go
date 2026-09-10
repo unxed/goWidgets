@@ -43,6 +43,20 @@ func WindowHandle() uintptr {
 	return current.win.handle
 }
 
+// WidgetHandle returns the GtkWidget* of the first widget of the given kind
+// in the current window, or 0. A test hook like WindowHandle.
+func WidgetHandle(kind core.WidgetKind) uintptr {
+	if current == nil || current.win == nil {
+		return 0
+	}
+	for h := core.Handle(1); h <= current.win.nextH; h++ {
+		if n := current.win.nodes[h]; n != nil && n.kind == kind {
+			return n.handle
+		}
+	}
+	return 0
+}
+
 var (
 	gtkInitCheck    func(argc, argv uintptr) int32
 	gtkMain         func()
@@ -71,6 +85,9 @@ var (
 	gtkScrollNew    func(h, v uintptr) uintptr
 	gtkScrollPolicy func(sw uintptr, h, v int32)
 	gtkTextViewMono func(tv uintptr, mono int32)
+	gtkEntryNew     func() uintptr
+	gtkEntrySetText func(e uintptr, text string)
+	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
 	gtkWidgetHide   func(w uintptr)
 	gtkWidgetDestr  func(w uintptr)
@@ -93,6 +110,8 @@ type driver struct {
 
 	cbClicked      uintptr
 	cbToggled      uintptr
+	cbEntryChanged uintptr
+	cbEntryEnter   uintptr
 	cbKeyPress     uintptr
 	cbKeyRelease   uintptr
 	cbTrayActivate uintptr
@@ -177,6 +196,9 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkScrollNew, lib, "gtk_scrolled_window_new")
 	purego.RegisterLibFunc(&gtkScrollPolicy, lib, "gtk_scrolled_window_set_policy")
 	purego.RegisterLibFunc(&gtkTextViewMono, lib, "gtk_text_view_set_monospace")
+	purego.RegisterLibFunc(&gtkEntryNew, lib, "gtk_entry_new")
+	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
+	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
 	purego.RegisterLibFunc(&gtkWidgetHide, lib, "gtk_widget_hide")
 	purego.RegisterLibFunc(&gtkWidgetDestr, lib, "gtk_widget_destroy")
@@ -230,6 +252,16 @@ func (d *driver) Init() error {
 	})
 	d.cbMenuItem = purego.NewCallback(func(item, data uintptr) uintptr {
 		trayEmit(core.BackendEvent{Kind: core.EventMenuItem, H: core.Handle(data)})
+		return 0
+	})
+	// GtkEditable "changed" and GtkEntry "activate" both hand over the widget;
+	// the text is read back from it, so the event carries the whole field.
+	d.cbEntryChanged = purego.NewCallback(func(w, data uintptr) uintptr {
+		emit(core.BackendEvent{Kind: core.EventTextChanged, H: core.Handle(data), Text: gtkEntryGetText(w)})
+		return 0
+	})
+	d.cbEntryEnter = purego.NewCallback(func(w, data uintptr) uintptr {
+		emit(core.BackendEvent{Kind: core.EventActivated, H: core.Handle(data), Text: gtkEntryGetText(w)})
 		return 0
 	})
 	d.cbToggled = purego.NewCallback(func(w, data uintptr) uintptr {
@@ -418,6 +450,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindLabel:
 		g = gtkLabelNew("")
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
+	case core.KindEntry:
+		g = gtkEntryNew()
 	case core.KindTextView:
 		// A text view goes inside a scrolled window: the scroller is what the
 		// layout places and sizes, the view is what holds the text. Read-only
@@ -455,6 +489,9 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		gSignalConnect(g, "clicked", w.drv.cbClicked, uintptr(h), 0, 0)
 	case core.KindCheckBox:
 		gSignalConnect(g, "toggled", w.drv.cbToggled, uintptr(h), 0, 0)
+	case core.KindEntry:
+		gSignalConnect(g, "changed", w.drv.cbEntryChanged, uintptr(h), 0, 0)
+		gSignalConnect(g, "activate", w.drv.cbEntryEnter, uintptr(h), 0, 0)
 	}
 	gtkFixedPut(w.fixed, g, 0, 0)
 	gtkWidgetShow(g)
@@ -482,6 +519,10 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		gtkTextBufSet(gtkTextViewBuf(n.inner), v, -1)
 	case core.KindButton, core.KindCheckBox:
 		gtkButtonLabel(n.handle, v) // GtkCheckButton is a GtkButton subclass
+	case core.KindEntry:
+		// gtk_entry_set_text emits "changed" only when the text differs, so
+		// the property's own write does not come back as an edit.
+		gtkEntrySetText(n.handle, v)
 	default:
 		gtkLabelText(n.handle, v)
 	}

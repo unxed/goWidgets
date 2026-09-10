@@ -28,6 +28,9 @@ const (
 	ButtonPadY  = 10.0
 	CheckBoxBox = 18.0 // the indicator itself
 	CheckBoxGap = 6.0
+	EntryW      = 160.0 // natural width of a text field: a choice, not a measurement
+	EntryMinW   = 40.0
+	EntryPadY   = 4.0
 	DefaultW    = 640.0
 	DefaultH    = 480.0
 	DefaultDPIS = 1.0
@@ -183,6 +186,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindCheckBox:
 		s := core.Size{W: CheckBoxBox + CheckBoxGap + textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: CheckBoxBox, H: s.H}, s
+	case core.KindEntry:
+		h := LineHeight + 2*EntryPadY
+		return core.Size{W: EntryMinW, H: h}, core.Size{W: EntryW, H: h}
 	default:
 		s := core.Size{W: textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: 0, H: s.H}, s
@@ -256,6 +262,49 @@ func Resize(w, h float64) {
 	}
 	current.size = core.Size{W: w, H: h}
 	current.events <- core.BackendEvent{Kind: core.EventResized, H: current.root, Size: current.size}
+}
+
+// TypeIntoEntry replaces the contents of the first text field, as if the
+// user had typed, and reports whether there is one.
+func TypeIntoEntry(text string) bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind == core.KindEntry {
+			n.text = text
+			current.events <- core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: text}
+			return true
+		}
+	}
+	return false
+}
+
+// PressEnterInEntry presses Enter in the first text field.
+func PressEnterInEntry() bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind == core.KindEntry {
+			current.events <- core.BackendEvent{Kind: core.EventActivated, H: h, Text: n.text}
+			return true
+		}
+	}
+	return false
+}
+
+// EntryText reports what the platform holds in the first text field.
+func EntryText() (text string, found bool) {
+	if current == nil {
+		return "", false
+	}
+	for _, n := range current.nodes {
+		if n.kind == core.KindEntry {
+			return n.text, true
+		}
+	}
+	return "", false
 }
 
 // ToggleByText flips the first check box whose label matches, as if the user

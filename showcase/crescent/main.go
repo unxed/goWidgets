@@ -41,40 +41,61 @@ func main() {
 	}
 
 	status, _ := win.AddLabel("")
-	goals := []*goal{
-		{title: "Цель: починить флаки в CI"},
-		{title: "Цель: рефакторинг парсера rollout-файлов"},
-		{title: "Цель: дописать тесты бэкенда"},
-	}
-	for _, g := range goals {
-		box, err := win.AddCheckBox(g.title, false)
-		if err != nil {
-			log.Fatal(err)
-		}
-		g.box = box
-	}
-
+	entry, _ := win.AddEntry("")
+	add, _ := win.AddButton("Добавить")
 	run, _ := win.AddButton("Гнать все цели")
 	drop, _ := win.AddButton("Убрать отмеченные")
 	quit, _ := win.AddButton("Выход")
 
-	// The dialog: status line across the top, goals stacked under it, three
-	// equal buttons along the bottom edge. Only edges are stated; widths and
-	// heights the platform does not fix come out of the solver.
-	boxes := []goWidgets.Box{status}
-	for _, g := range goals {
-		boxes = append(boxes, g.box)
-	}
+	// The dialog: status line across the top, the new-goal field with its
+	// button under it, goals stacked under that, three equal buttons along
+	// the bottom edge. Only edges are stated; widths and heights the platform
+	// does not fix come out of the solver.
 	const pad = 8
 	if err := win.Constrain(
 		status.Left().Eq(win.Left().Plus(pad)),
 		status.Top().Eq(win.Top().Plus(pad)),
 		status.Right().Eq(win.Right().Minus(pad)),
+
+		entry.Left().Eq(status.Left()),
+		entry.Top().Eq(status.Bottom().Plus(pad)),
+		add.Right().Eq(status.Right()),
 	); err != nil {
 		log.Fatal(err)
 	}
-	if err := win.Constrain(goWidgets.Column(pad, boxes...)...); err != nil {
+	if err := win.Constrain(goWidgets.Row(pad, entry, add)...); err != nil {
 		log.Fatal(err)
+	}
+	add.HugWidth() // the field takes the slack, not the button
+
+	// Goals are a column that grows at run time: each new box is chained
+	// under the previous one (or under the field, for the first). Removing
+	// one hides it, and the column closes up by its height.
+	var goals []*goal
+	addGoal := func(title string) {
+		box, err := win.AddCheckBox(title, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var above goWidgets.Box = entry
+		if n := len(goals); n > 0 {
+			above = goals[n-1].box
+		}
+		if err := win.Constrain(
+			box.Top().Eq(above.Bottom().Plus(pad)),
+			box.Left().Eq(status.Left()),
+			box.Right().Eq(status.Right()),
+		); err != nil {
+			log.Fatal(err)
+		}
+		goals = append(goals, &goal{title: title, box: box})
+	}
+	for _, title := range []string{
+		"Цель: починить флаки в CI",
+		"Цель: рефакторинг парсера rollout-файлов",
+		"Цель: дописать тесты бэкенда",
+	} {
+		addGoal(title)
 	}
 	if err := win.Constrain(
 		run.Left().Eq(win.Left().Plus(pad)),
@@ -118,9 +139,23 @@ func main() {
 		}
 	}
 
+	// Toggling a box only changes what "drop" applies to; the box list is
+	// dynamic, so the subscription is made where the box is.
+	submit := func() {
+		title := entry.Text.Get()
+		if title == "" {
+			return
+		}
+		addGoal(title)
+		goals[len(goals)-1].box.Toggled.On(app.Scope(), func(bool) { refresh() })
+		entry.Text.Set("")
+		refresh()
+	}
 	for _, g := range goals {
 		g.box.Toggled.On(app.Scope(), func(bool) { refresh() })
 	}
+	entry.Activated.On(app.Scope(), func(string) { submit() })
+	add.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { submit() })
 	run.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		running = !running
 		if running {
