@@ -212,6 +212,11 @@ type DriverInfo struct {
 	Name     string
 	Caps     Caps
 	Attempts []string // every driver tried, in order, with the outcome
+
+	// LayoutConflicts lists every constraint the solver rejected as
+	// unsatisfiable and core dropped (§5.3), most recent last. Empty is the
+	// normal state; anything here is a bug in the caller's constraints.
+	LayoutConflicts []string
 }
 
 // PlatformDriver is the contract every backend implements.

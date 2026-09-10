@@ -248,6 +248,16 @@ func MeasureCount() int {
 	return current.measures
 }
 
+// Resize delivers a window resize the way the platform would, so a test can
+// check that the layout follows the window.
+func Resize(w, h float64) {
+	if current == nil {
+		return
+	}
+	current.size = core.Size{W: w, H: h}
+	current.events <- core.BackendEvent{Kind: core.EventResized, H: current.root, Size: current.size}
+}
+
 // ToggleByText flips the first check box whose label matches, as if the user
 // had clicked it, and reports whether one was found.
 func ToggleByText(text string) bool {

@@ -8,8 +8,8 @@
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
-> иконка в трее с меню, вертикальный стек и реактивные свойства. Нет: Cassowary,
-> анимаций, фокуса и tab-order, Cocoa, Web.
+> `TextView`, иконка в трее с меню, layout на констрейнтах (Cassowary) и
+> реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
 
 ## Пример
 
@@ -45,6 +45,63 @@ go func() {
 	app.QueueUpdate(func() { status.Text.Set(result) })
 }()
 ```
+
+## Layout
+
+Диалог описывается констрейнтами между краями виджетов; прямоугольники
+считает Cassowary ([kiwi-go](https://github.com/unxed/kiwi-go)). Нативных
+sizer'ов нет, и других layout-механизмов тоже — только этот (ADR-0005).
+
+```go
+status, _ := win.AddLabel("Готов")
+ok, _ := win.AddButton("OK")
+cancel, _ := win.AddButton("Отмена")
+
+win.Constrain(
+	status.Left().Eq(win.Left().Plus(8)),
+	status.Top().Eq(win.Top().Plus(8)),
+	status.Right().Eq(win.Right().Minus(8)),
+
+	ok.Right().Eq(win.Right().Minus(8)),
+	ok.Bottom().Eq(win.Bottom().Minus(8)),
+	cancel.Right().Eq(ok.Left().Minus(8)),
+	cancel.Top().Eq(ok.Top()),
+	cancel.Width().Eq(ok.Width()),
+)
+```
+
+У каждого виджета и у окна восемь якорей: `Left`, `Top`, `Right`, `Bottom`,
+`Width`, `Height`, `CenterX`, `CenterY`. Якорь можно сдвинуть (`Plus`,
+`Minus`) и масштабировать (`Times`), связать с другим (`Eq`, `Ge`, `Le`) или
+с числом (`Is`, `AtLeast`, `AtMost`). Что не зафиксировано — берёт
+естественный размер, измеренный платформой.
+
+Сила правил: минимальный размер виджета — `required`; правила пользователя —
+`strong` по умолчанию; естественные размеры — `weak`. Когда strong-правила
+не сходятся, solver выполняет сколько может — это не ошибка, а не та вёрстка,
+которую вы имели в виду; `.Medium()` и `.Weak()` ставят приоритеты.
+`required` против `required` — ошибка: правило отбрасывается,
+`Constrain` возвращает `core.ErrUnsatisfiable`, конфликт виден в
+`app.Diagnostics().LayoutConflicts`; сборка `-tags goWidgets_debug` паникует.
+
+Виджет, о котором нет ни одного правила, укладывается «потоком»: под
+предыдущим таким же, во всю ширину, с отступом 8. Первое правило о нём
+(владелец левого якоря — субъект правила) выводит его из потока. Так окно без
+единого констрейнта всё равно что-то показывает.
+
+Для типовых форм есть сахар, который собирает те же констрейнты:
+`Column(gap, …)`, `Row(gap, …)`, `EqualWidths(…)`, `EqualHeights(…)`,
+`Fill(item, container, inset)`. Первый элемент цепочки остаётся там, где его
+поставили (в потоке или прижатым к окну), остальные следуют за ним:
+
+```go
+win.Constrain(goWidgets.Column(8, status, cb1, cb2, cb3)...)
+win.Constrain(goWidgets.Row(8, run, drop, quit)...)
+win.Constrain(goWidgets.EqualWidths(run, drop, quit)...)
+```
+
+Скрытый виджет (`Visible.Set(false)`) в цепочке схлопывается до нуля по
+свободной оси, и всё под ним поднимается; зазор цепочки остаётся.
 
 ## Сборка
 
@@ -123,7 +180,9 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 
 * GTK 3: окно с нативными контролами Adwaita рендерится под Xvfb; фоновая
   горутина обновляет UI через `QueueUpdate`.
-* Golden-тест layout, тест двусторонней привязки `CheckBox`, тест на утечки
+* Golden-тесты layout (стек и диалог на констрейнтах), resize через
+  edit-переменные, схлопывание скрытой строки, неразрешимая система → ошибка и
+  диагностика, тест двусторонней привязки `CheckBox`, тест на утечки
   подписок, тест glitch-free `Batch`.
 * `CGO_ENABLED=0` сборка под `windows/amd64`, `windows/arm64`, `linux/amd64`,
   `linux/arm64`, `darwin/arm64` (последняя уходит на headless — драйвера Cocoa ещё нет).

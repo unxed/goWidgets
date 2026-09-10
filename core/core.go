@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/unxed/goWidgets/vreactive"
+	kiwi "github.com/unxed/kiwi-go"
 )
 
 // Node is the internal representation of a widget (never exposed to users).
@@ -31,6 +32,16 @@ type Node struct {
 
 	OnClicked func()
 	OnToggled func(bool)
+
+	// Vars are the node's Cassowary variables (core/layout.go).
+	Vars *Vars
+	// constraints counts the user constraints this node is the subject of;
+	// zero means the flow places it.
+	constraints int
+	// sizeCns are the size constraints derived from the last measurement,
+	// rebuilt when sizeKey changes.
+	sizeCns []*kiwi.Constraint
+	sizeKey sizeKey
 }
 
 // registered drivers, filled by backend packages through init().
@@ -60,11 +71,11 @@ type App struct {
 	win    BackendWindow
 	info   DriverInfo
 
-	nodes  map[Handle]*Node
-	nextH  Handle
-	root   Handle
-	scope  *vreactive.Scope
-	layout func(*App) []BoundsChange
+	nodes map[Handle]*Node
+	nextH Handle
+	root  Handle
+	scope *vreactive.Scope
+	lay   *layoutEngine
 
 	queueMu sync.Mutex
 	queue   []func()
@@ -90,8 +101,8 @@ func NewApp() (*App, error) {
 	a := &App{
 		nodes: map[Handle]*Node{},
 		scope: vreactive.NewScope(),
+		lay:   newLayoutEngine(),
 	}
-	a.layout = stackLayout
 
 	regMu.Lock()
 	defer regMu.Unlock()
@@ -148,14 +159,17 @@ func (a *App) OpenWindow(spec WindowSpec) error {
 	a.win = w
 	a.root = w.RootHandle()
 	// The content area is a node like any other: without it there is no layout
-	// parent and stackLayout has nothing to iterate. Bounds are seeded from the
+	// parent and nothing for the flow to stack into. Bounds are seeded from the
 	// spec so the first frame is correct even before the backend's initial
 	// resize event arrives.
-	a.nodes[a.root] = &Node{
+	root := &Node{
 		H:       a.root,
 		Visible: true,
 		Bounds:  Rect{W: spec.Size.W, H: spec.Size.H},
+		Vars:    newVars(a.root),
 	}
+	a.nodes[a.root] = root
+	a.initRoot(root, spec.Size)
 
 	// §4.4 hands events over a channel. Reading it from a helper goroutine and
 	// re-entering through QueueUpdate keeps the contract intact and still lands
@@ -178,7 +192,7 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true}
+	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h)}
 	a.nodes[h] = n
 	root := a.nodes[a.root]
 	if root != nil {
@@ -256,7 +270,7 @@ func (a *App) Frame() {
 		return
 	}
 	a.dirtyLayout = false
-	changes := a.layout(a)
+	changes := a.solveLayout()
 	if len(changes) > 0 {
 		a.win.ApplyLayout(changes)
 	}
@@ -316,54 +330,6 @@ type closeHandler func() bool
 
 // SetCloseHandler installs the veto handler used by Window.Closing (§4.3).
 func (a *App) SetCloseHandler(h closeHandler) { a.onClose = h }
-
-// stackLayout is the Phase-1 layout: a vertical stack of full-width rows, each
-// at its natural height, 8 DIP padding. Cassowary replaces this in Phase 2; the
-// signature is already the one the solver will use.
-func stackLayout(a *App) []BoundsChange {
-	root := a.nodes[a.root]
-	if root == nil {
-		return nil
-	}
-	const pad = 8.0
-	avail := Size{W: root.Bounds.W - 2*pad, H: root.Bounds.H}
-	if avail.W < 0 {
-		avail.W = 0
-	}
-
-	var changes []BoundsChange
-	y := pad
-	for _, ch := range root.Children {
-		n := a.nodes[ch]
-		if n == nil {
-			continue
-		}
-		if !n.Visible {
-			// A hidden row leaves the flow entirely rather than holding an
-			// empty gap, which is what callers expect from Visible=false.
-			if r := (Rect{}); r != n.Bounds {
-				n.Bounds = r
-				changes = append(changes, BoundsChange{H: n.H, R: r, Visible: false})
-			}
-			continue
-		}
-		if !n.measured {
-			n.minSize, n.natSize = a.win.MeasureIntrinsic(n.H, avail)
-			n.measured = true
-		}
-		height := n.natSize.H
-		if n.PrefHeight > 0 {
-			height = n.PrefHeight
-		}
-		r := Rect{X: pad, Y: y, W: avail.W, H: height}
-		if r != n.Bounds {
-			n.Bounds = r
-			changes = append(changes, BoundsChange{H: n.H, R: r, Visible: n.Visible})
-		}
-		y += height + pad
-	}
-	return changes
-}
 
 // OpenTray creates the status-area icon and starts routing its events.
 func (a *App) OpenTray(tooltip string, menu []MenuItem, on func(EventKind, Handle)) error {

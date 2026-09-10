@@ -1,9 +1,10 @@
 module github.com/unxed/goWidgets
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/ebitengine/purego v0.9.0
+	github.com/unxed/kiwi-go v0.1.0
 	github.com/unxed/winkeys v0.1.1
 	golang.org/x/sys v0.31.0
 )

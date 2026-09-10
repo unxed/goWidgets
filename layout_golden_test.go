@@ -16,6 +16,10 @@ import (
 // intrinsic sizes, so the whole measure→solve→apply pipeline has one correct
 // answer that is identical on every machine. Any change in layout behaviour
 // shows up here immediately.
+//
+// The stack below is not a separate layout: it is what the solver produces
+// for widgets with no constraints of their own (the flow, ADR-0005), which is
+// why this golden survived the move to Cassowary unchanged.
 const goldenStack = `Label("Статус: простаиваю") x=8.0 y=8.0 w=384.0 h=24.0 visible=true
 Button("Гнать все цели") x=8.0 y=40.0 w=384.0 h=36.0 visible=true
 Button("Выход") x=8.0 y=84.0 w=384.0 h=36.0 visible=true`
@@ -282,4 +286,183 @@ func TestTextViewTakesItsChosenHeight(t *testing.T) {
 	if !strings.Contains(log, `Button("ниже")`) {
 		t.Errorf("button below the text view was not placed:\n%s", log)
 	}
+}
+
+// A real dialog, declared as constraints (§5): status line, a column of check
+// boxes under it, three equal buttons along the bottom. Golden because the
+// solver's answer is exact and the same on every machine.
+const goldenDialog = `Label("Простаиваю. Целей в очереди: 2") x=8.0 y=8.0 w=444.0 h=24.0 visible=true
+CheckBox("Цель: починить флаки в CI") x=8.0 y=40.0 w=444.0 h=24.0 visible=true
+CheckBox("Цель: дописать тесты бэкенда") x=8.0 y=72.0 w=444.0 h=24.0 visible=true
+Button("Гнать все цели") x=8.0 y=276.0 w=142.7 h=36.0 visible=true
+Button("Убрать отмеченные") x=158.7 y=276.0 w=142.7 h=36.0 visible=true
+Button("Выход") x=309.3 y=276.0 w=142.7 h=36.0 visible=true`
+
+type dialog struct {
+	win             *goWidgets.Window
+	status          *goWidgets.Label
+	cb1, cb2        *goWidgets.CheckBox
+	run, drop, quit *goWidgets.Button
+}
+
+func newDialog(t *testing.T, app *goWidgets.App) *dialog {
+	t.Helper()
+	win, err := app.NewWindow("crescent", 460, 320)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &dialog{win: win}
+	d.status, _ = win.AddLabel("Простаиваю. Целей в очереди: 2")
+	d.cb1, _ = win.AddCheckBox("Цель: починить флаки в CI", false)
+	d.cb2, _ = win.AddCheckBox("Цель: дописать тесты бэкенда", false)
+	d.run, _ = win.AddButton("Гнать все цели")
+	d.drop, _ = win.AddButton("Убрать отмеченные")
+	d.quit, _ = win.AddButton("Выход")
+
+	const pad = 8
+	var cs []*goWidgets.Constraint
+	cs = append(cs,
+		d.status.Left().Eq(win.Left().Plus(pad)),
+		d.status.Top().Eq(win.Top().Plus(pad)),
+		d.status.Right().Eq(win.Right().Minus(pad)),
+		d.run.Left().Eq(win.Left().Plus(pad)),
+		d.run.Bottom().Eq(win.Bottom().Minus(pad)),
+		d.quit.Right().Eq(win.Right().Minus(pad)),
+	)
+	cs = append(cs, goWidgets.Column(pad, d.status, d.cb1, d.cb2)...)
+	cs = append(cs, goWidgets.Row(pad, d.run, d.drop, d.quit)...)
+	cs = append(cs, goWidgets.EqualWidths(d.run, d.drop, d.quit)...)
+	if err := win.Constrain(cs...); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func TestGoldenConstraintDialog(t *testing.T) {
+	app := newHeadlessApp(t)
+	newDialog(t, app)
+	pumpUntilIdle(t, app)
+
+	got := strings.TrimSpace(headless.Golden())
+	if got != goldenDialog {
+		t.Errorf("dialog drifted from golden:\n--- got ---\n%s\n--- want ---\n%s", got, goldenDialog)
+	}
+	if c := app.Diagnostics().LayoutConflicts; len(c) != 0 {
+		t.Errorf("a well-formed dialog reported conflicts: %v", c)
+	}
+}
+
+// The window size is an edit variable: a resize is a re-solve of the same
+// system, and edges pinned to the window follow it.
+func TestResizeReflowsConstraints(t *testing.T) {
+	app := newHeadlessApp(t)
+	d := newDialog(t, app)
+	pumpUntilIdle(t, app)
+
+	headless.Reset()
+	headless.Resize(600, 400)
+	pumpUntilIdle(t, app)
+
+	log := headless.Golden()
+	for _, want := range []string{
+		`Label("Простаиваю. Целей в очереди: 2") x=8.0 y=8.0 w=584.0`,
+		`Button("Выход") x=402.7 y=356.0 w=189.3 h=36.0`,
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("after resize, missing %q in:\n%s", want, log)
+		}
+	}
+	_ = d
+}
+
+// Hiding a constrained widget collapses it along the axis its chain leaves
+// free, so the rows below a hidden row move up by its height; the chain's gap
+// stays, because the constraint saying so is still there.
+func TestHiddenConstrainedWidgetCollapses(t *testing.T) {
+	app := newHeadlessApp(t)
+	d := newDialog(t, app)
+	pumpUntilIdle(t, app)
+
+	headless.Reset()
+	d.cb1.Visible.Set(false)
+	pumpUntilIdle(t, app)
+
+	got := strings.TrimSpace(headless.Golden())
+	want := `CheckBox("Цель: починить флаки в CI") x=0.0 y=0.0 w=0.0 h=0.0 visible=false
+CheckBox("Цель: дописать тесты бэкенда") x=8.0 y=48.0 w=444.0 h=24.0 visible=true`
+	if got != want {
+		t.Errorf("hidden row did not collapse:\n--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+// Phase 2 DoD (§8): an unsatisfiable system is diagnosed, never a panic and
+// never a silent hang. Two required rules that disagree: the second is
+// dropped, reported, and everything else keeps working.
+func TestUnsatisfiableIsDiagnosedNotFatal(t *testing.T) {
+	if core.DebugBuild {
+		t.Skip("a debug build panics on an unsatisfiable constraint by design")
+	}
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	btn, _ := win.AddButton("Гнать")
+
+	err := win.Constrain(
+		btn.Width().Is(100).Required(),
+		btn.Width().Is(200).Required(),
+	)
+	if !errors.Is(err, core.ErrUnsatisfiable) {
+		t.Fatalf("err = %v, want it to wrap core.ErrUnsatisfiable", err)
+	}
+	if c := app.Diagnostics().LayoutConflicts; len(c) != 1 {
+		t.Fatalf("LayoutConflicts = %v, want exactly one entry", c)
+	}
+	pumpUntilIdle(t, app)
+	if !strings.Contains(headless.Golden(), "w=100.0") {
+		t.Errorf("the first required rule did not survive the conflict:\n%s", headless.Golden())
+	}
+}
+
+// Strong rules that merely disagree are not an error: the solver compromises,
+// and the caller controls the outcome with strengths.
+func TestStrengthsResolveDisagreement(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	btn, _ := win.AddButton("Гнать")
+
+	if err := win.Constrain(
+		btn.Width().Is(100),
+		btn.Width().Is(200).Weak(),
+	); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+	if !strings.Contains(headless.Golden(), "w=100.0") {
+		t.Errorf("strong did not beat weak:\n%s", headless.Golden())
+	}
+}
+
+// One constraint takes a widget out of the flow; removing it puts the widget
+// back. The stack and the solver are one system, so this is just a re-solve.
+func TestUnconstrainReturnsToFlow(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	lbl, _ := win.AddLabel("Статус")
+	btn, _ := win.AddButton("Гнать")
+
+	c := btn.Left().Eq(win.Left().Plus(100))
+	if err := win.Constrain(c); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+	if !strings.Contains(headless.Golden(), `Button("Гнать") x=100.0 y=0.0`) {
+		t.Fatalf("constrained button not where it was put:\n%s", headless.Golden())
+	}
+
+	headless.Reset()
+	win.Unconstrain(c)
+	pumpUntilIdle(t, app)
+	if !strings.Contains(headless.Golden(), `Button("Гнать") x=8.0 y=40.0 w=384.0`) {
+		t.Errorf("button did not return to the flow under the label:\n%s", headless.Golden())
+	}
+	_ = lbl
 }

@@ -58,6 +58,38 @@ func main() {
 	drop, _ := win.AddButton("Убрать отмеченные")
 	quit, _ := win.AddButton("Выход")
 
+	// The dialog: status line across the top, goals stacked under it, three
+	// equal buttons along the bottom edge. Only edges are stated; widths and
+	// heights the platform does not fix come out of the solver.
+	boxes := []goWidgets.Box{status}
+	for _, g := range goals {
+		boxes = append(boxes, g.box)
+	}
+	const pad = 8
+	if err := win.Constrain(
+		status.Left().Eq(win.Left().Plus(pad)),
+		status.Top().Eq(win.Top().Plus(pad)),
+		status.Right().Eq(win.Right().Minus(pad)),
+	); err != nil {
+		log.Fatal(err)
+	}
+	if err := win.Constrain(goWidgets.Column(pad, boxes...)...); err != nil {
+		log.Fatal(err)
+	}
+	if err := win.Constrain(
+		run.Left().Eq(win.Left().Plus(pad)),
+		run.Bottom().Eq(win.Bottom().Minus(pad)),
+		quit.Right().Eq(win.Right().Minus(pad)),
+	); err != nil {
+		log.Fatal(err)
+	}
+	if err := win.Constrain(goWidgets.Row(pad, run, drop, quit)...); err != nil {
+		log.Fatal(err)
+	}
+	if err := win.Constrain(goWidgets.EqualWidths(run, drop, quit)...); err != nil {
+		log.Fatal(err)
+	}
+
 	// Declared before the closures that use them: refresh() updates the
 	// tooltip, and Closing decides between hiding and quitting.
 	var tray *goWidgets.TrayIcon
