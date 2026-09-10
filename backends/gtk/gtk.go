@@ -45,13 +45,19 @@ func WindowHandle() uintptr {
 
 // WidgetHandle returns the GtkWidget* of the first widget of the given kind
 // in the current window, or 0. A test hook like WindowHandle.
-func WidgetHandle(kind core.WidgetKind) uintptr {
+func WidgetHandle(kind core.WidgetKind) uintptr { return NthWidgetHandle(kind, 0) }
+
+// NthWidgetHandle is WidgetHandle for the i-th widget of the kind.
+func NthWidgetHandle(kind core.WidgetKind, i int) uintptr {
 	if current == nil || current.win == nil {
 		return 0
 	}
 	for h := core.Handle(1); h <= current.win.nextH; h++ {
 		if n := current.win.nodes[h]; n != nil && n.kind == kind {
-			return n.handle
+			if i == 0 {
+				return n.handle
+			}
+			i--
 		}
 	}
 	return 0
@@ -110,6 +116,13 @@ var (
 	gtkFilterName   func(filter uintptr, name string)
 	gtkFilterAddPat func(filter uintptr, pattern string)
 	gtkBoxPack      func(box, child uintptr, expand, fill int32, padding uint32)
+	gtkComboNew     func() uintptr
+	gtkComboNewEnt  func() uintptr
+	gtkComboAppend  func(cb uintptr, text string)
+	gtkComboClear   func(cb uintptr)
+	gtkComboActive  func(cb uintptr) int32
+	gtkComboSetAct  func(cb uintptr, index int32)
+	gtkComboText    func(cb uintptr) *byte
 	gtkEntrySetText func(e uintptr, text string)
 	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
@@ -135,6 +148,7 @@ type driver struct {
 	cbClicked      uintptr
 	cbToggled      uintptr
 	cbEntryChanged uintptr
+	cbComboChanged uintptr
 	cbEntryEnter   uintptr
 	cbKeyPress     uintptr
 	cbKeyRelease   uintptr
@@ -245,6 +259,13 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkFilterName, lib, "gtk_file_filter_set_name")
 	purego.RegisterLibFunc(&gtkFilterAddPat, lib, "gtk_file_filter_add_pattern")
 	purego.RegisterLibFunc(&gtkBoxPack, lib, "gtk_box_pack_start")
+	purego.RegisterLibFunc(&gtkComboNew, lib, "gtk_combo_box_text_new")
+	purego.RegisterLibFunc(&gtkComboNewEnt, lib, "gtk_combo_box_text_new_with_entry")
+	purego.RegisterLibFunc(&gtkComboAppend, lib, "gtk_combo_box_text_append_text")
+	purego.RegisterLibFunc(&gtkComboClear, lib, "gtk_combo_box_text_remove_all")
+	purego.RegisterLibFunc(&gtkComboActive, lib, "gtk_combo_box_get_active")
+	purego.RegisterLibFunc(&gtkComboSetAct, lib, "gtk_combo_box_set_active")
+	purego.RegisterLibFunc(&gtkComboText, lib, "gtk_combo_box_text_get_active_text")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
@@ -306,6 +327,17 @@ func (d *driver) Init() error {
 	// the text is read back from it, so the event carries the whole field.
 	d.cbEntryChanged = purego.NewCallback(func(w, data uintptr) uintptr {
 		emit(core.BackendEvent{Kind: core.EventTextChanged, H: core.Handle(data), Text: gtkEntryGetText(w)})
+		return 0
+	})
+	// GtkComboBox "changed" fires for a pick from the list and for typing in
+	// the entry alike; the active index tells the two apart (-1 while typing).
+	d.cbComboChanged = purego.NewCallback(func(w, data uintptr) uintptr {
+		text := cString(gtkComboText(w))
+		if i := gtkComboActive(w); i >= 0 {
+			emit(core.BackendEvent{Kind: core.EventSelected, H: core.Handle(data), Int: int(i), Text: text})
+		} else {
+			emit(core.BackendEvent{Kind: core.EventTextChanged, H: core.Handle(data), Text: text})
+		}
 		return 0
 	})
 	d.cbEntryEnter = purego.NewCallback(func(w, data uintptr) uintptr {
@@ -498,8 +530,10 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindLabel:
 		g = gtkLabelNew("")
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
-	case core.KindEntry:
+	case core.KindEdit:
 		g = gtkEntryNew()
+	case core.KindComboBox:
+		g = gtkComboNewEnt() // the dropdown-only variant is swapped in by SetBool
 	case core.KindTextView:
 		// A text view goes inside a scrolled window: the scroller is what the
 		// layout places and sizes, the view is what holds the text. Read-only
@@ -537,9 +571,11 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		gSignalConnect(g, "clicked", w.drv.cbClicked, uintptr(h), 0, 0)
 	case core.KindCheckBox:
 		gSignalConnect(g, "toggled", w.drv.cbToggled, uintptr(h), 0, 0)
-	case core.KindEntry:
+	case core.KindEdit:
 		gSignalConnect(g, "changed", w.drv.cbEntryChanged, uintptr(h), 0, 0)
 		gSignalConnect(g, "activate", w.drv.cbEntryEnter, uintptr(h), 0, 0)
+	case core.KindComboBox:
+		gSignalConnect(g, "changed", w.drv.cbComboChanged, uintptr(h), 0, 0)
 	}
 	gtkFixedPut(w.fixed, g, 0, 0)
 	gtkWidgetShow(g)
@@ -567,7 +603,7 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		gtkTextBufSet(gtkTextViewBuf(n.inner), v, -1)
 	case core.KindButton, core.KindCheckBox:
 		gtkButtonLabel(n.handle, v) // GtkCheckButton is a GtkButton subclass
-	case core.KindEntry:
+	case core.KindEdit:
 		// gtk_entry_set_text emits "changed" only when the text differs, so
 		// the property's own write does not come back as an edit.
 		gtkEntrySetText(n.handle, v)
@@ -752,6 +788,17 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 		return
 	}
 	switch p {
+	case core.PropDropdownOnly:
+		// GtkComboBoxText decides at construction whether it has an entry,
+		// so the widget is rebuilt; this happens before items or layout.
+		if n.kind == core.KindComboBox && v {
+			gtkWidgetDestr(n.handle)
+			n.handle = gtkComboNew()
+			gSignalConnect(n.handle, "changed", w.drv.cbComboChanged, uintptr(h), 0, 0)
+			gtkFixedPut(w.fixed, n.handle, 0, 0)
+			gtkWidgetShow(n.handle)
+		}
+		return
 	case core.PropEnabled:
 		b := int32(0)
 		if v {
@@ -776,6 +823,23 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 }
 
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
+
+func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
+	if n := w.nodes[h]; n != nil && p == core.PropSelected && n.kind == core.KindComboBox {
+		gtkComboSetAct(n.handle, int32(v))
+	}
+}
+
+func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
+	n := w.nodes[h]
+	if n == nil || p != core.PropItems || n.kind != core.KindComboBox {
+		return
+	}
+	gtkComboClear(n.handle)
+	for _, it := range items {
+		gtkComboAppend(n.handle, it)
+	}
+}
 
 // MeasureIntrinsic asks GTK itself, so theme padding and the user's font are
 // respected — the whole reason §5.1 makes this a backend responsibility.

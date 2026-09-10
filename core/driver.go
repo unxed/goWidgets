@@ -49,9 +49,12 @@ const (
 	// KindTextView is a multi-line, read-only, scrolling text area — a native
 	// GtkTextView on GTK and a multiline EDIT on Win32.
 	KindTextView
-	// KindEntry is a single-line text field — GtkEntry on GTK, a single-line
+	// KindEdit is a single-line text field — GtkEntry on GTK, a single-line
 	// EDIT on Win32.
-	KindEntry
+	KindEdit
+	// KindComboBox is a drop-down list, with or without a text field —
+	// GtkComboBoxText on GTK, COMBOBOX on Win32.
+	KindComboBox
 )
 
 func (k WidgetKind) String() string {
@@ -64,8 +67,10 @@ func (k WidgetKind) String() string {
 		return "CheckBox"
 	case KindTextView:
 		return "TextView"
-	case KindEntry:
-		return "Entry"
+	case KindEdit:
+		return "Edit"
+	case KindComboBox:
+		return "ComboBox"
 	}
 	return "Unknown"
 }
@@ -80,6 +85,13 @@ const (
 	PropEnabled
 	PropVisible
 	PropChecked
+	// PropSelected is a list's selected index (int), -1 for none.
+	PropSelected
+	// PropItems is a list's items.
+	PropItems
+	// PropDropdownOnly makes a combo box a pure list, no text entry. Set
+	// once, before the widget is shown.
+	PropDropdownOnly
 )
 
 func (p PropKey) String() string {
@@ -90,6 +102,12 @@ func (p PropKey) String() string {
 		return "Enabled"
 	case PropVisible:
 		return "Visible"
+	case PropSelected:
+		return "selected"
+	case PropItems:
+		return "items"
+	case PropDropdownOnly:
+		return "dropdownOnly"
 	case PropChecked:
 		return "Checked"
 	}
@@ -172,6 +190,8 @@ const (
 	EventTextChanged
 	// EventActivated is Enter pressed in a text field; Text is its contents.
 	EventActivated
+	// EventSelected is a list item chosen; Int is its index, Text its text.
+	EventSelected
 )
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a
@@ -208,7 +228,8 @@ type BackendEvent struct {
 	Scale ScaleInfo
 	Bool  bool     // EventToggled: the control's new state
 	Key   KeyEvent // EventKey: the keystroke
-	Text  string   // EventTextChanged, EventActivated: the field's contents
+	Text  string   // EventTextChanged, EventActivated, EventSelected: text
+	Int   int      // EventSelected: the index
 }
 
 // MenuItem is one entry of the tray menu. A separator ignores Label.
@@ -304,6 +325,8 @@ type BackendWindow interface {
 	SetString(h Handle, p PropKey, v string)
 	SetBool(h Handle, p PropKey, v bool)
 	SetFloat(h Handle, p PropKey, v float64)
+	SetInt(h Handle, p PropKey, v int)
+	SetList(h Handle, p PropKey, items []string)
 
 	// MeasureIntrinsic is the only source of truth about a widget's natural
 	// size: only the platform knows its font metrics and theme padding (§5.1).

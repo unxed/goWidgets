@@ -517,10 +517,10 @@ Button("Отмена") x=204.0 y=256.0 w=188.0 h=36.0 visible=true`
 // type must reach the property, what the program sets must reach the field,
 // and a platform-reported edit must never be written back over the field —
 // that echo is how a fast typist loses characters.
-func TestEntryBindsBothWays(t *testing.T) {
+func TestEditBindsBothWays(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("crescent", 400, 300)
-	e, err := win.AddEntry("")
+	e, err := win.AddEdit("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func TestEntryBindsBothWays(t *testing.T) {
 	// program → platform
 	e.Text.Set("починить CI")
 	pumpUntilIdle(t, app)
-	if got, ok := headless.EntryText(); !ok || got != "починить CI" {
+	if got, ok := headless.EditText(); !ok || got != "починить CI" {
 		t.Fatalf("property write did not reach the field (found=%v text=%q)", ok, got)
 	}
 
@@ -539,8 +539,8 @@ func TestEntryBindsBothWays(t *testing.T) {
 	// the property must end on the later one and the field must be left alone.
 	measured := headless.MeasureCount()
 	writes := headless.TextWrites()
-	headless.TypeIntoEntry("починить C")
-	headless.TypeIntoEntry("починить")
+	headless.TypeIntoEdit("починить C")
+	headless.TypeIntoEdit("починить")
 	pumpUntilIdle(t, app)
 	if headless.TextWrites() != writes {
 		// The write would carry the right text and still be wrong: on Win32
@@ -551,7 +551,7 @@ func TestEntryBindsBothWays(t *testing.T) {
 	if got := e.Text.Get(); got != "починить" {
 		t.Fatalf("Text = %q, want the last edit", got)
 	}
-	if got, _ := headless.EntryText(); got != "починить" {
+	if got, _ := headless.EditText(); got != "починить" {
 		t.Fatalf("an earlier edit was echoed back over the field: %q", got)
 	}
 	if len(changes) != 2 || changes[1] != "починить" {
@@ -563,16 +563,16 @@ func TestEntryBindsBothWays(t *testing.T) {
 }
 
 // Enter in a text field is the field's activation, with its contents.
-func TestEntryActivates(t *testing.T) {
+func TestEditActivates(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("crescent", 400, 300)
-	e, _ := win.AddEntry("")
+	e, _ := win.AddEdit("")
 	var got []string
 	e.Activated.On(app.Scope(), func(v string) { got = append(got, v) })
 	pumpUntilIdle(t, app)
 
-	headless.TypeIntoEntry("новая цель")
-	headless.PressEnterInEntry()
+	headless.TypeIntoEdit("новая цель")
+	headless.PressEnterInEdit()
 	pumpUntilIdle(t, app)
 	if len(got) != 1 || got[0] != "новая цель" {
 		t.Fatalf("Activated = %v, want [новая цель]", got)
@@ -581,12 +581,12 @@ func TestEntryActivates(t *testing.T) {
 
 // A field in the flow takes its chosen width when nothing else says
 // otherwise — here the flow stretches it, and the golden pins its height.
-func TestEntryGolden(t *testing.T) {
+func TestEditGolden(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("crescent", 400, 300)
-	win.AddEntry("x")
+	win.AddEdit("x")
 	pumpUntilIdle(t, app)
-	want := `Entry("x") x=8.0 y=8.0 w=384.0 h=24.0 visible=true`
+	want := `Edit("x") x=8.0 y=8.0 w=384.0 h=24.0 visible=true`
 	if got := strings.TrimSpace(headless.Golden()); got != want {
 		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
@@ -597,7 +597,7 @@ func TestEntryGolden(t *testing.T) {
 func TestHugWidthDecidesWhoStretches(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("crescent", 400, 300)
-	entry, _ := win.AddEntry("")
+	entry, _ := win.AddEdit("")
 	add, _ := win.AddButton("Добавить")
 	if err := win.Constrain(
 		entry.Left().Eq(win.Left().Plus(8)),
@@ -614,7 +614,7 @@ func TestHugWidthDecidesWhoStretches(t *testing.T) {
 
 	got := strings.TrimSpace(headless.Golden())
 	// "Добавить" is 8 chars: 8·7 + 2·16 = 88 wide; the field gets the rest.
-	want := `Entry("") x=8.0 y=8.0 w=288.0 h=36.0 visible=true
+	want := `Edit("") x=8.0 y=8.0 w=288.0 h=36.0 visible=true
 Button("Добавить") x=304.0 y=8.0 w=88.0 h=36.0 visible=true`
 	if got != want {
 		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
@@ -626,7 +626,7 @@ func TestFocusReachesPlatform(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("crescent", 400, 300)
 	win.AddButton("Гнать")
-	e, _ := win.AddEntry("цель")
+	e, _ := win.AddEdit("цель")
 	e.Focus()
 	pumpUntilIdle(t, app)
 	if got, ok := headless.Focused(); !ok || got != "цель" {
@@ -683,5 +683,63 @@ func TestFileDialogsScripted(t *testing.T) {
 	ds := headless.FileDialogs()
 	if len(ds) != 3 || ds[0].Save || !ds[1].Save || ds[1].Suggested != "цели.txt" || len(ds[0].Filters) != 1 {
 		t.Errorf("FileDialogs = %+v", ds)
+	}
+}
+
+// ComboBox: a pick from the list reaches Text, Changed and Selected; Select
+// from the program reaches the platform and Text but is not reported as the
+// user's; SetItems clears the selection.
+func TestComboBoxBindsBothWays(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	cb, err := win.AddComboBox([]string{"luna", "sol", "terra"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed []string
+	var picked []int
+	cb.Changed.On(app.Scope(), func(v string) { changed = append(changed, v) })
+	cb.Selected.On(app.Scope(), func(i int) { picked = append(picked, i) })
+	pumpUntilIdle(t, app)
+
+	cb.Select(1)
+	pumpUntilIdle(t, app)
+	if _, sel, text, _ := headless.ComboState(); sel != 1 || text != "sol" {
+		t.Fatalf("Select did not reach the platform: sel=%d text=%q", sel, text)
+	}
+	if cb.Text.Get() != "sol" || len(picked) != 0 {
+		t.Fatalf("after Select: Text=%q picked=%v", cb.Text.Get(), picked)
+	}
+
+	headless.PickItem(2)
+	pumpUntilIdle(t, app)
+	if cb.SelectedIndex() != 2 || cb.Text.Get() != "terra" {
+		t.Fatalf("after a pick: index=%d Text=%q", cb.SelectedIndex(), cb.Text.Get())
+	}
+	if len(picked) != 1 || picked[0] != 2 || len(changed) != 1 || changed[0] != "terra" {
+		t.Fatalf("Selected=%v Changed=%v, want [2] and [terra]", picked, changed)
+	}
+
+	cb.SetItems([]string{"a", "b"})
+	pumpUntilIdle(t, app)
+	items, sel, _, _ := headless.ComboState()
+	if len(items) != 2 || sel != -1 || cb.SelectedIndex() != -1 {
+		t.Errorf("SetItems: items=%v sel=%d index=%d", items, sel, cb.SelectedIndex())
+	}
+}
+
+func TestComboBoxGolden(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	cb, _ := win.AddComboBox([]string{"gpt-5.6-luna", "gpt-5.6"}, true)
+	cb.HugWidth()
+	if err := win.Constrain(cb.Left().Eq(win.Left().Plus(8)), cb.Top().Eq(win.Top().Plus(8))); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+	// 12 chars · 7 + 2·16 + 20 = 136 wide, one line tall.
+	want := `ComboBox("") x=8.0 y=8.0 w=136.0 h=24.0 visible=true`
+	if got := strings.TrimSpace(headless.Golden()); got != want {
+		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }

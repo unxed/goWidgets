@@ -28,9 +28,10 @@ const (
 	ButtonPadY  = 10.0
 	CheckBoxBox = 18.0 // the indicator itself
 	CheckBoxGap = 6.0
-	EntryW      = 160.0 // natural width of a text field: a choice, not a measurement
-	EntryMinW   = 40.0
-	EntryPadY   = 4.0
+	EditW       = 160.0 // natural width of a text field: a choice, not a measurement
+	EditMinW    = 40.0
+	EditPadY    = 4.0
+	ComboArrowW = 20.0
 	DefaultW    = 640.0
 	DefaultH    = 480.0
 	DefaultDPIS = 1.0
@@ -104,6 +105,9 @@ type node struct {
 	visible bool
 	checked bool
 	parent  core.Handle
+
+	items    []string // combo box
+	selected int
 }
 
 type window struct {
@@ -136,7 +140,7 @@ func (w *window) Events() <-chan core.BackendEvent { return w.events }
 func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Handle, error) {
 	w.nextH++
 	h := w.nextH
-	w.nodes[h] = &node{kind: kind, parent: parent, enabled: true, visible: true}
+	w.nodes[h] = &node{kind: kind, parent: parent, enabled: true, visible: true, selected: -1}
 	return h, nil
 }
 
@@ -155,7 +159,7 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		// Both real platforms report a programmatic write to a text field as
 		// a change (GTK "changed", Win32 EN_CHANGE); so does this one, so the
 		// core's handling of that echo is what the tests exercise.
-		if n.kind == core.KindEntry {
+		if n.kind == core.KindEdit {
 			select {
 			case w.events <- core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: v}:
 			default:
@@ -293,6 +297,56 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
 
+func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
+	if n := w.nodes[h]; n != nil && p == core.PropSelected {
+		n.selected = v
+		if v >= 0 && v < len(n.items) {
+			n.text = n.items[v]
+			// GTK reports a programmatic set_active as "changed"; so does
+			// this driver, so the core's handling of it is what tests see.
+			select {
+			case w.events <- core.BackendEvent{Kind: core.EventSelected, H: h, Int: v, Text: n.text}:
+			default:
+			}
+		}
+	}
+}
+
+func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
+	if n := w.nodes[h]; n != nil && p == core.PropItems {
+		n.items = append([]string(nil), items...)
+		n.selected = -1
+	}
+}
+
+// PickItem chooses an item in the first combo box, as the user would.
+func PickItem(i int) bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind == core.KindComboBox && i >= 0 && i < len(n.items) {
+			n.selected, n.text = i, n.items[i]
+			current.events <- core.BackendEvent{Kind: core.EventSelected, H: h, Int: i, Text: n.items[i]}
+			return true
+		}
+	}
+	return false
+}
+
+// ComboState reports the first combo box's items and selection.
+func ComboState() (items []string, selected int, text string, ok bool) {
+	if current == nil {
+		return nil, -1, "", false
+	}
+	for _, n := range current.nodes {
+		if n.kind == core.KindComboBox {
+			return append([]string(nil), n.items...), n.selected, n.text, true
+		}
+	}
+	return nil, -1, "", false
+}
+
 // MeasureIntrinsic uses the constants above so that a golden file is stable
 // across machines, fonts and locales.
 func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural core.Size) {
@@ -314,9 +368,19 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindCheckBox:
 		s := core.Size{W: CheckBoxBox + CheckBoxGap + textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: CheckBoxBox, H: s.H}, s
-	case core.KindEntry:
-		h := LineHeight + 2*EntryPadY
-		return core.Size{W: EntryMinW, H: h}, core.Size{W: EntryW, H: h}
+	case core.KindEdit:
+		h := LineHeight + 2*EditPadY
+		return core.Size{W: EditMinW, H: h}, core.Size{W: EditW, H: h}
+	case core.KindComboBox:
+		// Wide enough for the widest item plus the arrow, one line tall.
+		widest := 0.0
+		for _, it := range n.items {
+			if w := float64(len([]rune(it))) * CharWidth; w > widest {
+				widest = w
+			}
+		}
+		h := LineHeight + 2*EditPadY
+		return core.Size{W: EditMinW, H: h}, core.Size{W: widest + 2*ButtonPadX + ComboArrowW, H: h}
 	default:
 		s := core.Size{W: textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: 0, H: s.H}, s
@@ -392,14 +456,14 @@ func Resize(w, h float64) {
 	current.events <- core.BackendEvent{Kind: core.EventResized, H: current.root, Size: current.size}
 }
 
-// TypeIntoEntry replaces the contents of the first text field, as if the
+// TypeIntoEdit replaces the contents of the first text field, as if the
 // user had typed, and reports whether there is one.
-func TypeIntoEntry(text string) bool {
+func TypeIntoEdit(text string) bool {
 	if current == nil {
 		return false
 	}
 	for h, n := range current.nodes {
-		if n.kind == core.KindEntry {
+		if n.kind == core.KindEdit {
 			n.text = text
 			current.events <- core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: text}
 			return true
@@ -408,13 +472,13 @@ func TypeIntoEntry(text string) bool {
 	return false
 }
 
-// PressEnterInEntry presses Enter in the first text field.
-func PressEnterInEntry() bool {
+// PressEnterInEdit presses Enter in the first text field.
+func PressEnterInEdit() bool {
 	if current == nil {
 		return false
 	}
 	for h, n := range current.nodes {
-		if n.kind == core.KindEntry {
+		if n.kind == core.KindEdit {
 			current.events <- core.BackendEvent{Kind: core.EventActivated, H: h, Text: n.text}
 			return true
 		}
@@ -422,13 +486,13 @@ func PressEnterInEntry() bool {
 	return false
 }
 
-// EntryText reports what the platform holds in the first text field.
-func EntryText() (text string, found bool) {
+// EditText reports what the platform holds in the first text field.
+func EditText() (text string, found bool) {
 	if current == nil {
 		return "", false
 	}
 	for _, n := range current.nodes {
-		if n.kind == core.KindEntry {
+		if n.kind == core.KindEdit {
 			return n.text, true
 		}
 	}

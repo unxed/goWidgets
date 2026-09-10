@@ -8,7 +8,7 @@
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
-> `Entry`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
+> `Edit`, `ComboBox`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
 > реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
 
 ## Пример
@@ -37,11 +37,11 @@ func main() {
 }
 ```
 
-Текстовое поле — `Entry`: `Text` двусторонний, `Changed` на каждую правку,
+Текстовое поле — `Edit`: `Text` двусторонний, `Changed` на каждую правку,
 `Activated` на Enter:
 
 ```go
-field, _ := win.AddEntry("")
+field, _ := win.AddEdit("")
 field.Activated.On(app.Scope(), func(s string) { addGoal(s); field.Text.Set("") })
 ```
 
@@ -51,6 +51,17 @@ field.Activated.On(app.Scope(), func(s string) { addGoal(s); field.Text.Set("") 
 
 ```go
 if win.Ask("crescent", fmt.Sprintf("Убрать отмеченные цели (%d)?", n)) { … }
+```
+
+Выпадающий список — `ComboBox`: `AddComboBox(items, dropdownOnly)`, `Text`
+двусторонний, `SetItems`, `Select(i)`/`SelectedIndex()`; `Changed` на набор и
+выбор, `Selected(int)` на выбор из списка. Имена виджетов, свойств и сигналов
+— по словарю vtui (`vocabulary.json`), см. ADR-0011.
+
+```go
+model, _ := win.AddComboBox([]string{"gpt-5.6-luna", "gpt-5.6"}, true)
+model.Select(0)
+model.Selected.On(app.Scope(), func(i int) { log.Println("модель:", model.Text.Get()) })
 ```
 
 Файловые диалоги — `win.OpenFile(title, filters...)` и
@@ -235,13 +246,15 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
   подписок, тест glitch-free `Batch`.
 * `CGO_ENABLED=0` сборка под `windows/amd64`, `windows/arm64`, `linux/amd64`,
   `linux/arm64`, `darwin/arm64` (последняя уходит на headless — драйвера Cocoa ещё нет).
-* GTK 3: `Entry` под Xvfb — текст в обе стороны, `Changed`, `Activated`,
+* GTK 3: `Edit` под Xvfb — текст в обе стороны, `Changed`, `Activated`,
   без эха; скриншот showcase с полем ввода.
 * GTK 3: клавиатурное событие, построенное через `gdk_event_new` и поданное в
   `gtk_widget_event`, доходит до `KeyPressed` как Ctrl+A (тест под Xvfb).
 * `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
   проходит тесты и проверяется в CI.
 
+* `ComboBox`: GTK под Xvfb (выбор снаружи, набор в entry, программный `Select`
+  не репортится) и под Wine (`CBN_SELCHANGE`); showcase с клавиатуры на обеих.
 * Файловые диалоги: GTK под Xvfb (выбор файла снаружи → путь; сохранение с
   предложенным именем) и comdlg32 под Wine (поле имени заполнено, `IDOK`,
   путь совпал); размер `OPENFILENAMEW` — юнит-тестом.

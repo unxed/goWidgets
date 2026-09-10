@@ -123,6 +123,19 @@ const (
 	esReadonly      = 0x00000800
 	esAutoVScroll   = 0x00000040
 	esAutoHScroll   = 0x00000080
+	cbsDropdown     = 0x0002
+	cbsDropdownList = 0x0003
+	cbsAutoHScroll  = 0x0040
+	cbAddString     = 0x0143
+	cbGetCurSel     = 0x0147
+	cbGetLBText     = 0x0148
+	cbGetLBTextLen  = 0x0149
+	cbResetContent  = 0x014B
+	cbSetCurSel     = 0x014E
+	cbGetItemHeight = 0x0154
+	cbnSelChange    = 1
+	cbnEditChange   = 5
+	comboListRows   = 8 // rows shown when the list drops down
 	wsVScroll       = 0x00200000
 	wsHScroll       = 0x00100000
 	wsBorder        = 0x00800000
@@ -426,7 +439,7 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 		// here, before translation, and not passed on — passing it on would
 		// only produce the "unhandled character" beep.
 		if m.message == wmKeyDown && m.wParam == vkReturn && d.win != nil {
-			if h, n := d.win.nodeByHwnd(uintptr(m.hwnd)); n != nil && n.kind == core.KindEntry {
+			if h, n := d.win.nodeByHwnd(uintptr(m.hwnd)); n != nil && n.kind == core.KindEdit {
 				d.win.emit(core.BackendEvent{
 					Kind: core.EventActivated, H: h, Text: d.win.text(n.hwnd),
 				})
@@ -556,7 +569,13 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// BS_AUTOCHECKBOX makes the control own its state; we read it back on
 		// BN_CLICKED rather than tracking it ourselves.
 		class, style = "BUTTON", wsChild|wsVisible|wsTabStop|bsAutoCheckBox
-	case core.KindEntry:
+	case core.KindComboBox:
+		// CBS_DROPDOWN has a text field; SetBool swaps in CBS_DROPDOWNLIST for
+		// dropdown-only. The height a COMBOBOX is given is the height of its
+		// opened list; the closed control is one line regardless (ApplyLayout
+		// adds the list height back).
+		class, style = "COMBOBOX", wsChild|wsVisible|wsTabStop|wsVScroll|cbsDropdown|cbsAutoHScroll
+	case core.KindEdit:
 		// A single-line EDIT. ES_AUTOHSCROLL lets text longer than the field
 		// scroll instead of stopping; WS_BORDER draws the box.
 		class, style = "EDIT", wsChild|wsVisible|wsTabStop|wsBorder|esAutoHScroll
@@ -570,14 +589,9 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		style = wsChild | wsVisible | wsBorder | wsVScroll | wsHScroll |
 			esMultiline | esReadonly | esAutoVScroll | esAutoHScroll
 	}
-	clsp, _ := windows.UTF16PtrFromString(class)
-	txtp, _ := windows.UTF16PtrFromString("")
-
-	hwnd, _, e := pCreateWindowExW.Call(0,
-		uintptr(unsafe.Pointer(clsp)), uintptr(unsafe.Pointer(txtp)),
-		style, 0, 0, 10, 10, w.hwnd, uintptr(id), uintptr(w.drv.hInstance), 0)
-	if hwnd == 0 {
-		return 0, fmt.Errorf("CreateWindowExW(%s): %v", class, e)
+	hwnd, err := w.createControl(class, style, id)
+	if err != nil {
+		return 0, err
 	}
 	// A text view shows a log: columns of time, source and message. In a
 	// proportional font the columns do not line up and it reads as a mess.
@@ -594,6 +608,20 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	ctlByID[id] = h
 	regMu.Unlock()
 	return h, nil
+}
+
+// createControl makes a child control of the window with the given class,
+// style and command id.
+func (w *window) createControl(class string, style uintptr, id uint32) (uintptr, error) {
+	clsp, _ := windows.UTF16PtrFromString(class)
+	txtp, _ := windows.UTF16PtrFromString("")
+	hwnd, _, e := pCreateWindowExW.Call(0,
+		uintptr(unsafe.Pointer(clsp)), uintptr(unsafe.Pointer(txtp)),
+		style, 0, 0, 10, 10, w.hwnd, uintptr(id), uintptr(w.drv.hInstance), 0)
+	if hwnd == 0 {
+		return 0, fmt.Errorf("CreateWindowExW(%s): %v", class, e)
+	}
+	return hwnd, nil
 }
 
 func (w *window) DestroyWidget(h core.Handle) {
@@ -813,6 +841,20 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 		return
 	}
 	switch p {
+	case core.PropDropdownOnly:
+		// The list-only style is a creation-time choice: rebuild the control
+		// (this precedes items and layout).
+		if n.kind == core.KindComboBox && v {
+			hwnd, err := w.createControl("COMBOBOX", wsChild|wsVisible|wsTabStop|wsVScroll|cbsDropdownList, n.id)
+			if err != nil {
+				return
+			}
+			pDestroyWindow.Call(n.hwnd)
+			n.hwnd = hwnd
+			if w.drv.font != 0 {
+				pSendMessageW.Call(hwnd, wmSetFont, uintptr(w.drv.font), 1)
+			}
+		}
 	case core.PropEnabled:
 		b := uintptr(0)
 		if v {
@@ -838,6 +880,36 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
 
+func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
+	if n := w.nodes[h]; n != nil && p == core.PropSelected && n.kind == core.KindComboBox {
+		pSendMessageW.Call(n.hwnd, cbSetCurSel, uintptr(v), 0)
+	}
+}
+
+func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
+	n := w.nodes[h]
+	if n == nil || p != core.PropItems || n.kind != core.KindComboBox {
+		return
+	}
+	pSendMessageW.Call(n.hwnd, cbResetContent, 0, 0)
+	for _, it := range items {
+		if s, err := windows.UTF16PtrFromString(it); err == nil {
+			pSendMessageW.Call(n.hwnd, cbAddString, 0, uintptr(unsafe.Pointer(s)))
+		}
+	}
+}
+
+// comboItemText reads item i of a combo box's list.
+func (w *window) comboItemText(hwnd uintptr, i int) string {
+	n, _, _ := pSendMessageW.Call(hwnd, cbGetLBTextLen, uintptr(i), 0)
+	if int32(n) < 0 {
+		return ""
+	}
+	buf := make([]uint16, n+1)
+	pSendMessageW.Call(hwnd, cbGetLBText, uintptr(i), uintptr(unsafe.Pointer(&buf[0])))
+	return windows.UTF16ToString(buf)
+}
+
 // MeasureIntrinsic asks the control itself where it can: themed buttons answer
 // BCM_GETIDEALSIZE, which accounts for the current theme's padding. Static text
 // falls back to the font metrics of the UI font. Physical pixels are converted
@@ -860,11 +932,24 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 
 	tw, th := w.textExtent(n.hwnd)
 	switch n.kind {
-	case core.KindEntry:
+	case core.KindEdit:
 		// Width is a choice, not a function of the contents; the height is
 		// one line plus the border and padding of a themed EDIT.
 		h := (th + 8*s) / s
 		return core.Size{W: 40, H: h}, core.Size{W: 160, H: h}
+	case core.KindComboBox:
+		// The control reports its own closed height; width fits the widest
+		// item plus the arrow button.
+		ih, _, _ := pSendMessageW.Call(n.hwnd, cbGetItemHeight, ^uintptr(0), 0)
+		h := (float64(ih) + 6*s) / s
+		widest := 0.0
+		cnt, _, _ := pSendMessageW.Call(n.hwnd, 0x0146 /* CB_GETCOUNT */, 0, 0)
+		for i := 0; i < int(cnt); i++ {
+			if tw, _ := w.textExtentOf(n.hwnd, w.comboItemText(n.hwnd, i)); tw > widest {
+				widest = tw
+			}
+		}
+		return core.Size{W: 40, H: h}, core.Size{W: (widest + 40*s) / s, H: h}
 	case core.KindButton:
 		nat := core.Size{W: (tw + 32*s) / s, H: (th + 12*s) / s}
 		return core.Size{W: 0, H: nat.H}, nat
@@ -880,10 +965,15 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 
 // textExtent measures a control's caption with the UI font, in physical pixels.
 func (w *window) textExtent(hwnd uintptr) (width, height float64) {
-	const wmGetTextLength, wmGetText = 0x000E, 0x000D
-	n, _, _ := pSendMessageW.Call(hwnd, wmGetTextLength, 0, 0)
-	buf := make([]uint16, n+1)
-	pSendMessageW.Call(hwnd, wmGetText, uintptr(len(buf)), uintptr(unsafe.Pointer(&buf[0])))
+	return w.textExtentOf(hwnd, w.text(hwnd))
+}
+
+// textExtentOf measures s with the UI font on a control's DC, in physical pixels.
+func (w *window) textExtentOf(hwnd uintptr, s string) (width, height float64) {
+	buf, _ := windows.UTF16FromString(s)
+	if len(buf) == 0 {
+		buf = []uint16{0}
+	}
 
 	dc, _, _ := pGetDC.Call(hwnd)
 	if dc == 0 {
@@ -894,7 +984,7 @@ func (w *window) textExtent(hwnd uintptr) (width, height float64) {
 		pSelectObject.Call(dc, uintptr(w.drv.font))
 	}
 	var sz sizeW
-	pGetTextExtentPoint.Call(dc, uintptr(unsafe.Pointer(&buf[0])), uintptr(n),
+	pGetTextExtentPoint.Call(dc, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)-1),
 		uintptr(unsafe.Pointer(&sz)))
 	return float64(sz.cx), float64(sz.cy)
 }
@@ -912,9 +1002,17 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		} else {
 			flags |= swpHideWindow
 		}
+		h := c.R.H
+		if n.kind == core.KindComboBox {
+			// The given height is the opened list's; the closed control
+			// stays one line, so the layout's height is the closed one and
+			// room for comboListRows items is added underneath.
+			ih, _, _ := pSendMessageW.Call(n.hwnd, cbGetItemHeight, 0, 0)
+			h += float64(ih) / s * comboListRows
+		}
 		pSetWindowPos.Call(n.hwnd, 0,
 			uintptr(int32(c.R.X*s)), uintptr(int32(c.R.Y*s)),
-			uintptr(int32(c.R.W*s)), uintptr(int32(c.R.H*s)), flags)
+			uintptr(int32(c.R.W*s)), uintptr(int32(h*s)), flags)
 		n.rect, n.visible = c.R, c.Visible
 	}
 	if len(changes) > 0 {
@@ -1021,7 +1119,21 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			h := ctlByID[id]
 			regMu.Unlock()
 			if n := d.win.nodes[h]; n != nil {
-				if n.kind == core.KindEntry {
+				if n.kind == core.KindComboBox {
+					switch uint32(wParam >> 16) {
+					case cbnSelChange:
+						i, _, _ := pSendMessageW.Call(n.hwnd, cbGetCurSel, 0, 0)
+						if int32(i) >= 0 {
+							d.win.emit(core.BackendEvent{
+								Kind: core.EventSelected, H: h, Int: int(int32(i)), Text: d.win.comboItemText(n.hwnd, int(int32(i))),
+							})
+						}
+					case cbnEditChange:
+						d.win.emit(core.BackendEvent{
+							Kind: core.EventTextChanged, H: h, Text: d.win.text(n.hwnd),
+						})
+					}
+				} else if n.kind == core.KindEdit {
 					// EN_CHANGE arrives after the control has updated; the
 					// other EDIT notifications (focus, update, scroll) are
 					// not edits.

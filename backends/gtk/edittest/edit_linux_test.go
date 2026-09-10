@@ -1,9 +1,9 @@
 //go:build linux
 
-// Package entrytest exercises the text field against a real GTK. Its own
+// Package edittest exercises the text field against a real GTK. Its own
 // directory for the reason given in keytest: one GTK application per test
 // binary.
-package entrytest
+package edittest
 
 import (
 	"os"
@@ -20,7 +20,7 @@ import (
 // as a Go string through the FFI, "changed" fires for an edit made on the
 // platform side and carries the whole text, "activate" fires for Enter, and
 // a property write reaches the widget without bouncing back as an edit.
-func TestEntryAgainstGTK(t *testing.T) {
+func TestEditAgainstGTK(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("нет DISPLAY: запускать под Xvfb")
 	}
@@ -39,7 +39,7 @@ func TestEntryAgainstGTK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err := win.AddEntry("start")
+	e, err := win.AddEdit("start")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestEntryAgainstGTK(t *testing.T) {
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		app.QueueUpdate(func() {
-			h := gtk.WidgetHandle(core.KindEntry)
+			h := gtk.WidgetHandle(core.KindEdit)
 			widgetText = gtkEntryGetText(h)
 			entryFocused = gtkIsFocus(h) != 0
 			btn.Focus()
@@ -89,7 +89,7 @@ func TestEntryAgainstGTK(t *testing.T) {
 		// write reaches the widget when the batch commits — an edit made on
 		// the widget in the same batch would be ordered before it.
 		app.QueueUpdate(func() {
-			h := gtk.WidgetHandle(core.KindEntry)
+			h := gtk.WidgetHandle(core.KindEdit)
 			programText = gtkEntryGetText(h)
 			// Widget → property, as typing would.
 			gtkEntrySetText(h, "из виджета")

@@ -228,7 +228,7 @@ func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
 		// Text changes the intrinsic size of a label or a button. A text
 		// field's size is a choice, not a function of its contents, and a
 		// re-measure of the whole window per keystroke would be wasted.
-		if kind != core.KindEntry {
+		if kind != core.KindEdit && kind != core.KindComboBox {
 			w.app.eng.Invalidate()
 		}
 	})
@@ -256,22 +256,22 @@ func (t *TextView) SetText(s string) { t.Text.Set(s) }
 // from there in creation order, on every backend.
 func (w *widget) Focus() { w.app.eng.Focus(w.node) }
 
-// Entry is a single-line native text field. Text is two-way: setting it
+// Edit is a single-line native text field. Text is two-way: setting it
 // changes the field, and typing updates it. Changed fires per edit with the
 // whole contents; Activated fires on Enter.
-type Entry struct {
+type Edit struct {
 	*widget
 	Changed   *vreactive.Event[string]
 	Activated *vreactive.Event[string]
 }
 
-// AddEntry appends a text field holding text.
-func (w *Window) AddEntry(text string) (*Entry, error) {
-	wd, err := w.newWidget(core.KindEntry, text)
+// AddEdit appends a text field holding text.
+func (w *Window) AddEdit(text string) (*Edit, error) {
+	wd, err := w.newWidget(core.KindEdit, text)
 	if err != nil {
 		return nil, err
 	}
-	e := &Entry{
+	e := &Edit{
 		widget:    wd,
 		Changed:   vreactive.NewEvent[string](),
 		Activated: vreactive.NewEvent[string](),
@@ -289,6 +289,100 @@ func (w *Window) AddEntry(text string) (*Entry, error) {
 	wd.node.OnActivated = func(v string) { e.Activated.Emit(v) }
 	return e, nil
 }
+
+// ComboBox is a native drop-down list. With a text field (the default) the
+// user may type as well as pick, and Text is what the field shows; dropdown-
+// only, Text is the chosen item. Changed fires as Text changes, for typing
+// and picking alike; Selected fires when an item is picked from the list,
+// with its index.
+//
+// Vocabulary (vtui): properties text, items, dropdownOnly; signals changed,
+// selected.
+type ComboBox struct {
+	*widget
+	Changed  *vreactive.Event[string]
+	Selected *vreactive.Event[int]
+
+	items        []string
+	dropdownOnly bool
+	selected     int
+}
+
+// AddComboBox appends a drop-down with the items; dropdownOnly removes the
+// text field. Nothing is selected until Select or the user does it.
+func (w *Window) AddComboBox(items []string, dropdownOnly bool) (*ComboBox, error) {
+	wd, err := w.newWidget(core.KindComboBox, "")
+	if err != nil {
+		return nil, err
+	}
+	cb := &ComboBox{
+		widget:       wd,
+		Changed:      vreactive.NewEvent[string](),
+		Selected:     vreactive.NewEvent[int](),
+		dropdownOnly: dropdownOnly,
+		selected:     -1,
+	}
+	bw := w.app.eng.Window()
+	if dropdownOnly {
+		bw.SetBool(wd.node.H, core.PropDropdownOnly, true)
+	}
+	cb.SetItems(items)
+	wd.node.OnTextChanged = func(v string) {
+		if v == wd.platformText {
+			return
+		}
+		wd.platformText = v
+		cb.Text.Set(v)
+		cb.Changed.Emit(v)
+	}
+	wd.node.OnSelected = func(i int, text string) {
+		if i == cb.selected {
+			// GTK reports the program's own Select as "changed" (seen under
+			// Xvfb); the platform holding what we set is not a pick.
+			return
+		}
+		cb.selected = i
+		// The platform shows the item's text in the field; mirror that so
+		// Text and Changed follow, then report the pick.
+		if text != wd.platformText {
+			wd.platformText = text
+			cb.Text.Set(text)
+			cb.Changed.Emit(text)
+		}
+		cb.Selected.Emit(i)
+	}
+	return cb, nil
+}
+
+// SetItems replaces the list; the selection is cleared.
+func (cb *ComboBox) SetItems(items []string) {
+	cb.items = append([]string(nil), items...)
+	cb.selected = -1
+	cb.app.eng.Window().SetList(cb.node.H, core.PropItems, cb.items)
+}
+
+// Items returns the list.
+func (cb *ComboBox) Items() []string { return append([]string(nil), cb.items...) }
+
+// Select picks an item by index (-1 clears); Text follows. Selected does
+// not fire — that is for the user's picks, and only for ones that change
+// the selection.
+func (cb *ComboBox) Select(i int) {
+	if i < -1 || i >= len(cb.items) {
+		i = -1
+	}
+	cb.selected = i
+	cb.app.eng.Window().SetInt(cb.node.H, core.PropSelected, i)
+	text := ""
+	if i >= 0 {
+		text = cb.items[i]
+	}
+	cb.platformText = text
+	cb.Text.Set(text)
+}
+
+// SelectedIndex is the chosen item's index, -1 when none.
+func (cb *ComboBox) SelectedIndex() int { return cb.selected }
 
 // CheckBox is a native check box. Checked is two-way: setting it moves the
 // control, and the user moving the control updates it.

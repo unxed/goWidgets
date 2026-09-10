@@ -26,20 +26,25 @@ var (
 	pFindWindow  = user32.NewProc("FindWindowW")
 	pGetDlgItem  = user32.NewProc("GetDlgItem")
 	pSetDlgText  = user32.NewProc("SetDlgItemTextW")
+	pSendMessage = user32.NewProc("SendMessageW")
+	pGetCtrlID   = user32.NewProc("GetDlgCtrlID")
+	pGetParent   = user32.NewProc("GetParent")
 )
 
 const (
-	wmKeyDown = 0x0100
-	wmKeyUp   = 0x0101
-	wmChar    = 0x0102
-	wmCommand = 0x0111
-	idYes     = 6
-	idOK      = 1
-	vkReturn  = 0x0D
-	vkTab     = 0x09
+	wmKeyDown    = 0x0100
+	wmKeyUp      = 0x0101
+	wmChar       = 0x0102
+	wmCommand    = 0x0111
+	idYes        = 6
+	idOK         = 1
+	cbSetCurSel  = 0x014E
+	cbnSelChange = 1
+	vkReturn     = 0x0D
+	vkTab        = 0x09
 )
 
-func TestEntryFocusAndKeys(t *testing.T) {
+func TestEditFocusAndKeys(t *testing.T) {
 	app, err := goWidgets.NewApp()
 	if err != nil {
 		t.Skipf("графическая подсистема недоступна: %v", err)
@@ -52,10 +57,13 @@ func TestEntryFocusAndKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	btn, _ := win.AddButton("Гнать")
-	e, _ := win.AddEntry("")
+	e, _ := win.AddEdit("")
+	combo, _ := win.AddComboBox([]string{"luna", "sol", "terra"}, true)
+	combo.Select(0)
 	if err := win.Constrain(
 		e.Left().Eq(win.Left().Plus(8)), e.Top().Eq(win.Top().Plus(8)),
 		btn.Left().Eq(e.Right().Plus(8)), btn.Top().Eq(e.Top()),
+		combo.Left().Eq(e.Left()), combo.Top().Eq(e.Bottom().Plus(8)),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +76,8 @@ func TestEntryFocusAndKeys(t *testing.T) {
 	focus := func() uintptr { f, _, _ := pGetFocus.Call(); return f }
 	var focusAtStart, focusAfterTab, entryHwnd, btnHwnd uintptr
 	var asked, boxFound, openBoxFound, editFound, openedOK bool
+	var picked []int
+	combo.Selected.On(app.Scope(), func(i int) { picked = append(picked, i) })
 	var openedPath string
 	tmpFile := filepath.Join(os.TempDir(), "win32test-open.txt")
 	if err := os.WriteFile(tmpFile, []byte("x"), 0o644); err != nil {
@@ -82,7 +92,7 @@ func TestEntryFocusAndKeys(t *testing.T) {
 	}
 	go func() {
 		step(500*time.Millisecond, func() {
-			entryHwnd, btnHwnd = win32.WidgetHandle(core.KindEntry), win32.WidgetHandle(core.KindButton)
+			entryHwnd, btnHwnd = win32.WidgetHandle(core.KindEdit), win32.WidgetHandle(core.KindButton)
 			focusAtStart = focus()
 			// Typing: WM_CHAR is what TranslateMessage produces per key.
 			for _, ch := range "abc" {
@@ -98,6 +108,17 @@ func TestEntryFocusAndKeys(t *testing.T) {
 			pPostMessage.Call(entryHwnd, wmKeyUp, vkTab, 1)
 		})
 		step(300*time.Millisecond, func() { focusAfterTab = focus() })
+
+		// A pick in the combo box, as the control reports one: the selection
+		// set, then CBN_SELCHANGE to the parent.
+		step(100*time.Millisecond, func() {
+			ch := win32.WidgetHandle(core.KindComboBox)
+			pSendMessage.Call(ch, cbSetCurSel, 2, 0)
+			id, _, _ := pGetCtrlID.Call(ch)
+			parent, _, _ := pGetParent.Call(ch)
+			pPostMessage.Call(parent, wmCommand, uintptr(cbnSelChange)<<16|id, ch)
+		})
+		step(300*time.Millisecond, func() {})
 
 		// A modal box blocks the UI goroutine in MessageBox's own loop; the
 		// box is found by its title and answered with the Yes command, and
@@ -172,6 +193,9 @@ func TestEntryFocusAndKeys(t *testing.T) {
 	}
 	if focusAfterTab != btnHwnd {
 		t.Errorf("focus after Tab = %#x, want the button %#x", focusAfterTab, btnHwnd)
+	}
+	if len(picked) != 1 || picked[0] != 2 || combo.Text.Get() != "terra" {
+		t.Errorf("combo: Selected=%v Text=%q, want [2] terra (and Select(0) not reported)", picked, combo.Text.Get())
 	}
 	if !boxFound {
 		t.Error("the message box never appeared")

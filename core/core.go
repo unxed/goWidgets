@@ -39,6 +39,7 @@ type Node struct {
 	OnToggled     func(bool)
 	OnTextChanged func(string)
 	OnActivated   func(string)
+	OnSelected    func(int, string)
 
 	// Vars are the node's Cassowary variables (core/layout.go).
 	Vars *Vars
@@ -302,6 +303,10 @@ func (a *App) dispatch(ev BackendEvent) {
 	case EventActivated:
 		if n := a.nodes[ev.H]; n != nil && n.OnActivated != nil {
 			n.OnActivated(ev.Text)
+		}
+	case EventSelected:
+		if n := a.nodes[ev.H]; n != nil && n.OnSelected != nil {
+			n.OnSelected(ev.Int, ev.Text)
 		}
 	case EventResized:
 		if n := a.nodes[a.root]; n != nil {

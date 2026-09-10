@@ -41,14 +41,19 @@ func main() {
 	}
 
 	status, _ := win.AddLabel("")
-	entry, _ := win.AddEntry("")
+	edit, _ := win.AddEdit("")
+	model, err := win.AddComboBox([]string{"gpt-5.6-luna", "gpt-5.6", "gpt-5.6-mini"}, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	model.Select(0)
 	add, _ := win.AddButton("Добавить")
 	run, _ := win.AddButton("Гнать все цели")
 	drop, _ := win.AddButton("Убрать отмеченные")
 	quit, _ := win.AddButton("Выход")
 
-	// The dialog: status line across the top, the new-goal field with its
-	// button under it, goals stacked under that, three equal buttons along
+	// The dialog: status line across the top, the new-goal field with the
+	// model to run it on and its button under it, goals stacked under that, three equal buttons along
 	// the bottom edge. Only edges are stated; widths and heights the platform
 	// does not fix come out of the solver.
 	const pad = 8
@@ -57,17 +62,18 @@ func main() {
 		status.Top().Eq(win.Top().Plus(pad)),
 		status.Right().Eq(win.Right().Minus(pad)),
 
-		entry.Left().Eq(status.Left()),
-		entry.Top().Eq(status.Bottom().Plus(pad)),
+		edit.Left().Eq(status.Left()),
+		edit.Top().Eq(status.Bottom().Plus(pad)),
 		add.Right().Eq(status.Right()),
 	); err != nil {
 		log.Fatal(err)
 	}
-	if err := win.Constrain(goWidgets.Row(pad, entry, add)...); err != nil {
+	if err := win.Constrain(goWidgets.Row(pad, edit, model, add)...); err != nil {
 		log.Fatal(err)
 	}
-	add.HugWidth() // the field takes the slack, not the button
-	entry.Focus()  // typing a goal is the first thing to do here
+	model.HugWidth() // the field takes the slack; the list and the button
+	add.HugWidth()   // keep their natural widths
+	edit.Focus()     // typing a goal is the first thing to do here
 
 	// Goals are a column that grows at run time: each new box is chained
 	// under the previous one (or under the field, for the first). Removing
@@ -78,7 +84,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		var above goWidgets.Box = entry
+		var above goWidgets.Box = edit
 		if n := len(goals); n > 0 {
 			above = goals[n-1].box
 		}
@@ -143,19 +149,19 @@ func main() {
 	// Toggling a box only changes what "drop" applies to; the box list is
 	// dynamic, so the subscription is made where the box is.
 	submit := func() {
-		title := entry.Text.Get()
+		title := edit.Text.Get()
 		if title == "" {
 			return
 		}
-		addGoal(title)
+		addGoal(title + " [" + model.Text.Get() + "]")
 		goals[len(goals)-1].box.Toggled.On(app.Scope(), func(bool) { refresh() })
-		entry.Text.Set("")
+		edit.Text.Set("")
 		refresh()
 	}
 	for _, g := range goals {
 		g.box.Toggled.On(app.Scope(), func(bool) { refresh() })
 	}
-	entry.Activated.On(app.Scope(), func(string) { submit() })
+	edit.Activated.On(app.Scope(), func(string) { submit() })
 	add.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { submit() })
 	run.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		running = !running
