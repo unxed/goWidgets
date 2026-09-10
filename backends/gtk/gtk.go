@@ -123,6 +123,16 @@ var (
 	gtkComboActive  func(cb uintptr) int32
 	gtkComboSetAct  func(cb uintptr, index int32)
 	gtkComboText    func(cb uintptr) *byte
+	gtkListNew      func() uintptr
+	gtkListInsert   func(box, child uintptr, position int32)
+	gtkListSelect   func(box, row uintptr)
+	gtkListUnselect func(box uintptr)
+	gtkListRowAt    func(box uintptr, index int32) uintptr
+	gtkListRowIndex func(row uintptr) int32
+	gtkListSelRow   func(box uintptr) uintptr
+	gtkListActivate func(box uintptr, single int32)
+	gtkMarginStart  func(w uintptr, margin int32)
+	gtkMarginEnd    func(w uintptr, margin int32)
 	gtkEntrySetText func(e uintptr, text string)
 	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
@@ -142,6 +152,11 @@ type requisition struct{ Width, Height int32 }
 
 const windowToplevel = 0
 
+const (
+	listRows   = 8  // natural height of a list box, in rows
+	scrollbarW = 16 // room for the overlay scrollbar beside a list
+)
+
 type driver struct {
 	win *window
 
@@ -149,6 +164,8 @@ type driver struct {
 	cbToggled      uintptr
 	cbEntryChanged uintptr
 	cbComboChanged uintptr
+	cbRowSelected  uintptr
+	cbRowActivated uintptr
 	cbEntryEnter   uintptr
 	cbKeyPress     uintptr
 	cbKeyRelease   uintptr
@@ -266,6 +283,16 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkComboActive, lib, "gtk_combo_box_get_active")
 	purego.RegisterLibFunc(&gtkComboSetAct, lib, "gtk_combo_box_set_active")
 	purego.RegisterLibFunc(&gtkComboText, lib, "gtk_combo_box_text_get_active_text")
+	purego.RegisterLibFunc(&gtkListNew, lib, "gtk_list_box_new")
+	purego.RegisterLibFunc(&gtkListInsert, lib, "gtk_list_box_insert")
+	purego.RegisterLibFunc(&gtkListSelect, lib, "gtk_list_box_select_row")
+	purego.RegisterLibFunc(&gtkListUnselect, lib, "gtk_list_box_unselect_all")
+	purego.RegisterLibFunc(&gtkListRowAt, lib, "gtk_list_box_get_row_at_index")
+	purego.RegisterLibFunc(&gtkListRowIndex, lib, "gtk_list_box_row_get_index")
+	purego.RegisterLibFunc(&gtkListSelRow, lib, "gtk_list_box_get_selected_row")
+	purego.RegisterLibFunc(&gtkListActivate, lib, "gtk_list_box_set_activate_on_single_click")
+	purego.RegisterLibFunc(&gtkMarginStart, lib, "gtk_widget_set_margin_start")
+	purego.RegisterLibFunc(&gtkMarginEnd, lib, "gtk_widget_set_margin_end")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
@@ -338,6 +365,23 @@ func (d *driver) Init() error {
 		} else {
 			emit(core.BackendEvent{Kind: core.EventTextChanged, H: core.Handle(data), Text: text})
 		}
+		return 0
+	})
+	// GtkListBox hands over the row (NULL when the selection is cleared);
+	// the index comes from the row, the text from what was inserted.
+	d.cbRowSelected = purego.NewCallback(func(box, row, data uintptr) uintptr {
+		h := core.Handle(data)
+		i := -1
+		if row != 0 {
+			i = int(gtkListRowIndex(row))
+		}
+		emit(core.BackendEvent{Kind: core.EventSelected, H: h, Int: i, Text: d.itemText(h, i)})
+		return 0
+	})
+	d.cbRowActivated = purego.NewCallback(func(box, row, data uintptr) uintptr {
+		h := core.Handle(data)
+		i := int(gtkListRowIndex(row))
+		emit(core.BackendEvent{Kind: core.EventItemActivated, H: h, Int: i, Text: d.itemText(h, i)})
 		return 0
 	})
 	d.cbEntryEnter = purego.NewCallback(func(w, data uintptr) uintptr {
@@ -488,6 +532,18 @@ type node struct {
 	handle uintptr // the widget placed in the layout (scrolled window for a text view)
 	inner  uintptr // the text view itself, when different from handle
 	kind   core.WidgetKind
+	items  []string // list box rows, for event text
+}
+
+// itemText is a list node's i-th item, or "".
+func (d *driver) itemText(h core.Handle, i int) string {
+	if d.win == nil {
+		return ""
+	}
+	if n := d.win.nodes[h]; n != nil && i >= 0 && i < len(n.items) {
+		return n.items[i]
+	}
+	return ""
 }
 
 type window struct {
@@ -534,6 +590,23 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		g = gtkEntryNew()
 	case core.KindComboBox:
 		g = gtkComboNewEnt() // the dropdown-only variant is swapped in by SetBool
+	case core.KindListBox:
+		// A list box inside a scrolled window: the scroller is what the
+		// layout sizes, the list holds the rows. Selection by click, no
+		// activate-on-single-click, so "activated" stays a double-click.
+		lb := gtkListNew()
+		gtkListActivate(lb, 0)
+		gSignalConnect(lb, "row-selected", w.drv.cbRowSelected, uintptr(h), 0, 0)
+		gSignalConnect(lb, "row-activated", w.drv.cbRowActivated, uintptr(h), 0, 0)
+		sw := gtkScrollNew(0, 0)
+		const policyNever, policyAutomatic = 2, 1
+		gtkScrollPolicy(sw, policyNever, policyAutomatic)
+		gtkContAdd(sw, lb)
+		gtkWidgetShow(lb)
+		w.nodes[h] = &node{handle: sw, inner: lb, kind: kind}
+		gtkFixedPut(w.fixed, sw, 0, 0)
+		gtkWidgetShow(sw)
+		return h, nil
 	case core.KindTextView:
 		// A text view goes inside a scrolled window: the scroller is what the
 		// layout places and sizes, the view is what holds the text. Read-only
@@ -607,6 +680,8 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		// gtk_entry_set_text emits "changed" only when the text differs, so
 		// the property's own write does not come back as an edit.
 		gtkEntrySetText(n.handle, v)
+	case core.KindComboBox, core.KindListBox:
+		// Text is not a property of these; the list holds items.
 	default:
 		gtkLabelText(n.handle, v)
 	}
@@ -778,6 +853,26 @@ func RespondDialog(d uintptr, response int32) { gtkDialogResp(d, response) }
 // records the toplevel's focus widget, which takes effect on map.
 func (w *window) Focus(h core.Handle) {
 	if n := w.nodes[h]; n != nil {
+		if n.kind == core.KindListBox {
+			// A GtkListBox cannot take focus itself (can-focus is FALSE);
+			// its rows can. Before the window is shown, grabbing on the
+			// list does not stick and GTK then picks another widget
+			// (observed: the button). Grab on the selected row, or the first.
+			row := gtkListSelRow(n.inner)
+			if row == 0 {
+				row = gtkListRowAt(n.inner, 0)
+			}
+			if row != 0 {
+				gtkGrabFocus(row)
+			}
+			return
+		}
+		if n.inner != 0 {
+			// The scroller is what the layout holds; the keys go to what
+			// is inside it.
+			gtkGrabFocus(n.inner)
+			return
+		}
 		gtkGrabFocus(n.handle)
 	}
 }
@@ -825,19 +920,46 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
 
 func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
-	if n := w.nodes[h]; n != nil && p == core.PropSelected && n.kind == core.KindComboBox {
+	n := w.nodes[h]
+	if n == nil || p != core.PropSelected {
+		return
+	}
+	switch n.kind {
+	case core.KindComboBox:
 		gtkComboSetAct(n.handle, int32(v))
+	case core.KindListBox:
+		if v < 0 {
+			gtkListUnselect(n.inner)
+		} else if row := gtkListRowAt(n.inner, int32(v)); row != 0 {
+			gtkListSelect(n.inner, row)
+		}
 	}
 }
 
 func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropItems || n.kind != core.KindComboBox {
+	if n == nil || p != core.PropItems {
 		return
 	}
-	gtkComboClear(n.handle)
-	for _, it := range items {
-		gtkComboAppend(n.handle, it)
+	switch n.kind {
+	case core.KindComboBox:
+		gtkComboClear(n.handle)
+		for _, it := range items {
+			gtkComboAppend(n.handle, it)
+		}
+	case core.KindListBox:
+		for row := gtkListRowAt(n.inner, 0); row != 0; row = gtkListRowAt(n.inner, 0) {
+			gtkWidgetDestr(row)
+		}
+		n.items = append([]string(nil), items...)
+		for _, it := range items {
+			lbl := gtkLabelNew(it)
+			gtkLabelXAlign(lbl, 0)
+			gtkMarginStart(lbl, 6)
+			gtkMarginEnd(lbl, 6)
+			gtkWidgetShow(lbl)
+			gtkListInsert(n.inner, lbl, -1) // wrapped in a GtkListBoxRow by GTK
+		}
 	}
 }
 
@@ -850,6 +972,22 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	}
 	var mn, nat requisition
 	gtkPreferred(n.handle, unsafe.Pointer(&mn), unsafe.Pointer(&nat))
+	if n.kind == core.KindListBox {
+		// A scrolled window's natural size is barely more than its minimum;
+		// the list inside knows the rows. Natural is up to listRows of
+		// them; the minimum stays the scroller's, so the list can shrink.
+		var lmn, lnat requisition
+		gtkPreferred(n.inner, unsafe.Pointer(&lmn), unsafe.Pointer(&lnat))
+		h := float64(lnat.Height)
+		if cnt := len(n.items); cnt > listRows {
+			h = h / float64(cnt) * listRows
+		}
+		if h < float64(nat.Height) {
+			h = float64(nat.Height)
+		}
+		return core.Size{W: float64(mn.Width), H: float64(mn.Height)},
+			core.Size{W: float64(lnat.Width) + scrollbarW, H: h}
+	}
 	return core.Size{W: float64(mn.Width), H: float64(mn.Height)},
 		core.Size{W: float64(nat.Width), H: float64(nat.Height)}
 }

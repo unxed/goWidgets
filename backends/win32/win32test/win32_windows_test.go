@@ -40,6 +40,9 @@ const (
 	idOK         = 1
 	cbSetCurSel  = 0x014E
 	cbnSelChange = 1
+	lbSetCurSel  = 0x0186
+	lbnSelChange = 1
+	lbnDblClk    = 2
 	vkReturn     = 0x0D
 	vkTab        = 0x09
 )
@@ -60,10 +63,13 @@ func TestEditFocusAndKeys(t *testing.T) {
 	e, _ := win.AddEdit("")
 	combo, _ := win.AddComboBox([]string{"luna", "sol", "terra"}, true)
 	combo.Select(0)
+	list, _ := win.AddListBox([]string{"один", "два", "три"})
+	list.Select(0)
 	if err := win.Constrain(
 		e.Left().Eq(win.Left().Plus(8)), e.Top().Eq(win.Top().Plus(8)),
 		btn.Left().Eq(e.Right().Plus(8)), btn.Top().Eq(e.Top()),
 		combo.Left().Eq(e.Left()), combo.Top().Eq(e.Bottom().Plus(8)),
+		list.Left().Eq(e.Left()), list.Top().Eq(combo.Bottom().Plus(8)), list.Height().Is(60),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -76,8 +82,10 @@ func TestEditFocusAndKeys(t *testing.T) {
 	focus := func() uintptr { f, _, _ := pGetFocus.Call(); return f }
 	var focusAtStart, focusAfterTab, entryHwnd, btnHwnd uintptr
 	var asked, boxFound, openBoxFound, editFound, openedOK bool
-	var picked []int
+	var picked, listPicked, listOpened []int
 	combo.Selected.On(app.Scope(), func(i int) { picked = append(picked, i) })
+	list.Selected.On(app.Scope(), func(i int) { listPicked = append(listPicked, i) })
+	list.Activated.On(app.Scope(), func(i int) { listOpened = append(listOpened, i) })
 	var openedPath string
 	tmpFile := filepath.Join(os.TempDir(), "win32test-open.txt")
 	if err := os.WriteFile(tmpFile, []byte("x"), 0o644); err != nil {
@@ -117,6 +125,15 @@ func TestEditFocusAndKeys(t *testing.T) {
 			id, _, _ := pGetCtrlID.Call(ch)
 			parent, _, _ := pGetParent.Call(ch)
 			pPostMessage.Call(parent, wmCommand, uintptr(cbnSelChange)<<16|id, ch)
+		})
+		// The same for the list box: a selection, then a double-click.
+		step(100*time.Millisecond, func() {
+			lh := win32.WidgetHandle(core.KindListBox)
+			pSendMessage.Call(lh, lbSetCurSel, 2, 0)
+			id, _, _ := pGetCtrlID.Call(lh)
+			parent, _, _ := pGetParent.Call(lh)
+			pPostMessage.Call(parent, wmCommand, uintptr(lbnSelChange)<<16|id, lh)
+			pPostMessage.Call(parent, wmCommand, uintptr(lbnDblClk)<<16|id, lh)
 		})
 		step(300*time.Millisecond, func() {})
 
@@ -196,6 +213,9 @@ func TestEditFocusAndKeys(t *testing.T) {
 	}
 	if len(picked) != 1 || picked[0] != 2 || combo.Text.Get() != "terra" {
 		t.Errorf("combo: Selected=%v Text=%q, want [2] terra (and Select(0) not reported)", picked, combo.Text.Get())
+	}
+	if len(listPicked) != 1 || listPicked[0] != 2 || len(listOpened) != 1 || listOpened[0] != 2 || list.SelectedIndex() != 2 {
+		t.Errorf("list: Selected=%v Activated=%v index=%d, want [2] [2] 2", listPicked, listOpened, list.SelectedIndex())
 	}
 	if !boxFound {
 		t.Error("the message box never appeared")

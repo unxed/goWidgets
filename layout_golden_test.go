@@ -743,3 +743,73 @@ func TestComboBoxGolden(t *testing.T) {
 		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
+
+// ListBox: the user's selection and double-click reach the events with the
+// index; the program's Select reaches the platform and is not reported.
+func TestListBoxBindsBothWays(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	lb, err := win.AddListBox([]string{"починить CI", "рефакторинг", "тесты"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var picked, opened []int
+	lb.Selected.On(app.Scope(), func(i int) { picked = append(picked, i) })
+	lb.Activated.On(app.Scope(), func(i int) { opened = append(opened, i) })
+	pumpUntilIdle(t, app)
+
+	lb.Select(1)
+	pumpUntilIdle(t, app)
+	if _, sel, _ := headless.ListState(); sel != 1 || len(picked) != 0 {
+		t.Fatalf("Select: platform sel=%d picked=%v", sel, picked)
+	}
+	headless.PickListItem(2)
+	headless.OpenListItem(2)
+	pumpUntilIdle(t, app)
+	if lb.SelectedIndex() != 2 || len(picked) != 1 || picked[0] != 2 || len(opened) != 1 || opened[0] != 2 {
+		t.Fatalf("index=%d Selected=%v Activated=%v", lb.SelectedIndex(), picked, opened)
+	}
+	lb.SetItems([]string{"a"})
+	if lb.SelectedIndex() != -1 {
+		t.Error("SetItems kept the selection")
+	}
+}
+
+func TestListBoxGolden(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	lb, _ := win.AddListBox([]string{"first", "second item"})
+	lb.HugWidth()
+	lb.HugHeight()
+	if err := win.Constrain(lb.Left().Eq(win.Left().Plus(8)), lb.Top().Eq(win.Top().Plus(8))); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+	// 11 chars · 7 + 2·16 = 109 wide, 8 rows · 16 = 128 tall.
+	want := `ListBox("") x=8.0 y=8.0 w=109.0 h=128.0 visible=true`
+	if got := strings.TrimSpace(headless.Golden()); got != want {
+		t.Errorf("--- got ---\n%s\n--- want ---\n%s", got, want)
+	}
+}
+
+// A list in a column with a button: both prefer their natural height, but
+// the list holds it less firmly, so the slack goes to the list — the
+// content-hugging default — with no Hug call needed.
+func TestListStretchesBeforeButton(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	lb, _ := win.AddListBox([]string{"a", "b"})
+	btn, _ := win.AddButton("Открыть")
+	if err := win.Constrain(
+		lb.Left().Eq(win.Left().Plus(8)), lb.Top().Eq(win.Top().Plus(8)),
+		lb.Bottom().Eq(btn.Top().Minus(8)),
+		btn.Left().Eq(lb.Left()), btn.Bottom().Eq(win.Bottom().Minus(8)),
+	); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+	log := headless.Golden()
+	if !strings.Contains(log, `Button("Открыть") x=8.0 y=256.0 w=81.0 h=36.0`) || !strings.Contains(log, `ListBox("") x=8.0 y=8.0 w=`) || !strings.Contains(log, `h=240.0`) {
+		t.Errorf("the button stretched instead of the list:\n%s", log)
+	}
+}

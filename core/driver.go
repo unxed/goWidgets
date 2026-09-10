@@ -55,6 +55,9 @@ const (
 	// KindComboBox is a drop-down list, with or without a text field —
 	// GtkComboBoxText on GTK, COMBOBOX on Win32.
 	KindComboBox
+	// KindListBox is a scrolling list of strings with one selected —
+	// GtkListBox in a scrolled window on GTK, LISTBOX on Win32.
+	KindListBox
 )
 
 func (k WidgetKind) String() string {
@@ -71,6 +74,8 @@ func (k WidgetKind) String() string {
 		return "Edit"
 	case KindComboBox:
 		return "ComboBox"
+	case KindListBox:
+		return "ListBox"
 	}
 	return "Unknown"
 }
@@ -192,6 +197,9 @@ const (
 	EventActivated
 	// EventSelected is a list item chosen; Int is its index, Text its text.
 	EventSelected
+	// EventItemActivated is a list item opened (double-click or Enter);
+	// Int is its index, Text its text.
+	EventItemActivated
 )
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a

@@ -34,12 +34,16 @@ type Node struct {
 	// one, two widgets sharing a row both want their natural width equally
 	// weakly and the solver picks which one grows.
 	HugW, HugH bool
+	// Stretchy marks a scrolling widget: it yields its natural size before
+	// the widgets around it do (see strengthStretchy).
+	Stretchy bool
 
 	OnClicked     func()
 	OnToggled     func(bool)
 	OnTextChanged func(string)
 	OnActivated   func(string)
 	OnSelected    func(int, string)
+	OnItemOpened  func(int, string)
 
 	// Vars are the node's Cassowary variables (core/layout.go).
 	Vars *Vars
@@ -202,7 +206,8 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h)}
+	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h),
+		Stretchy: kind == KindListBox || kind == KindTextView}
 	a.nodes[h] = n
 	root := a.nodes[a.root]
 	if root != nil {
@@ -307,6 +312,10 @@ func (a *App) dispatch(ev BackendEvent) {
 	case EventSelected:
 		if n := a.nodes[ev.H]; n != nil && n.OnSelected != nil {
 			n.OnSelected(ev.Int, ev.Text)
+		}
+	case EventItemActivated:
+		if n := a.nodes[ev.H]; n != nil && n.OnItemOpened != nil {
+			n.OnItemOpened(ev.Int, ev.Text)
 		}
 	case EventResized:
 		if n := a.nodes[a.root]; n != nil {

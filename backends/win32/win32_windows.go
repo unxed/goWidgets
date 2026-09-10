@@ -136,6 +136,19 @@ const (
 	cbnSelChange    = 1
 	cbnEditChange   = 5
 	comboListRows   = 8 // rows shown when the list drops down
+	lbsNotify       = 0x0001
+	lbsNoIntegral   = 0x0100
+	lbAddString     = 0x0180
+	lbResetContent  = 0x0184
+	lbSetCurSel     = 0x0186
+	lbGetCurSel     = 0x0188
+	lbGetText       = 0x0189
+	lbGetTextLen    = 0x018A
+	lbGetCount      = 0x018B
+	lbGetItemHeight = 0x01A1
+	lbnSelChange    = 1
+	lbnDblClk       = 2
+	listRows        = 8 // natural height of a list box, in rows
 	wsVScroll       = 0x00200000
 	wsHScroll       = 0x00100000
 	wsBorder        = 0x00800000
@@ -439,11 +452,23 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 		// here, before translation, and not passed on — passing it on would
 		// only produce the "unhandled character" beep.
 		if m.message == wmKeyDown && m.wParam == vkReturn && d.win != nil {
-			if h, n := d.win.nodeByHwnd(uintptr(m.hwnd)); n != nil && n.kind == core.KindEdit {
-				d.win.emit(core.BackendEvent{
-					Kind: core.EventActivated, H: h, Text: d.win.text(n.hwnd),
-				})
-				continue
+			if h, n := d.win.nodeByHwnd(uintptr(m.hwnd)); n != nil {
+				switch n.kind {
+				case core.KindEdit:
+					d.win.emit(core.BackendEvent{
+						Kind: core.EventActivated, H: h, Text: d.win.text(n.hwnd),
+					})
+					continue
+				case core.KindListBox:
+					// Enter on a list opens the selected item, as a
+					// double-click does; a LISTBOX has no notification for it.
+					if i, _, _ := pSendMessageW.Call(n.hwnd, lbGetCurSel, 0, 0); int32(i) >= 0 {
+						d.win.emit(core.BackendEvent{
+							Kind: core.EventItemActivated, H: h, Int: int(int32(i)), Text: d.win.listItemText(n.hwnd, int(int32(i))),
+						})
+					}
+					continue
+				}
 			}
 		}
 		// Tab, Shift+Tab and mnemonics between controls are the dialog
@@ -575,6 +600,11 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// opened list; the closed control is one line regardless (ApplyLayout
 		// adds the list height back).
 		class, style = "COMBOBOX", wsChild|wsVisible|wsTabStop|wsVScroll|cbsDropdown|cbsAutoHScroll
+	case core.KindListBox:
+		// LBS_NOTIFY for selection notifications; LBS_NOINTEGRALHEIGHT so the
+		// control takes the height the layout gives it rather than rounding
+		// to whole rows.
+		class, style = "LISTBOX", wsChild|wsVisible|wsTabStop|wsBorder|wsVScroll|lbsNotify|lbsNoIntegral
 	case core.KindEdit:
 		// A single-line EDIT. ES_AUTOHSCROLL lets text longer than the field
 		// scroll instead of stopping; WS_BORDER draws the box.
@@ -881,32 +911,56 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
 
 func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
-	if n := w.nodes[h]; n != nil && p == core.PropSelected && n.kind == core.KindComboBox {
+	n := w.nodes[h]
+	if n == nil || p != core.PropSelected {
+		return
+	}
+	switch n.kind {
+	case core.KindComboBox:
 		pSendMessageW.Call(n.hwnd, cbSetCurSel, uintptr(v), 0)
+	case core.KindListBox:
+		pSendMessageW.Call(n.hwnd, lbSetCurSel, uintptr(v), 0)
 	}
 }
 
 func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropItems || n.kind != core.KindComboBox {
+	if n == nil || p != core.PropItems {
 		return
 	}
-	pSendMessageW.Call(n.hwnd, cbResetContent, 0, 0)
+	reset, add := uintptr(cbResetContent), uintptr(cbAddString)
+	switch n.kind {
+	case core.KindListBox:
+		reset, add = lbResetContent, lbAddString
+	case core.KindComboBox:
+	default:
+		return
+	}
+	pSendMessageW.Call(n.hwnd, reset, 0, 0)
 	for _, it := range items {
 		if s, err := windows.UTF16PtrFromString(it); err == nil {
-			pSendMessageW.Call(n.hwnd, cbAddString, 0, uintptr(unsafe.Pointer(s)))
+			pSendMessageW.Call(n.hwnd, add, 0, uintptr(unsafe.Pointer(s)))
 		}
 	}
 }
 
 // comboItemText reads item i of a combo box's list.
 func (w *window) comboItemText(hwnd uintptr, i int) string {
-	n, _, _ := pSendMessageW.Call(hwnd, cbGetLBTextLen, uintptr(i), 0)
+	return itemText(hwnd, cbGetLBTextLen, cbGetLBText, i)
+}
+
+// listItemText reads item i of a list box.
+func (w *window) listItemText(hwnd uintptr, i int) string {
+	return itemText(hwnd, lbGetTextLen, lbGetText, i)
+}
+
+func itemText(hwnd uintptr, lenMsg, textMsg uintptr, i int) string {
+	n, _, _ := pSendMessageW.Call(hwnd, lenMsg, uintptr(i), 0)
 	if int32(n) < 0 {
 		return ""
 	}
 	buf := make([]uint16, n+1)
-	pSendMessageW.Call(hwnd, cbGetLBText, uintptr(i), uintptr(unsafe.Pointer(&buf[0])))
+	pSendMessageW.Call(hwnd, textMsg, uintptr(i), uintptr(unsafe.Pointer(&buf[0])))
 	return windows.UTF16ToString(buf)
 }
 
@@ -937,6 +991,17 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 		// one line plus the border and padding of a themed EDIT.
 		h := (th + 8*s) / s
 		return core.Size{W: 40, H: h}, core.Size{W: 160, H: h}
+	case core.KindListBox:
+		ih, _, _ := pSendMessageW.Call(n.hwnd, lbGetItemHeight, 0, 0)
+		widest := 0.0
+		cnt, _, _ := pSendMessageW.Call(n.hwnd, lbGetCount, 0, 0)
+		for i := 0; i < int(cnt); i++ {
+			if tw, _ := w.textExtentOf(n.hwnd, w.listItemText(n.hwnd, i)); tw > widest {
+				widest = tw
+			}
+		}
+		row := float64(ih) / s
+		return core.Size{W: 40, H: 3 * row}, core.Size{W: (widest + 40*s) / s, H: listRows * row}
 	case core.KindComboBox:
 		// The control reports its own closed height; width fits the widest
 		// item plus the arrow button.
@@ -1119,7 +1184,19 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			h := ctlByID[id]
 			regMu.Unlock()
 			if n := d.win.nodes[h]; n != nil {
-				if n.kind == core.KindComboBox {
+				if n.kind == core.KindListBox {
+					code := uint32(wParam >> 16)
+					if code == lbnSelChange || code == lbnDblClk {
+						i, _, _ := pSendMessageW.Call(n.hwnd, lbGetCurSel, 0, 0)
+						kind := core.EventSelected
+						if code == lbnDblClk {
+							kind = core.EventItemActivated
+						}
+						d.win.emit(core.BackendEvent{
+							Kind: kind, H: h, Int: int(int32(i)), Text: d.win.listItemText(n.hwnd, int(int32(i))),
+						})
+					}
+				} else if n.kind == core.KindComboBox {
 					switch uint32(wParam >> 16) {
 					case cbnSelChange:
 						i, _, _ := pSendMessageW.Call(n.hwnd, cbGetCurSel, 0, 0)

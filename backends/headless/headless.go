@@ -32,6 +32,7 @@ const (
 	EditMinW    = 40.0
 	EditPadY    = 4.0
 	ComboArrowW = 20.0
+	ListRows    = 8 // natural height of a list box, in rows
 	DefaultW    = 640.0
 	DefaultH    = 480.0
 	DefaultDPIS = 1.0
@@ -301,7 +302,9 @@ func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
 	if n := w.nodes[h]; n != nil && p == core.PropSelected {
 		n.selected = v
 		if v >= 0 && v < len(n.items) {
-			n.text = n.items[v]
+			if n.kind == core.KindComboBox {
+				n.text = n.items[v]
+			}
 			// GTK reports a programmatic set_active as "changed"; so does
 			// this driver, so the core's handling of it is what tests see.
 			select {
@@ -320,18 +323,42 @@ func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
 }
 
 // PickItem chooses an item in the first combo box, as the user would.
-func PickItem(i int) bool {
+func PickItem(i int) bool { return pick(core.KindComboBox, i, core.EventSelected) }
+
+// PickListItem selects an item in the first list box.
+func PickListItem(i int) bool { return pick(core.KindListBox, i, core.EventSelected) }
+
+// OpenListItem double-clicks an item in the first list box.
+func OpenListItem(i int) bool { return pick(core.KindListBox, i, core.EventItemActivated) }
+
+func pick(kind core.WidgetKind, i int, ev core.EventKind) bool {
 	if current == nil {
 		return false
 	}
 	for h, n := range current.nodes {
-		if n.kind == core.KindComboBox && i >= 0 && i < len(n.items) {
-			n.selected, n.text = i, n.items[i]
-			current.events <- core.BackendEvent{Kind: core.EventSelected, H: h, Int: i, Text: n.items[i]}
+		if n.kind == kind && i >= 0 && i < len(n.items) {
+			n.selected = i
+			if kind == core.KindComboBox {
+				n.text = n.items[i]
+			}
+			current.events <- core.BackendEvent{Kind: ev, H: h, Int: i, Text: n.items[i]}
 			return true
 		}
 	}
 	return false
+}
+
+// ListState reports the first list box's items and selection.
+func ListState() (items []string, selected int, ok bool) {
+	if current == nil {
+		return nil, -1, false
+	}
+	for _, n := range current.nodes {
+		if n.kind == core.KindListBox {
+			return append([]string(nil), n.items...), n.selected, true
+		}
+	}
+	return nil, -1, false
 }
 
 // ComboState reports the first combo box's items and selection.
@@ -371,6 +398,16 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindEdit:
 		h := LineHeight + 2*EditPadY
 		return core.Size{W: EditMinW, H: h}, core.Size{W: EditW, H: h}
+	case core.KindListBox:
+		// A list wants room for its rows but must shrink: the minimum is
+		// a few rows, the natural eight, and the layout decides the rest.
+		widest := 0.0
+		for _, it := range n.items {
+			if w := float64(len([]rune(it))) * CharWidth; w > widest {
+				widest = w
+			}
+		}
+		return core.Size{W: EditMinW, H: 3 * LineHeight}, core.Size{W: widest + 2*ButtonPadX, H: ListRows * LineHeight}
 	case core.KindComboBox:
 		// Wide enough for the widest item plus the arrow, one line tall.
 		widest := 0.0

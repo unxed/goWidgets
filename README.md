@@ -8,7 +8,7 @@
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
-> `Edit`, `ComboBox`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
+> `Edit`, `ComboBox`, `ListBox`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
 > реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
 
 ## Пример
@@ -63,6 +63,11 @@ model, _ := win.AddComboBox([]string{"gpt-5.6-luna", "gpt-5.6"}, true)
 model.Select(0)
 model.Selected.On(app.Scope(), func(i int) { log.Println("модель:", model.Text.Get()) })
 ```
+
+Список — `ListBox`: `AddListBox(items)`, `SetItems`, `Select(i)`/
+`SelectedIndex()`, `Selected(int)` на смену выбора, `Activated(int)` на
+двойной клик или Enter. Списки и `TextView` держат свой естественный размер
+слабее остальных: в колонке «список над кнопкой» растягивается список.
 
 Файловые диалоги — `win.OpenFile(title, filters...)` и
 `win.SaveFile(title, suggested, filters...)`, оба `(path string, ok bool)`;
@@ -253,6 +258,8 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 * `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
   проходит тесты и проверяется в CI.
 
+* `ListBox`: GTK под Xvfb (выбор, активация, фокус на строке до показа) и
+  под Wine (`LBN_SELCHANGE`/`LBN_DBLCLK`, Enter); демо с клавиатуры на обеих.
 * `ComboBox`: GTK под Xvfb (выбор снаружи, набор в entry, программный `Select`
   не репортится) и под Wine (`CBN_SELCHANGE`); showcase с клавиатуры на обеих.
 * Файловые диалоги: GTK под Xvfb (выбор файла снаружи → путь; сохранение с

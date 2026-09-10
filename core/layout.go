@@ -37,6 +37,11 @@ var (
 
 	strengthWindow   = kiwi.CreateStrength(1000, 0, 0)
 	strengthCollapse = kiwi.StrengthMedium
+	// strengthStretchy is below weak: a scrolling widget (list, text view)
+	// holds its natural size less firmly than a button or a label does, so
+	// when a column has slack the list takes it, not the button. The
+	// content-hugging default of every desktop toolkit, in one number.
+	strengthStretchy = kiwi.CreateStrength(0, 0, 0.5)
 )
 
 // FlowPad is the padding the flow keeps around and between stacked widgets.
@@ -97,6 +102,7 @@ type sizeKey struct {
 	prefHeight float64
 	visible    bool
 	hugW, hugH bool
+	stretchy   bool
 }
 
 // initRoot seeds the content area: its origin is pinned, its size is edited.
@@ -238,7 +244,7 @@ func dip(v float64) float64 {
 // hidden node instead prefers zero size, so a chain through it closes up
 // along the axis the chain runs in, while alignment rules (strong) still hold.
 func (a *App) syncSize(n *Node) {
-	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible, hugW: n.HugW, hugH: n.HugH}
+	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible, hugW: n.HugW, hugH: n.HugH, stretchy: n.Stretchy}
 	if n.sizeCns != nil && key == n.sizeKey {
 		return
 	}
@@ -266,11 +272,11 @@ func (a *App) syncSize(n *Node) {
 	}
 	add(kiwi.NewConstraint(v.Width, kiwi.OpGe, n.minSize.W, StrengthRequired))
 	add(kiwi.NewConstraint(v.Height, kiwi.OpGe, n.minSize.H, StrengthRequired))
-	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, hugStrength(n.HugW)))
+	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, hugStrength(n.HugW, n.Stretchy)))
 	if n.PrefHeight > 0 {
 		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.PrefHeight, StrengthMedium))
 	} else {
-		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, hugStrength(n.HugH)))
+		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, hugStrength(n.HugH, n.Stretchy)))
 	}
 }
 
@@ -320,10 +326,14 @@ func (a *App) syncFlow(root *Node) {
 }
 
 // hugStrength is how firmly a natural size is held: a preference by
-// default, a rule when the widget hugs its content.
-func hugStrength(hug bool) float64 {
-	if hug {
+// default, less than that for a scrolling widget, a rule when the widget
+// hugs its content.
+func hugStrength(hug, stretchy bool) float64 {
+	switch {
+	case hug:
 		return StrengthStrong
+	case stretchy:
+		return strengthStretchy
 	}
 	return StrengthWeak
 }

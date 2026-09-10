@@ -228,7 +228,7 @@ func (w *Window) newWidget(kind core.WidgetKind, text string) (*widget, error) {
 		// Text changes the intrinsic size of a label or a button. A text
 		// field's size is a choice, not a function of its contents, and a
 		// re-measure of the whole window per keystroke would be wasted.
-		if kind != core.KindEdit && kind != core.KindComboBox {
+		if kind != core.KindEdit && kind != core.KindComboBox && kind != core.KindListBox {
 			w.app.eng.Invalidate()
 		}
 	})
@@ -383,6 +383,67 @@ func (cb *ComboBox) Select(i int) {
 
 // SelectedIndex is the chosen item's index, -1 when none.
 func (cb *ComboBox) SelectedIndex() int { return cb.selected }
+
+// ListBox is a native scrolling list of strings with a single selection.
+// Selected fires when the user changes the selection, Activated when they
+// open an item (double-click, Enter); both carry the index. Text is unused.
+//
+// Vocabulary (vtui): properties items, selected; signals selected,
+// activated. multiSelect is not offered yet.
+type ListBox struct {
+	*widget
+	Selected  *vreactive.Event[int]
+	Activated *vreactive.Event[int]
+
+	items    []string
+	selected int
+}
+
+// AddListBox appends a list with the items and nothing selected.
+func (w *Window) AddListBox(items []string) (*ListBox, error) {
+	wd, err := w.newWidget(core.KindListBox, "")
+	if err != nil {
+		return nil, err
+	}
+	lb := &ListBox{
+		widget:    wd,
+		Selected:  vreactive.NewEvent[int](),
+		Activated: vreactive.NewEvent[int](),
+		selected:  -1,
+	}
+	lb.SetItems(items)
+	wd.node.OnSelected = func(i int, _ string) {
+		if i == lb.selected {
+			return // the platform holding what the program set is not a pick
+		}
+		lb.selected = i
+		lb.Selected.Emit(i)
+	}
+	wd.node.OnItemOpened = func(i int, _ string) { lb.Activated.Emit(i) }
+	return lb, nil
+}
+
+// SetItems replaces the list; the selection is cleared.
+func (lb *ListBox) SetItems(items []string) {
+	lb.items = append([]string(nil), items...)
+	lb.selected = -1
+	lb.app.eng.Window().SetList(lb.node.H, core.PropItems, lb.items)
+}
+
+// Items returns the list.
+func (lb *ListBox) Items() []string { return append([]string(nil), lb.items...) }
+
+// Select picks an item by index (-1 clears). Selected does not fire.
+func (lb *ListBox) Select(i int) {
+	if i < -1 || i >= len(lb.items) {
+		i = -1
+	}
+	lb.selected = i
+	lb.app.eng.Window().SetInt(lb.node.H, core.PropSelected, i)
+}
+
+// SelectedIndex is the selected item's index, -1 when none.
+func (lb *ListBox) SelectedIndex() int { return lb.selected }
 
 // CheckBox is a native check box. Checked is two-way: setting it moves the
 // control, and the user moving the control updates it.
