@@ -8,7 +8,7 @@
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
-> `Entry`, `TextView`, иконка в трее с меню, layout на констрейнтах (Cassowary) и
+> `Entry`, `TextView`, модальные сообщения, иконка в трее с меню, layout на констрейнтах (Cassowary) и
 > реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
 
 ## Пример
@@ -43,6 +43,14 @@ func main() {
 ```go
 field, _ := win.AddEntry("")
 field.Activated.On(app.Scope(), func(s string) { addGoal(s); field.Text.Set("") })
+```
+
+Модальные сообщения — `win.Message(title, text)`, `win.Confirm(...) bool`
+(OK/Cancel), `win.Ask(...) bool` (Yes/No): блокируют до ответа, кнопки —
+платформы и на языке пользователя; Escape и крестик читаются как Cancel/No.
+
+```go
+if win.Ask("crescent", fmt.Sprintf("Убрать отмеченные цели (%d)?", n)) { … }
 ```
 
 Фокус: `widget.Focus()` ставит клавиатурный фокус (можно до показа окна);
@@ -229,9 +237,12 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 * `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
   проходит тесты и проверяется в CI.
 
+* Модальные диалоги: GTK под Xvfb (ответ снаружи через `gtk_dialog_response`,
+  очередь работает под `gtk_dialog_run`) и `MessageBoxW` под Wine (ответ
+  через `WM_COMMAND`).
 * Win32 под Wine (`backends/win32/win32test`: `GOOS=windows go test -c`, потом
-  `wine`): фокус, набор, Enter, Tab против настоящего окна; showcase под Wine
-  с клавиатуры.
+  `wine`): фокус, набор, Enter, Tab, `MessageBox` против настоящего окна;
+  showcase под Wine с клавиатуры.
 
 На настоящем Windows пока не запускалось — только Wine и CI.
 

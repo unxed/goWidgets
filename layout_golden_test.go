@@ -633,3 +633,31 @@ func TestFocusReachesPlatform(t *testing.T) {
 		t.Fatalf("focused = %q (%v), want the entry", got, ok)
 	}
 }
+
+// Message boxes: the answer scripted by the test reaches the caller, and an
+// unscripted box is answered the cautious way, as a user closing it would.
+func TestDialogsAnswerAndDefault(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	pumpUntilIdle(t, app)
+
+	headless.AnswerDialogs(core.DialogYes, core.DialogOK)
+	if !win.Ask("Убрать?", "Убрать 2 отмеченные цели?") {
+		t.Error("scripted Yes did not reach Ask")
+	}
+	if !win.Confirm("Выход", "Выйти?") {
+		t.Error("scripted OK did not reach Confirm")
+	}
+	if win.Ask("Убрать?", "ещё раз") {
+		t.Error("an unscripted Yes/No box should read as No")
+	}
+	if win.Confirm("Выход", "ещё раз") {
+		t.Error("an unscripted OK/Cancel box should read as Cancel")
+	}
+	win.Message("Готово", "Все цели закрыты")
+
+	ds := headless.Dialogs()
+	if len(ds) != 5 || ds[0].Title != "Убрать?" || ds[4].Kind != core.DialogInfo {
+		t.Errorf("Dialogs = %+v", ds)
+	}
+}

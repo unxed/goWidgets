@@ -87,6 +87,18 @@ var (
 	gtkTextViewMono func(tv uintptr, mono int32)
 	gtkEntryNew     func() uintptr
 	gtkGrabFocus    func(w uintptr)
+	gtkDialogNew    func() uintptr
+	gtkDialogArea   func(d uintptr) uintptr
+	gtkDialogAddBtn func(d uintptr, text string, response int32) uintptr
+	gtkDialogDefRsp func(d uintptr, response int32)
+	gtkDialogRun    func(d uintptr) int32
+	gtkDialogResp   func(d uintptr, response int32)
+	gtkWinTransient func(win, parent uintptr)
+	gtkWinSetModal  func(win uintptr, modal int32)
+	gtkWinResizable func(win uintptr, resizable int32)
+	gtkContBorder   func(container uintptr, width uint32)
+	gtkLabelWrap    func(label uintptr, wrap int32)
+	gDgettext       func(domain, msgid string) string
 	gtkEntrySetText func(e uintptr, text string)
 	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
@@ -199,6 +211,18 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkTextViewMono, lib, "gtk_text_view_set_monospace")
 	purego.RegisterLibFunc(&gtkEntryNew, lib, "gtk_entry_new")
 	purego.RegisterLibFunc(&gtkGrabFocus, lib, "gtk_widget_grab_focus")
+	purego.RegisterLibFunc(&gtkDialogNew, lib, "gtk_dialog_new")
+	purego.RegisterLibFunc(&gtkDialogArea, lib, "gtk_dialog_get_content_area")
+	purego.RegisterLibFunc(&gtkDialogAddBtn, lib, "gtk_dialog_add_button")
+	purego.RegisterLibFunc(&gtkDialogDefRsp, lib, "gtk_dialog_set_default_response")
+	purego.RegisterLibFunc(&gtkDialogRun, lib, "gtk_dialog_run")
+	purego.RegisterLibFunc(&gtkDialogResp, lib, "gtk_dialog_response")
+	purego.RegisterLibFunc(&gtkWinTransient, lib, "gtk_window_set_transient_for")
+	purego.RegisterLibFunc(&gtkWinSetModal, lib, "gtk_window_set_modal")
+	purego.RegisterLibFunc(&gtkWinResizable, lib, "gtk_window_set_resizable")
+	purego.RegisterLibFunc(&gtkContBorder, lib, "gtk_container_set_border_width")
+	purego.RegisterLibFunc(&gtkLabelWrap, lib, "gtk_label_set_line_wrap")
+	purego.RegisterLibFunc(&gDgettext, glib, "g_dgettext")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
@@ -529,6 +553,87 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		gtkLabelText(n.handle, v)
 	}
 }
+
+// Dialog builds the box from gtk_dialog_new and gtk_dialog_add_button —
+// the non-variadic part of the API; gtk_message_dialog_new takes a printf
+// format and varargs, which is not something to push through an FFI. Button
+// labels are GTK's own translated ones (g_dgettext on its "gtk30" domain), so
+// the box reads like every other GTK dialog on the machine.
+//
+// gtk_dialog_run spins GTK's loop until a response, so the application's
+// queue keeps draining underneath (Wake is g_idle_add).
+func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogResult {
+	const (
+		responseAccept = 1
+		responseReject = 2
+	)
+	d := gtkDialogNew()
+	gtkWinSetTitle(d, title)
+	gtkWinTransient(d, w.handle)
+	gtkWinSetModal(d, 1)
+	gtkWinResizable(d, 0)
+
+	area := gtkDialogArea(d)
+	gtkContBorder(area, 12)
+	lbl := gtkLabelNew(text)
+	gtkLabelWrap(lbl, 1)
+	gtkLabelXAlign(lbl, 0)
+	gtkContAdd(area, lbl)
+	gtkWidgetShow(lbl)
+
+	switch kind {
+	case core.DialogConfirm:
+		gtkDialogAddBtn(d, gDgettext("gtk30", "_Cancel"), responseReject)
+		gtkDialogAddBtn(d, gDgettext("gtk30", "_OK"), responseAccept)
+	case core.DialogYesNo:
+		gtkDialogAddBtn(d, gDgettext("gtk30", "_No"), responseReject)
+		gtkDialogAddBtn(d, gDgettext("gtk30", "_Yes"), responseAccept)
+	default:
+		gtkDialogAddBtn(d, gDgettext("gtk30", "_OK"), responseAccept)
+	}
+	gtkDialogDefRsp(d, responseAccept)
+
+	dialogMu.Lock()
+	dialogCurrent = d
+	dialogMu.Unlock()
+	resp := gtkDialogRun(d)
+	dialogMu.Lock()
+	dialogCurrent = 0
+	dialogMu.Unlock()
+	gtkWidgetDestr(d)
+
+	// Anything but an explicit accept — reject, Escape, delete-event — is
+	// the cautious answer.
+	switch kind {
+	case core.DialogConfirm:
+		if resp == responseAccept {
+			return core.DialogOK
+		}
+		return core.DialogCancel
+	case core.DialogYesNo:
+		if resp == responseAccept {
+			return core.DialogYes
+		}
+		return core.DialogNo
+	}
+	return core.DialogOK
+}
+
+var (
+	dialogMu      sync.Mutex
+	dialogCurrent uintptr
+)
+
+// DialogHandle returns the GtkDialog* currently running, or 0. A test hook:
+// a test answers the modal box with gtk_dialog_response through it.
+func DialogHandle() uintptr {
+	dialogMu.Lock()
+	defer dialogMu.Unlock()
+	return dialogCurrent
+}
+
+// RespondDialog answers a running dialog (gtk_dialog_response). A test hook.
+func RespondDialog(d uintptr, response int32) { gtkDialogResp(d, response) }
 
 // Focus: gtk_widget_grab_focus works before the window is shown too — it
 // records the toplevel's focus widget, which takes effect on map.

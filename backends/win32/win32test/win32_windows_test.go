@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/unxed/goWidgets"
 	"github.com/unxed/goWidgets/backends/win32"
@@ -19,12 +20,15 @@ var (
 	user32       = syscall.NewLazyDLL("user32.dll")
 	pGetFocus    = user32.NewProc("GetFocus")
 	pPostMessage = user32.NewProc("PostMessageW")
+	pFindWindow  = user32.NewProc("FindWindowW")
 )
 
 const (
 	wmKeyDown = 0x0100
 	wmKeyUp   = 0x0101
 	wmChar    = 0x0102
+	wmCommand = 0x0111
+	idYes     = 6
 	vkReturn  = 0x0D
 	vkTab     = 0x09
 )
@@ -57,6 +61,7 @@ func TestEntryFocusAndKeys(t *testing.T) {
 
 	focus := func() uintptr { f, _, _ := pGetFocus.Call(); return f }
 	var focusAtStart, focusAfterTab, entryHwnd, btnHwnd uintptr
+	var asked, boxFound bool
 	step := func(delay time.Duration, f func()) {
 		time.Sleep(delay)
 		done := make(chan struct{})
@@ -81,6 +86,30 @@ func TestEntryFocusAndKeys(t *testing.T) {
 			pPostMessage.Call(entryHwnd, wmKeyUp, vkTab, 1)
 		})
 		step(300*time.Millisecond, func() { focusAfterTab = focus() })
+
+		// A modal box blocks the UI goroutine in MessageBox's own loop; the
+		// box is found by its title and answered with the Yes command, and
+		// the answer must come back to the caller.
+		askDone := make(chan struct{})
+		app.QueueUpdate(func() {
+			asked = win.Ask("win32test-ask", "Убрать отмеченные?")
+			close(askDone)
+		})
+		title, _ := syscall.UTF16PtrFromString("win32test-ask")
+		deadline := time.Now().Add(5 * time.Second)
+		var box uintptr
+		for box == 0 && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+			box, _, _ = pFindWindow.Call(0, uintptr(unsafe.Pointer(title)))
+		}
+		boxFound = box != 0
+		if boxFound {
+			pPostMessage.Call(box, wmCommand, idYes, 0)
+		}
+		select {
+		case <-askDone:
+		case <-time.After(5 * time.Second):
+		}
 		app.Quit()
 	}()
 	if err := app.Run(win); err != nil {
@@ -98,5 +127,11 @@ func TestEntryFocusAndKeys(t *testing.T) {
 	}
 	if focusAfterTab != btnHwnd {
 		t.Errorf("focus after Tab = %#x, want the button %#x", focusAfterTab, btnHwnd)
+	}
+	if !boxFound {
+		t.Error("the message box never appeared")
+	}
+	if !asked {
+		t.Error("Ask: the Yes command did not read as Yes")
 	}
 }

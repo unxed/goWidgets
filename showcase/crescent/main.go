@@ -167,9 +167,20 @@ func main() {
 		refresh()
 	})
 	drop.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		n := 0
 		for _, g := range goals {
 			if g.box.Checked.Get() {
-				g.box.Visible.Set(false) // leaves the layout flow entirely
+				n++
+			}
+		}
+		// A modal question: the platform's own box, its own Yes/No labels,
+		// blocking here until answered while the app keeps ticking underneath.
+		if !win.Ask("crescent", fmt.Sprintf("Убрать отмеченные цели (%d)?", n)) {
+			return
+		}
+		for _, g := range goals {
+			if g.box.Checked.Get() {
+				g.box.Visible.Set(false) // collapses out of its column
 			}
 		}
 		refresh()

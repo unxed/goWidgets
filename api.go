@@ -143,6 +143,23 @@ func (w *Window) Hide() {
 	w.app.eng.Window().Close()
 }
 
+// Message shows a modal box with the text and an OK button, and returns
+// when it is closed. Like every window call, from the UI goroutine only.
+func (w *Window) Message(title, text string) {
+	w.app.eng.Window().Dialog(core.DialogInfo, title, text)
+}
+
+// Confirm shows a modal OK/Cancel box and reports whether OK was chosen.
+// Any other way out — Cancel, Escape, the close button — is false.
+func (w *Window) Confirm(title, text string) bool {
+	return w.app.eng.Window().Dialog(core.DialogConfirm, title, text) == core.DialogOK
+}
+
+// Ask shows a modal Yes/No box and reports whether Yes was chosen.
+func (w *Window) Ask(title, text string) bool {
+	return w.app.eng.Window().Dialog(core.DialogYesNo, title, text) == core.DialogYes
+}
+
 // Scale reports the window's current DPI scaling.
 func (w *Window) Scale() ScaleInfo { return w.app.eng.Window().Scale() }
 

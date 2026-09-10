@@ -58,6 +58,7 @@ var (
 	pGetFocus           = user32.NewProc("GetFocus")
 	pGetNextDlgTabItem  = user32.NewProc("GetNextDlgTabItem")
 	pIsWindowVisible    = user32.NewProc("IsWindowVisible")
+	pMessageBoxW        = user32.NewProc("MessageBoxW")
 	pTranslateMessage   = user32.NewProc("TranslateMessage")
 	pDispatchMessageW   = user32.NewProc("DispatchMessageW")
 	pPostQuitMessage    = user32.NewProc("PostQuitMessage")
@@ -648,6 +649,46 @@ func crlf(s string) string {
 		b = append(b, s[i])
 	}
 	return string(b)
+}
+
+// Dialog is MessageBoxW: modal over the window, with the system's own
+// localized buttons. MessageBox runs its own message loop, so the
+// application's wake messages keep being dispatched to the message window
+// while the box is up.
+func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogResult {
+	const (
+		mbOK        = 0x0
+		mbOKCancel  = 0x1
+		mbYesNo     = 0x4
+		mbIconInfo  = 0x40
+		mbIconQuest = 0x20
+		idOK, idYes = 1, 6
+	)
+	var style uintptr
+	switch kind {
+	case core.DialogConfirm:
+		style = mbOKCancel | mbIconQuest
+	case core.DialogYesNo:
+		style = mbYesNo | mbIconQuest
+	default:
+		style = mbOK | mbIconInfo
+	}
+	tp, _ := windows.UTF16PtrFromString(text)
+	cp, _ := windows.UTF16PtrFromString(title)
+	r, _, _ := pMessageBoxW.Call(w.hwnd, uintptr(unsafe.Pointer(tp)), uintptr(unsafe.Pointer(cp)), style)
+	switch kind {
+	case core.DialogConfirm:
+		if r == idOK {
+			return core.DialogOK
+		}
+		return core.DialogCancel
+	case core.DialogYesNo:
+		if r == idYes {
+			return core.DialogYes
+		}
+		return core.DialogNo
+	}
+	return core.DialogOK
 }
 
 // Focus moves keyboard focus to a control. Before the window is visible

@@ -116,6 +116,8 @@ type window struct {
 	events     chan core.BackendEvent
 	focused    core.Handle
 	textWrites int
+	dialogs    []DialogRecord
+	answers    []core.DialogResult
 
 	mu       sync.Mutex
 	log      []string
@@ -167,6 +169,53 @@ func TextWrites() int {
 		return 0
 	}
 	return current.textWrites
+}
+
+// Dialog records the box and answers it from the script set with
+// AnswerDialogs; with no script it answers the cautious way (Cancel/No,
+// or OK for an info box), as a user closing the box would.
+func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogResult {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.dialogs = append(w.dialogs, DialogRecord{Kind: kind, Title: title, Text: text})
+	if len(w.answers) > 0 {
+		r := w.answers[0]
+		w.answers = w.answers[1:]
+		return r
+	}
+	switch kind {
+	case core.DialogConfirm:
+		return core.DialogCancel
+	case core.DialogYesNo:
+		return core.DialogNo
+	}
+	return core.DialogOK
+}
+
+// DialogRecord is one message box the program showed.
+type DialogRecord struct {
+	Kind        core.DialogKind
+	Title, Text string
+}
+
+// AnswerDialogs scripts the answers to the next dialogs, in order.
+func AnswerDialogs(rs ...core.DialogResult) {
+	if current == nil {
+		return
+	}
+	current.mu.Lock()
+	current.answers = append(current.answers, rs...)
+	current.mu.Unlock()
+}
+
+// Dialogs lists the message boxes shown so far.
+func Dialogs() []DialogRecord {
+	if current == nil {
+		return nil
+	}
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	return append([]DialogRecord(nil), current.dialogs...)
 }
 
 // Focus records the request; Focused reports it.

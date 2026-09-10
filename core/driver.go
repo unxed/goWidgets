@@ -96,6 +96,30 @@ func (p PropKey) String() string {
 	return "Unknown"
 }
 
+// DialogKind selects a message box's button set. The button texts are the
+// platform's own and come out in the user's language.
+type DialogKind int
+
+const (
+	// DialogInfo has a single OK.
+	DialogInfo DialogKind = iota
+	// DialogConfirm has OK and Cancel.
+	DialogConfirm
+	// DialogYesNo has Yes and No.
+	DialogYesNo
+)
+
+// DialogResult is what the user chose. Closing the box any other way
+// (Escape, the title-bar cross) reads as the cautious answer: Cancel or No.
+type DialogResult int
+
+const (
+	DialogOK DialogResult = iota
+	DialogCancel
+	DialogYes
+	DialogNo
+)
+
 // BoundsChange is one entry of a layout batch.
 type BoundsChange struct {
 	H       Handle
@@ -284,6 +308,11 @@ type BackendWindow interface {
 	// Focus moves keyboard focus to a widget. Before the window is shown the
 	// backend remembers the request and applies it when it can.
 	Focus(h Handle)
+
+	// Dialog shows a modal message box over the window and blocks until the
+	// user answers. Modal here is the platform's own nested loop, so the
+	// application keeps processing its queue while the dialog is up.
+	Dialog(kind DialogKind, title, text string) DialogResult
 
 	// RootHandle identifies the window's content area as a layout parent.
 	RootHandle() Handle
