@@ -160,6 +160,22 @@ func (w *Window) Ask(title, text string) bool {
 	return w.app.eng.Window().Dialog(core.DialogYesNo, title, text) == core.DialogYes
 }
 
+// FileFilter is a file-type entry for OpenFile and SaveFile.
+type FileFilter = core.FileFilter
+
+// OpenFile shows the platform's open-file dialog and returns the chosen
+// path; ok is false when the user backs out. Filters, if any, are offered
+// in order and the first is selected.
+func (w *Window) OpenFile(title string, filters ...FileFilter) (path string, ok bool) {
+	return w.app.eng.Window().FileDialog(false, title, "", filters)
+}
+
+// SaveFile shows the save-file dialog with suggested as the initial name.
+// Overwriting an existing file is the platform's question to ask, and it does.
+func (w *Window) SaveFile(title, suggested string, filters ...FileFilter) (path string, ok bool) {
+	return w.app.eng.Window().FileDialog(true, title, suggested, filters)
+}
+
 // Scale reports the window's current DPI scaling.
 func (w *Window) Scale() ScaleInfo { return w.app.eng.Window().Scale() }
 

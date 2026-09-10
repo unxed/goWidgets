@@ -120,6 +120,13 @@ const (
 	DialogNo
 )
 
+// FileFilter is one entry of a file dialog's type list: a name the user sees
+// and the glob patterns it admits ("*.txt").
+type FileFilter struct {
+	Name     string
+	Patterns []string
+}
+
 // BoundsChange is one entry of a layout batch.
 type BoundsChange struct {
 	H       Handle
@@ -313,6 +320,11 @@ type BackendWindow interface {
 	// user answers. Modal here is the platform's own nested loop, so the
 	// application keeps processing its queue while the dialog is up.
 	Dialog(kind DialogKind, title, text string) DialogResult
+
+	// FileDialog shows the platform's open or save dialog, modal over the
+	// window, and returns the chosen path or ok=false when the user backed
+	// out. suggested is the initial file name for a save dialog.
+	FileDialog(save bool, title, suggested string, filters []FileFilter) (path string, ok bool)
 
 	// RootHandle identifies the window's content area as a layout parent.
 	RootHandle() Handle

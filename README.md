@@ -8,7 +8,7 @@
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
-> `Entry`, `TextView`, модальные сообщения, иконка в трее с меню, layout на констрейнтах (Cassowary) и
+> `Entry`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
 > реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
 
 ## Пример
@@ -52,6 +52,11 @@ field.Activated.On(app.Scope(), func(s string) { addGoal(s); field.Text.Set("") 
 ```go
 if win.Ask("crescent", fmt.Sprintf("Убрать отмеченные цели (%d)?", n)) { … }
 ```
+
+Файловые диалоги — `win.OpenFile(title, filters...)` и
+`win.SaveFile(title, suggested, filters...)`, оба `(path string, ok bool)`;
+фильтр — `goWidgets.FileFilter{Name: "Текст", Patterns: []string{"*.txt"}}`.
+Перезапись подтверждает сама платформа.
 
 Фокус: `widget.Focus()` ставит клавиатурный фокус (можно до показа окна);
 Tab и Shift+Tab дальше ходят сами, в порядке раскладки — сверху вниз, слева
@@ -237,6 +242,9 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 * `go vet` чистый под обе платформы; debug-сборка (`-tags goWidgets_debug`)
   проходит тесты и проверяется в CI.
 
+* Файловые диалоги: GTK под Xvfb (выбор файла снаружи → путь; сохранение с
+  предложенным именем) и comdlg32 под Wine (поле имени заполнено, `IDOK`,
+  путь совпал); размер `OPENFILENAMEW` — юнит-тестом.
 * Модальные диалоги: GTK под Xvfb (ответ снаружи через `gtk_dialog_response`,
   очередь работает под `gtk_dialog_run`) и `MessageBoxW` под Wine (ответ
   через `WM_COMMAND`).

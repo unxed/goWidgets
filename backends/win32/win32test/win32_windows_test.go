@@ -6,6 +6,9 @@
 package win32test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -21,6 +24,8 @@ var (
 	pGetFocus    = user32.NewProc("GetFocus")
 	pPostMessage = user32.NewProc("PostMessageW")
 	pFindWindow  = user32.NewProc("FindWindowW")
+	pGetDlgItem  = user32.NewProc("GetDlgItem")
+	pSetDlgText  = user32.NewProc("SetDlgItemTextW")
 )
 
 const (
@@ -29,6 +34,7 @@ const (
 	wmChar    = 0x0102
 	wmCommand = 0x0111
 	idYes     = 6
+	idOK      = 1
 	vkReturn  = 0x0D
 	vkTab     = 0x09
 )
@@ -61,7 +67,13 @@ func TestEntryFocusAndKeys(t *testing.T) {
 
 	focus := func() uintptr { f, _, _ := pGetFocus.Call(); return f }
 	var focusAtStart, focusAfterTab, entryHwnd, btnHwnd uintptr
-	var asked, boxFound bool
+	var asked, boxFound, openBoxFound, editFound, openedOK bool
+	var openedPath string
+	tmpFile := filepath.Join(os.TempDir(), "win32test-open.txt")
+	if err := os.WriteFile(tmpFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile)
 	step := func(delay time.Duration, f func()) {
 		time.Sleep(delay)
 		done := make(chan struct{})
@@ -110,6 +122,39 @@ func TestEntryFocusAndKeys(t *testing.T) {
 		case <-askDone:
 		case <-time.After(5 * time.Second):
 		}
+
+		// The open-file common dialog: found by title, the file-name field
+		// (edt1 = 1152 in Explorer-style dialogs, cmb13 = 1148 in older
+		// layouts) filled with a real file, OK posted.
+		openDone := make(chan struct{})
+		app.QueueUpdate(func() {
+			openedPath, openedOK = win.OpenFile("win32test-open", goWidgets.FileFilter{Name: "Текст", Patterns: []string{"*.txt"}})
+			close(openDone)
+		})
+		otitle, _ := syscall.UTF16PtrFromString("win32test-open")
+		deadline = time.Now().Add(8 * time.Second)
+		box = 0
+		for box == 0 && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+			box, _, _ = pFindWindow.Call(0, uintptr(unsafe.Pointer(otitle)))
+		}
+		openBoxFound = box != 0
+		if openBoxFound {
+			time.Sleep(300 * time.Millisecond) // the dialog populates its controls after showing
+			pth, _ := syscall.UTF16PtrFromString(tmpFile)
+			for _, id := range []uintptr{1152, 1148} {
+				if item, _, _ := pGetDlgItem.Call(box, id); item != 0 {
+					pSetDlgText.Call(box, id, uintptr(unsafe.Pointer(pth)))
+					editFound = true
+					break
+				}
+			}
+			pPostMessage.Call(box, wmCommand, idOK, 0)
+		}
+		select {
+		case <-openDone:
+		case <-time.After(8 * time.Second):
+		}
 		app.Quit()
 	}()
 	if err := app.Run(win); err != nil {
@@ -133,5 +178,13 @@ func TestEntryFocusAndKeys(t *testing.T) {
 	}
 	if !asked {
 		t.Error("Ask: the Yes command did not read as Yes")
+	}
+	if !openBoxFound {
+		t.Error("the open-file dialog never appeared")
+	} else if !editFound {
+		t.Error("no file-name field (1152/1148) in the open-file dialog")
+	}
+	if !openedOK || !strings.EqualFold(openedPath, tmpFile) {
+		t.Errorf("OpenFile = %q, %v; want %q, true", openedPath, openedOK, tmpFile)
 	}
 }

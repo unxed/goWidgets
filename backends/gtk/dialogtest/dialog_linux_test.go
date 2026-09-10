@@ -6,6 +6,7 @@ package dialogtest
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -33,18 +34,27 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var yes, confirmed bool
+	tmp := filepath.Join(t.TempDir(), "цели.txt")
+	if err := os.WriteFile(tmp, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var yes, confirmed, openedOK, savedOK bool
+	var openedPath, savedPath string
 	answered := make(chan struct{})
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		app.QueueUpdate(func() {
 			yes = win.Ask("Вопрос", "Убрать отмеченные?")
 			confirmed = win.Confirm("Выход", "Точно?")
+			openedPath, openedOK = win.OpenFile("Открыть", goWidgets.FileFilter{Name: "Текст", Patterns: []string{"*.txt"}})
+			savedPath, savedOK = win.SaveFile("Сохранить", "новые-цели.txt")
 			close(answered)
 		})
-		// The two boxes are answered from outside, through the running
-		// dialog's handle: accept (1) the first, reject (2) the second.
-		for _, resp := range []int32{1, 2} {
+		// Each box is answered from outside, through the running dialog's
+		// handle: accept (1) or reject (2), via QueueUpdate — which is also
+		// the proof that the queue drains under gtk_dialog_run.
+		for i, resp := range []int32{1, 2, 1, 1} {
 			deadline := time.Now().Add(5 * time.Second)
 			for gtk.DialogHandle() == 0 && time.Now().Before(deadline) {
 				time.Sleep(20 * time.Millisecond)
@@ -53,6 +63,15 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 			if d == 0 {
 				break
 			}
+			if i == 2 {
+				// The open dialog: point it at the file first, as clicking
+				// it would, and give the chooser a moment to load the folder.
+				app.QueueUpdate(func() { gtk.SelectFile(tmp) })
+				time.Sleep(300 * time.Millisecond)
+			}
+			if i == 3 {
+				time.Sleep(300 * time.Millisecond)
+			}
 			app.QueueUpdate(func() { gtk.RespondDialog(d, resp) })
 			for gtk.DialogHandle() == d && time.Now().Before(deadline) {
 				time.Sleep(20 * time.Millisecond)
@@ -60,7 +79,7 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 		}
 		select {
 		case <-answered:
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 		}
 		app.Quit()
 	}()
@@ -77,5 +96,11 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 	}
 	if confirmed {
 		t.Error("Confirm: reject read as OK")
+	}
+	if !openedOK || openedPath != tmp {
+		t.Errorf("OpenFile = %q, %v; want %q, true", openedPath, openedOK, tmp)
+	}
+	if !savedOK || filepath.Base(savedPath) != "новые-цели.txt" {
+		t.Errorf("SaveFile = %q, %v; want …/новые-цели.txt, true", savedPath, savedOK)
 	}
 }

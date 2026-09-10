@@ -99,6 +99,17 @@ var (
 	gtkContBorder   func(container uintptr, width uint32)
 	gtkLabelWrap    func(label uintptr, wrap int32)
 	gDgettext       func(domain, msgid string) string
+	gFree           func(p *byte)
+	gtkChooserNew   func(action int32) uintptr
+	gtkChooserGet   func(chooser uintptr) *byte
+	gtkChooserSet   func(chooser uintptr, filename string) int32
+	gtkChooserName  func(chooser uintptr, name string)
+	gtkChooserFilt  func(chooser uintptr, filter uintptr)
+	gtkChooserOverw func(chooser uintptr, confirm int32)
+	gtkFilterNew    func() uintptr
+	gtkFilterName   func(filter uintptr, name string)
+	gtkFilterAddPat func(filter uintptr, pattern string)
+	gtkBoxPack      func(box, child uintptr, expand, fill int32, padding uint32)
 	gtkEntrySetText func(e uintptr, text string)
 	gtkEntryGetText func(e uintptr) string
 	gtkWidgetShow   func(w uintptr)
@@ -223,6 +234,17 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkContBorder, lib, "gtk_container_set_border_width")
 	purego.RegisterLibFunc(&gtkLabelWrap, lib, "gtk_label_set_line_wrap")
 	purego.RegisterLibFunc(&gDgettext, glib, "g_dgettext")
+	purego.RegisterLibFunc(&gFree, glib, "g_free")
+	purego.RegisterLibFunc(&gtkChooserNew, lib, "gtk_file_chooser_widget_new")
+	purego.RegisterLibFunc(&gtkChooserGet, lib, "gtk_file_chooser_get_filename")
+	purego.RegisterLibFunc(&gtkChooserSet, lib, "gtk_file_chooser_set_filename")
+	purego.RegisterLibFunc(&gtkChooserName, lib, "gtk_file_chooser_set_current_name")
+	purego.RegisterLibFunc(&gtkChooserFilt, lib, "gtk_file_chooser_add_filter")
+	purego.RegisterLibFunc(&gtkChooserOverw, lib, "gtk_file_chooser_set_do_overwrite_confirmation")
+	purego.RegisterLibFunc(&gtkFilterNew, lib, "gtk_file_filter_new")
+	purego.RegisterLibFunc(&gtkFilterName, lib, "gtk_file_filter_set_name")
+	purego.RegisterLibFunc(&gtkFilterAddPat, lib, "gtk_file_filter_add_pattern")
+	purego.RegisterLibFunc(&gtkBoxPack, lib, "gtk_box_pack_start")
 	purego.RegisterLibFunc(&gtkEntrySetText, lib, "gtk_entry_set_text")
 	purego.RegisterLibFunc(&gtkEntryGetText, lib, "gtk_entry_get_text")
 	purego.RegisterLibFunc(&gtkWidgetShow, lib, "gtk_widget_show")
@@ -619,10 +641,91 @@ func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogRes
 	return core.DialogOK
 }
 
+// FileDialog is a GtkDialog around a GtkFileChooserWidget. The ready-made
+// gtk_file_chooser_dialog_new takes its buttons as varargs, so it is built
+// here from the non-variadic parts instead; the result is the same GTK file
+// chooser, with GTK's own translated Open/Save/Cancel.
+func (w *window) FileDialog(save bool, title, suggested string, filters []core.FileFilter) (string, bool) {
+	const (
+		actionOpen     = 0
+		actionSave     = 1
+		responseAccept = 1
+		responseReject = 2
+	)
+	d := gtkDialogNew()
+	gtkWinSetTitle(d, title)
+	gtkWinTransient(d, w.handle)
+	gtkWinSetModal(d, 1)
+	gtkWinSetSize(d, 720, 520)
+
+	action, accept := int32(actionOpen), "_Open"
+	if save {
+		action, accept = actionSave, "_Save"
+	}
+	chooser := gtkChooserNew(action)
+	for _, f := range filters {
+		ff := gtkFilterNew()
+		gtkFilterName(ff, f.Name)
+		for _, p := range f.Patterns {
+			gtkFilterAddPat(ff, p)
+		}
+		gtkChooserFilt(chooser, ff) // the chooser takes ownership
+	}
+	if save {
+		gtkChooserOverw(chooser, 1)
+		if suggested != "" {
+			gtkChooserName(chooser, suggested)
+		}
+	}
+	gtkBoxPack(gtkDialogArea(d), chooser, 1, 1, 0)
+	gtkWidgetShow(chooser)
+
+	gtkDialogAddBtn(d, gDgettext("gtk30", "_Cancel"), responseReject)
+	gtkDialogAddBtn(d, gDgettext("gtk30", accept), responseAccept)
+	gtkDialogDefRsp(d, responseAccept)
+
+	dialogMu.Lock()
+	dialogCurrent, chooserCurrent = d, chooser
+	dialogMu.Unlock()
+	resp := gtkDialogRun(d)
+	path := ""
+	if resp == responseAccept {
+		path = cString(gtkChooserGet(chooser))
+	}
+	dialogMu.Lock()
+	dialogCurrent, chooserCurrent = 0, 0
+	dialogMu.Unlock()
+	gtkWidgetDestr(d)
+	return path, path != ""
+}
+
+// cString copies a NUL-terminated string GTK allocated and frees it.
+func cString(p *byte) string {
+	if p == nil {
+		return ""
+	}
+	n := 0
+	for *(*byte)(unsafe.Add(unsafe.Pointer(p), n)) != 0 {
+		n++
+	}
+	s := string(unsafe.Slice(p, n))
+	gFree(p)
+	return s
+}
+
 var (
-	dialogMu      sync.Mutex
-	dialogCurrent uintptr
+	dialogMu       sync.Mutex
+	dialogCurrent  uintptr
+	chooserCurrent uintptr
 )
+
+// SelectFile points the running file dialog at a path (a test hook).
+func SelectFile(path string) bool {
+	dialogMu.Lock()
+	c := chooserCurrent
+	dialogMu.Unlock()
+	return c != 0 && gtkChooserSet(c, path) != 0
+}
 
 // DialogHandle returns the GtkDialog* currently running, or 0. A test hook:
 // a test answers the modal box with gtk_dialog_response through it.

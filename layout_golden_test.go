@@ -661,3 +661,27 @@ func TestDialogsAnswerAndDefault(t *testing.T) {
 		t.Errorf("Dialogs = %+v", ds)
 	}
 }
+
+// File dialogs: scripted paths come back, "" is a cancel, and what the
+// program asked for (kind, title, suggested name, filters) is recorded.
+func TestFileDialogsScripted(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	pumpUntilIdle(t, app)
+
+	headless.AnswerFiles("/tmp/цели.txt", "")
+	txt := goWidgets.FileFilter{Name: "Текст", Patterns: []string{"*.txt", "*.md"}}
+	if p, ok := win.OpenFile("Открыть", txt); !ok || p != "/tmp/цели.txt" {
+		t.Errorf("OpenFile = %q, %v", p, ok)
+	}
+	if p, ok := win.SaveFile("Сохранить", "цели.txt", txt); ok || p != "" {
+		t.Errorf("a scripted cancel came back as %q, %v", p, ok)
+	}
+	if p, ok := win.OpenFile("Ещё"); ok || p != "" {
+		t.Errorf("an unscripted dialog should be a cancel, got %q, %v", p, ok)
+	}
+	ds := headless.FileDialogs()
+	if len(ds) != 3 || ds[0].Save || !ds[1].Save || ds[1].Suggested != "цели.txt" || len(ds[0].Filters) != 1 {
+		t.Errorf("FileDialogs = %+v", ds)
+	}
+}

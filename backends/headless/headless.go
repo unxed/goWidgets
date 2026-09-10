@@ -107,17 +107,19 @@ type node struct {
 }
 
 type window struct {
-	drv        *driver
-	title      string
-	size       core.Size
-	root       core.Handle
-	nextH      core.Handle
-	nodes      map[core.Handle]*node
-	events     chan core.BackendEvent
-	focused    core.Handle
-	textWrites int
-	dialogs    []DialogRecord
-	answers    []core.DialogResult
+	drv         *driver
+	title       string
+	size        core.Size
+	root        core.Handle
+	nextH       core.Handle
+	nodes       map[core.Handle]*node
+	events      chan core.BackendEvent
+	focused     core.Handle
+	textWrites  int
+	dialogs     []DialogRecord
+	answers     []core.DialogResult
+	fileDialogs []FileDialogRecord
+	fileAnswers []string
 
 	mu       sync.Mutex
 	log      []string
@@ -190,6 +192,47 @@ func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogRes
 		return core.DialogNo
 	}
 	return core.DialogOK
+}
+
+// FileDialog records the request and answers from the AnswerFiles script;
+// unscripted, the user backed out.
+func (w *window) FileDialog(save bool, title, suggested string, filters []core.FileFilter) (string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.fileDialogs = append(w.fileDialogs, FileDialogRecord{Save: save, Title: title, Suggested: suggested, Filters: filters})
+	if len(w.fileAnswers) > 0 {
+		p := w.fileAnswers[0]
+		w.fileAnswers = w.fileAnswers[1:]
+		return p, p != ""
+	}
+	return "", false
+}
+
+// FileDialogRecord is one file dialog the program showed.
+type FileDialogRecord struct {
+	Save             bool
+	Title, Suggested string
+	Filters          []core.FileFilter
+}
+
+// AnswerFiles scripts the paths the next file dialogs return; "" is a cancel.
+func AnswerFiles(paths ...string) {
+	if current == nil {
+		return
+	}
+	current.mu.Lock()
+	current.fileAnswers = append(current.fileAnswers, paths...)
+	current.mu.Unlock()
+}
+
+// FileDialogs lists the file dialogs shown so far.
+func FileDialogs() []FileDialogRecord {
+	if current == nil {
+		return nil
+	}
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	return append([]FileDialogRecord(nil), current.fileDialogs...)
 }
 
 // DialogRecord is one message box the program showed.

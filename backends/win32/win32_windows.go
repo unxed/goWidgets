@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -47,6 +48,7 @@ var (
 	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	comctl32 = windows.NewLazySystemDLL("comctl32.dll")
+	comdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
 
 	pRegisterClassExW   = user32.NewProc("RegisterClassExW")
 	pCreateWindowExW    = user32.NewProc("CreateWindowExW")
@@ -59,6 +61,8 @@ var (
 	pGetNextDlgTabItem  = user32.NewProc("GetNextDlgTabItem")
 	pIsWindowVisible    = user32.NewProc("IsWindowVisible")
 	pMessageBoxW        = user32.NewProc("MessageBoxW")
+	pGetOpenFileNameW   = comdlg32.NewProc("GetOpenFileNameW")
+	pGetSaveFileNameW   = comdlg32.NewProc("GetSaveFileNameW")
 	pTranslateMessage   = user32.NewProc("TranslateMessage")
 	pDispatchMessageW   = user32.NewProc("DispatchMessageW")
 	pPostQuitMessage    = user32.NewProc("PostQuitMessage")
@@ -689,6 +693,92 @@ func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogRes
 		return core.DialogNo
 	}
 	return core.DialogOK
+}
+
+// openFileNameW mirrors OPENFILENAMEW; the field order and Go's natural
+// alignment reproduce the C layout (152 bytes on 64-bit).
+type openFileNameW struct {
+	lStructSize       uint32
+	hwndOwner         uintptr
+	hInstance         uintptr
+	lpstrFilter       *uint16
+	lpstrCustomFilter *uint16
+	nMaxCustFilter    uint32
+	nFilterIndex      uint32
+	lpstrFile         *uint16
+	nMaxFile          uint32
+	lpstrFileTitle    *uint16
+	nMaxFileTitle     uint32
+	lpstrInitialDir   *uint16
+	lpstrTitle        *uint16
+	flags             uint32
+	nFileOffset       uint16
+	nFileExtension    uint16
+	lpstrDefExt       *uint16
+	lCustData         uintptr
+	lpfnHook          uintptr
+	lpTemplateName    *uint16
+	pvReserved        uintptr
+	dwReserved        uint32
+	flagsEx           uint32
+}
+
+// FileDialog is GetOpenFileNameW / GetSaveFileNameW — the common dialog
+// with the system's own look and buttons. Like MessageBox it runs its own
+// loop, so the application keeps ticking underneath.
+func (w *window) FileDialog(save bool, title, suggested string, filters []core.FileFilter) (string, bool) {
+	const (
+		ofnOverwritePrompt = 0x2
+		ofnNoChangeDir     = 0x8
+		ofnPathMustExist   = 0x800
+		ofnFileMustExist   = 0x1000
+		ofnExplorer        = 0x80000
+	)
+	// The filter is "name\0patterns\0…\0\0", patterns joined by ';'.
+	var filt []uint16
+	for _, f := range filters {
+		filt = append(filt, utf16z(f.Name)...)
+		filt = append(filt, utf16z(strings.Join(f.Patterns, ";"))...)
+	}
+	filt = append(filt, 0)
+
+	file := make([]uint16, 32768)
+	copy(file, utf16z(suggested))
+	tp, _ := windows.UTF16PtrFromString(title)
+
+	ofn := openFileNameW{
+		hwndOwner:    w.hwnd,
+		lpstrFile:    &file[0],
+		nMaxFile:     uint32(len(file)),
+		lpstrTitle:   tp,
+		nFilterIndex: 1,
+		flags:        ofnExplorer | ofnNoChangeDir | ofnPathMustExist,
+	}
+	ofn.lStructSize = uint32(unsafe.Sizeof(ofn))
+	if len(filters) > 0 {
+		ofn.lpstrFilter = &filt[0]
+	}
+	proc := pGetOpenFileNameW
+	if save {
+		proc = pGetSaveFileNameW
+		ofn.flags |= ofnOverwritePrompt
+	} else {
+		ofn.flags |= ofnFileMustExist
+	}
+	r, _, _ := proc.Call(uintptr(unsafe.Pointer(&ofn)))
+	if r == 0 {
+		return "", false
+	}
+	return windows.UTF16ToString(file), true
+}
+
+// utf16z encodes s as UTF-16 with a terminating NUL.
+func utf16z(s string) []uint16 {
+	u, err := windows.UTF16FromString(s)
+	if err != nil {
+		return []uint16{0}
+	}
+	return u
 }
 
 // Focus moves keyboard focus to a control. Before the window is visible
