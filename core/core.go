@@ -37,6 +37,13 @@ type Node struct {
 	// Stretchy marks a scrolling widget: it yields its natural size before
 	// the widgets around it do (see strengthStretchy).
 	Stretchy bool
+	// SingleLine marks a control one line high — a button, a check box, a
+	// text field, a combo box. Its natural height is held at medium rather
+	// than weak: no native toolkit grows these vertically (Qt's size policy
+	// is Fixed, GTK's vexpand is off, AppKit hugs), and in a column with
+	// slack to share the solver would otherwise hand it to whichever one
+	// widget was cheapest to stretch — a 444-pixel-tall text field in imgy.
+	SingleLine bool
 
 	OnClicked     func()
 	OnToggled     func(bool)
@@ -214,7 +221,8 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h),
-		Stretchy: kind == KindListBox || kind == KindTextView}
+		Stretchy:   kind == KindListBox || kind == KindTextView,
+		SingleLine: kind == KindButton || kind == KindCheckBox || kind == KindEdit || kind == KindComboBox}
 	a.nodes[h] = n
 	root := a.nodes[a.root]
 	if root != nil {

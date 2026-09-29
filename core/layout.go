@@ -103,6 +103,7 @@ type sizeKey struct {
 	visible    bool
 	hugW, hugH bool
 	stretchy   bool
+	singleLine bool
 }
 
 // initRoot seeds the content area: its origin is pinned, its size is edited.
@@ -244,7 +245,7 @@ func dip(v float64) float64 {
 // hidden node instead prefers zero size, so a chain through it closes up
 // along the axis the chain runs in, while alignment rules (strong) still hold.
 func (a *App) syncSize(n *Node) {
-	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible, hugW: n.HugW, hugH: n.HugH, stretchy: n.Stretchy}
+	key := sizeKey{min: n.minSize, nat: n.natSize, prefHeight: n.PrefHeight, visible: n.Visible, hugW: n.HugW, hugH: n.HugH, stretchy: n.Stretchy, singleLine: n.SingleLine}
 	if n.sizeCns != nil && key == n.sizeKey {
 		return
 	}
@@ -272,11 +273,11 @@ func (a *App) syncSize(n *Node) {
 	}
 	add(kiwi.NewConstraint(v.Width, kiwi.OpGe, n.minSize.W, StrengthRequired))
 	add(kiwi.NewConstraint(v.Height, kiwi.OpGe, n.minSize.H, StrengthRequired))
-	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, hugStrength(n.HugW, n.Stretchy)))
+	add(kiwi.NewConstraint(v.Width, kiwi.OpEq, n.natSize.W, hugStrength(n.HugW, n.Stretchy, false)))
 	if n.PrefHeight > 0 {
 		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.PrefHeight, StrengthMedium))
 	} else {
-		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, hugStrength(n.HugH, n.Stretchy)))
+		add(kiwi.NewConstraint(v.Height, kiwi.OpEq, n.natSize.H, hugStrength(n.HugH, n.Stretchy, n.SingleLine)))
 	}
 }
 
@@ -326,14 +327,17 @@ func (a *App) syncFlow(root *Node) {
 }
 
 // hugStrength is how firmly a natural size is held: a preference by
-// default, less than that for a scrolling widget, a rule when the widget
-// hugs its content.
-func hugStrength(hug, stretchy bool) float64 {
+// default, less than that for a scrolling widget, more than that for the
+// height of a one-line control (still below the user's own rules, which are
+// strong), a rule when the widget hugs its content.
+func hugStrength(hug, stretchy, singleLine bool) float64 {
 	switch {
 	case hug:
 		return StrengthStrong
 	case stretchy:
 		return strengthStretchy
+	case singleLine:
+		return StrengthMedium
 	}
 	return StrengthWeak
 }
