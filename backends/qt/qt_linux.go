@@ -120,11 +120,28 @@ var (
 	qSystemFont    func(which int32) qvalue
 	qFontDtor      func(f *qvalue)
 	qWidgetFont    func(w uintptr, f *qvalue)
+	qComboNew      func(this unsafe.Pointer, parent uintptr)
+	qComboEditable func(c uintptr, on bool)
+	qComboInsertP  func(c uintptr, policy int32)
+	qComboAdjustP  func(c uintptr, policy int32)
+	qComboComplete func(c uintptr, completer uintptr)
+	qComboLineEdit func(c uintptr) uintptr
+	qComboClear    func(c uintptr)
+	qComboInsert   func(c uintptr, index int32, icon *qvalue, text *qstring, data *qvalue)
+	qComboSetIndex func(c uintptr, index int32)
+	qComboText     func(c uintptr) qstring
+	qComboSetText  func(c uintptr, text *qstring)
+	qIconCtor      func(i *qvalue)
+	qIconDtor      func(i *qvalue)
+	qVariantInt    func(v *qvalue, i int32)
+	qVariantDtor   func(v *qvalue)
 
 	sigClicked signal
 	sigToggled signal
 	sigEdited  signal // QLineEdit::textChanged(QString)
 	sigReturn  signal // QLineEdit::returnPressed()
+	sigTyped   signal // QLineEdit::textEdited(QString): the user's typing only
+	sigPicked  signal // QComboBox::activated(int): the user's pick only
 
 	slotSizeHint    int
 	slotMinSizeHint int
@@ -191,6 +208,23 @@ func (r *resolver) bindAll() {
 	r.fn(&qSystemFont, "_ZN13QFontDatabase10systemFontENS_10SystemFontE")
 	r.fn(&qFontDtor, "_ZN5QFontD1Ev")
 	r.fn(&qWidgetFont, "_ZN7QWidget7setFontERK5QFont")
+	r.fn(&qComboNew, "_ZN9QComboBoxC1EP7QWidget")
+	r.fn(&qComboEditable, "_ZN9QComboBox11setEditableEb")
+	r.fn(&qComboInsertP, "_ZN9QComboBox15setInsertPolicyENS_12InsertPolicyE")
+	r.fn(&qComboAdjustP, "_ZN9QComboBox19setSizeAdjustPolicyENS_16SizeAdjustPolicyE")
+	r.fn(&qComboComplete, "_ZN9QComboBox12setCompleterEP10QCompleter")
+	r.fn(&qComboLineEdit, "_ZNK9QComboBox8lineEditEv")
+	r.fn(&qComboClear, "_ZN9QComboBox5clearEv")
+	r.fn(&qComboInsert, "_ZN9QComboBox10insertItemEiRK5QIconRK7QStringRK8QVariant")
+	r.fn(&qComboSetIndex, "_ZN9QComboBox15setCurrentIndexEi")
+	r.fn(&qComboText, "_ZNK9QComboBox11currentTextEv")
+	r.fn(&qComboSetText, "_ZN9QComboBox11setEditTextERK7QString")
+	r.fn(&qIconCtor, "_ZN5QIconC1Ev")
+	r.fn(&qIconDtor, "_ZN5QIconD1Ev")
+	r.fn(&qVariantInt, "_ZN8QVariantC1Ei")
+	r.fn(&qVariantDtor, "_ZN8QVariantD1Ev")
+	sigTyped = r.signal("9QLineEdit", "_ZN9QLineEdit10textEditedERK7QString")
+	sigPicked = r.signal("9QComboBox", "_ZN9QComboBox9activatedEi")
 	sigEdited = r.signal("9QLineEdit", "_ZN9QLineEdit11textChangedERK7QString")
 	sigReturn = r.signal("9QLineEdit", "_ZN9QLineEdit13returnPressedEv")
 
@@ -527,6 +561,13 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		qCheckBoxNew(obj, w.handle)
 	case core.KindEdit:
 		qLineEditNew(obj, w.handle)
+	case core.KindComboBox:
+		// With a text field by default, as GTK's; PropDropdownOnly takes it
+		// away before any item is added.
+		qComboNew(obj, w.handle)
+		const adjustToContents = 0
+		qComboAdjustP(uintptr(obj), adjustToContents)
+		setEditable(uintptr(obj), h, true)
 	case core.KindTextView:
 		// A log, as in the GTK driver: read-only, the user's fixed-width
 		// font, no wrapping — columns stay columns, long lines scroll.
@@ -553,6 +594,10 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// core tells the program's own writes apart by value.
 		connect(g, sigToggled, func(a *[4]unsafe.Pointer) {
 			emit(core.BackendEvent{Kind: core.EventToggled, H: h, Bool: *(*bool)(a[1])})
+		})
+	case core.KindComboBox:
+		connect(g, sigPicked, func(a *[4]unsafe.Pointer) {
+			emit(core.BackendEvent{Kind: core.EventSelected, H: h, Int: int(*(*int32)(a[1])), Text: takeString(qComboText(g))})
 		})
 	case core.KindEdit:
 		// textChanged, not textEdited: like GTK's "changed" it also reports
@@ -593,6 +638,10 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 			qLabelText(n.handle, s)
 		case core.KindTextView:
 			qPlainSet(n.handle, s)
+		case core.KindComboBox:
+			if qComboLineEdit(n.handle) != 0 {
+				qComboSetText(n.handle, s)
+			}
 		case core.KindEdit:
 			// setText with the text the field holds is a no-op, so the
 			// platform's own edit coming round does not move the caret.
@@ -607,6 +656,10 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 		return
 	}
 	switch p {
+	case core.PropDropdownOnly:
+		if n.kind == core.KindComboBox {
+			setEditable(n.handle, h, !v)
+		}
 	case core.PropEnabled:
 		qWidgetEnable(n.handle, v)
 	case core.PropVisible:
@@ -624,9 +677,59 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 
 func (w *window) SetFloat(core.Handle, core.PropKey, float64) {}
 
-func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {}
+func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
+	n := w.nodes[h]
+	if n == nil || p != core.PropSelected {
+		return
+	}
+	switch n.kind {
+	case core.KindComboBox:
+		qComboSetIndex(n.handle, int32(v))
+	}
+}
 
-func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {}
+func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
+	n := w.nodes[h]
+	if n == nil || p != core.PropItems {
+		return
+	}
+	switch n.kind {
+	case core.KindComboBox:
+		qComboClear(n.handle)
+		var icon, data qvalue
+		qIconCtor(&icon)
+		for i, it := range items {
+			qVariantInt(&data, int32(i))
+			qstr(it, func(s *qstring) { qComboInsert(n.handle, int32(i), &icon, s, &data) })
+			qVariantDtor(&data)
+		}
+		qIconDtor(&icon)
+		// Qt makes the first item current as soon as there is one; the
+		// contract is that nothing is selected until someone selects.
+		qComboSetIndex(n.handle, -1)
+	}
+}
+
+// setEditable gives a combo box its text field or takes it away. Qt's
+// editable combo has habits GTK's does not: Enter appends the typed text to
+// the list, and a completer finishes the word inside the field, so Text
+// would lag behind what the field shows. Both are switched off. Typing is
+// reported from the field's textEdited, which — unlike textChanged — does
+// not fire when a pick fills the field in.
+func setEditable(c uintptr, h core.Handle, on bool) {
+	qComboEditable(c, on)
+	if !on {
+		return
+	}
+	const noInsert = 0
+	qComboInsertP(c, noInsert)
+	qComboComplete(c, 0)
+	if le := qComboLineEdit(c); le != 0 {
+		connect(le, sigTyped, func(a *[4]unsafe.Pointer) {
+			emit(core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: (*qstring)(a[1]).String()})
+		})
+	}
+}
 
 // Focus: setFocus on a widget of a window that is not shown yet records it
 // as the window's focus child, which takes effect when the window activates.
