@@ -110,9 +110,14 @@ var (
 	qButtonText    func(b uintptr, text *qstring)
 	qCheckBoxNew   func(this unsafe.Pointer, parent uintptr)
 	qSetChecked    func(b uintptr, on bool)
+	qLineEditNew   func(this unsafe.Pointer, parent uintptr)
+	qLineEditSet   func(e uintptr, text *qstring)
+	qLineEditText  func(e uintptr) qstring
 
 	sigClicked signal
 	sigToggled signal
+	sigEdited  signal // QLineEdit::textChanged(QString)
+	sigReturn  signal // QLineEdit::returnPressed()
 
 	slotSizeHint    int
 	slotMinSizeHint int
@@ -169,6 +174,11 @@ func (r *resolver) bindAll() {
 
 	sigClicked = r.signal("15QAbstractButton", "_ZN15QAbstractButton7clickedEb")
 	sigToggled = r.signal("15QAbstractButton", "_ZN15QAbstractButton7toggledEb")
+	r.fn(&qLineEditNew, "_ZN9QLineEditC1EP7QWidget")
+	r.fn(&qLineEditSet, "_ZN9QLineEdit7setTextERK7QString")
+	r.fn(&qLineEditText, "_ZNK9QLineEdit4textEv")
+	sigEdited = r.signal("9QLineEdit", "_ZN9QLineEdit11textChangedERK7QString")
+	sigReturn = r.signal("9QLineEdit", "_ZN9QLineEdit13returnPressedEv")
 
 	if slotSizeHint = vslot("_ZTV7QWidget", "_ZNK7QWidget8sizeHintEv", 64); slotSizeHint < 0 {
 		r.missing = append(r.missing, "QWidget::sizeHint slot")
@@ -368,6 +378,17 @@ func (d *driver) filter(watched uintptr, ev unsafe.Pointer) bool {
 			s := (*qSize)(unsafe.Add(ev, lay.resizeSize))
 			emit(core.BackendEvent{Kind: core.EventResized, Size: core.Size{W: float64(s.W), H: float64(s.H)}})
 		}
+	case evKeyPress, evKeyRelease:
+		// Every key of the window, whichever control has focus — as GTK's
+		// key-press-event on the toplevel. A key event travels from the
+		// QWindow to the focus widget and on up through the parents that
+		// ignore it, and the application filter sees each stop; the focus
+		// widget's is the one to report. Keys of a dialog are not ours.
+		focus := qFocusWidget()
+		if (focus != 0 && watched == focus && qWidgetWindow(focus) == w.handle) ||
+			(focus == 0 && watched == w.handle) {
+			emit(core.BackendEvent{Kind: core.EventKey, Key: keyFromQt(ev, evType(ev) == evKeyPress)})
+		}
 	}
 	return false
 }
@@ -490,6 +511,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		qPushButtonNew(obj, w.handle)
 	case core.KindCheckBox:
 		qCheckBoxNew(obj, w.handle)
+	case core.KindEdit:
+		qLineEditNew(obj, w.handle)
 	default:
 		return 0, fmt.Errorf("qt: unsupported widget kind %v", kind)
 	}
@@ -506,6 +529,16 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// core tells the program's own writes apart by value.
 		connect(g, sigToggled, func(a *[4]unsafe.Pointer) {
 			emit(core.BackendEvent{Kind: core.EventToggled, H: h, Bool: *(*bool)(a[1])})
+		})
+	case core.KindEdit:
+		// textChanged, not textEdited: like GTK's "changed" it also reports
+		// setText, and core drops the program's own text by value. The
+		// argument is the whole new text.
+		connect(g, sigEdited, func(a *[4]unsafe.Pointer) {
+			emit(core.BackendEvent{Kind: core.EventTextChanged, H: h, Text: (*qstring)(a[1]).String()})
+		})
+		connect(g, sigReturn, func(*[4]unsafe.Pointer) {
+			emit(core.BackendEvent{Kind: core.EventActivated, H: h, Text: takeString(qLineEditText(g))})
 		})
 	}
 	qWidgetShow(g)
@@ -534,6 +567,10 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 			qButtonText(n.handle, s) // both are QAbstractButtons
 		case core.KindLabel:
 			qLabelText(n.handle, s)
+		case core.KindEdit:
+			// setText with the text the field holds is a no-op, so the
+			// platform's own edit coming round does not move the caret.
+			qLineEditSet(n.handle, s)
 		}
 	})
 }
