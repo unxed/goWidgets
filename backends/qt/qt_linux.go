@@ -822,7 +822,7 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	natural = sizeHint(n.handle, slotSizeHint)
 	min = sizeHint(n.handle, slotMinSizeHint)
 	if n.kind == core.KindListBox {
-		natural = listNatural(n.handle, natural)
+		natural = listNatural(n.handle, min)
 	}
 	if min.W > natural.W {
 		min.W = natural.W
@@ -838,8 +838,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 const listRows = 8
 
 // listNatural is a list's natural size from its rows: as wide as the widest
-// item plus the scroll bar, up to listRows rows high. An empty list keeps
-// Qt's hint.
+// item plus the scroll bar, up to listRows rows high. An empty list is as
+// small as it can be — GTK's empty list is too, and Qt's own 256×192 would
+// shove the rest of the column down for a list with nothing in it.
 func listNatural(l uintptr, fallback core.Size) core.Size {
 	count := int(qListCount(l))
 	if count == 0 {
