@@ -208,7 +208,7 @@ func (r *resolver) bindAll() {
 	r.fn(&qLabelCtor, "_ZN6QLabelC1EP7QWidget6QFlagsIN2Qt10WindowTypeEE")
 	r.fn(&qLabelText, "_ZN6QLabel7setTextERK7QString")
 	r.fn(&qLabelPixmap, "_ZN6QLabel9setPixmapERK7QPixmap")
-	r.fn(&qLabelScaled, "_ZN6QLabel16setScaledContentsEb")
+	r.fn(&qLabelScaled, "_ZN6QLabel17setScaledContentsEb")
 	r.fn(&qPixmapCtor, "_ZN7QPixmapC1ERK7QStringPKc6QFlagsIN2Qt19ImageConversionFlagEE")
 	r.fn(&qPixmapDtor, "_ZN7QPixmapD1Ev")
 	r.fn(&qPushButtonNew, "_ZN11QPushButtonC1EP7QWidget")
