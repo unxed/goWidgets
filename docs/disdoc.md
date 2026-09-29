@@ -73,7 +73,9 @@
 ## 2. Базовые принципы (строгие правила для ИИ)
 
 1. **Никакого `CGO`.** Весь FFI — `syscall`/`golang.org/x/sys/windows` (Windows),
-   `syscall/js` (Web), `purego` (macOS, Linux/GTK). `qt.go` исключён.
+   `syscall/js` (Web), `purego` (macOS, Linux/GTK и Linux/Qt). Qt — без CGO,
+   через манглированные C++-символы (ADR-0013; прежде здесь стояло «`qt.go`
+   исключён»).
 2. **Публичный API скрывает платформу** и построен на `vreactive.Property[T]`.
 3. **Единый layout-движок.** Нативные sizers/AutoLayout не используются; Core решает
    Cassowary и отдаёт абсолютные прямоугольники. **Но** — Core обязан спрашивать у бэкенда
@@ -130,7 +132,8 @@
 **Порядок выбора драйвера** (детерминированный, тестируемый):
 
 1. `goWidgets_BACKEND=<name>` — жёсткий выбор; при неудаче **ошибка**, а не тихий fallback.
-2. Иначе — платформенный дефолт (windows→win32, darwin→cocoa, js→web, linux→gtk).
+2. Иначе — платформенный дефолт (windows→win32, darwin→cocoa, js→web, linux→gtk, а на
+   Qt-десктопах — linux→qt; ADR-0013).
 3. При ошибке инициализации — `ebiten`, затем `headless` (в CI).
 4. Каждый шаг логируется в `goWidgets.Diagnostics()` — пользователь должен уметь ответить
    на вопрос «почему у меня не нативный вид».

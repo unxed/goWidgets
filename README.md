@@ -1,15 +1,16 @@
 # goWidgets
 
 Кроссплатформенный GUI для Go на **нативных контролах ОС**, без CGO.
-Один и тот же код открывает окно с настоящими Win32-контролами на Windows и
-настоящими GTK-виджетами на Linux.
+Один и тот же код открывает окно с настоящими Win32-контролами на Windows, а на
+Linux — с настоящими GTK- или Qt-виджетами, смотря какой тулкит родной для
+рабочего стола.
 
 Нормативный дизайн: [`docs/disdoc.md`](docs/disdoc.md). Решения, отклоняющиеся
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
 > `Edit`, `ComboBox`, `ListBox`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
-> реактивные свойства. Нет: анимаций, фокуса и tab-order, Cocoa, Web.
+> реактивные свойства — на Win32, GTK 3 и Qt (6 и 5). Нет: анимаций, Cocoa, Web.
 
 ## Пример
 
@@ -20,6 +21,7 @@ import (
 	"github.com/unxed/goWidgets"
 	_ "github.com/unxed/goWidgets/backends/gtk"
 	_ "github.com/unxed/goWidgets/backends/headless"
+	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
 )
 
@@ -189,6 +191,19 @@ goWidgets_BACKEND=headless go run ./showcase/crescent
 `app.Diagnostics()` показывает, какой драйвер выиграл и что было испробовано —
 это ответ на вопрос «почему у меня не нативный вид».
 
+### GTK или Qt
+
+На Linux бывают установлены оба тулкита, и родной из них определяется рабочим
+столом, а не списком пакетов: в Kubuntu есть и GTK, но её приложения — Qt.
+Поэтому на Qt-десктопах (`XDG_CURRENT_DESKTOP` = KDE, LXQt, DDE/Deepin, UKUI,
+Lumina, Lomiri; для старых сессий — `KDE_FULL_SESSION`/`DESKTOP_SESSION`)
+первым пробуется `qt`, везде остальном — `gtk`; решение записывается в
+`Diagnostics().Attempts`. Если выбранного тулкита нет, берётся другой.
+
+Драйвер `qt` сам берёт Qt 6, а без него — Qt 5 (Plasma 5, LTS-дистрибутивы);
+`goWidgets_BACKEND=qt6` или `qt5` фиксирует версию. Как Qt без C API
+вызывается без CGO — ADR-0013.
+
 ## Трей
 
 ```go
@@ -206,7 +221,9 @@ tray.Activated.On(app.Scope(), func(struct{}) { win.Show() })
 ради этого трей и нужен. Закрытие окна отменяется через `Closing` и превращается
 в `Hide`.
 
-На Windows это `Shell_NotifyIcon`. На Linux — `GtkStatusIcon`: он объявлен
+На Windows это `Shell_NotifyIcon`. На Qt — `QSystemTrayIcon`, который сам
+выбирает протокол: `StatusNotifierItem` по D-Bus там, где он есть (Plasma),
+XEmbed-трей в остальных случаях. На GTK — `GtkStatusIcon`: он объявлен
 устаревшим в GTK 3.14, но присутствует и работает в 3.24, и панели Cinnamon,
 XFCE, MATE и KDE его принимают. `StatusNotifierItem` формально правильнее, но
 это D-Bus-протокол, который пришлось бы писать вручную, и на GNOME он без
@@ -224,7 +241,7 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
         │                  Handle + Rect в DIP, батч-команды
    core                    node registry, scheduler, конвейер кадра
         │
-   backends/*              headless | gtk | win32
+   backends/*              headless | gtk | qt | win32
 ```
 
 Строгое правило: `backends/* → core` можно, `core → backends/*` нельзя.
@@ -232,14 +249,17 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 
 **Layout принадлежит Core.** Нативные sizer'ы не используются: Core считает
 абсолютные прямоугольники и отдаёт их бэкенду батчем. На Win32 это `SetWindowPos`,
-на GTK — `GtkFixed`. Естественные размеры при этом спрашиваются у платформы
+на GTK — `GtkFixed`, на Qt — `setGeometry` детей окна без `QLayout`. Естественные размеры при этом спрашиваются у платформы
 (`MeasureIntrinsic`), иначе текст не разместить корректно.
 
 **Без CGO.** На Windows — `golang.org/x/sys/windows` и `syscall.NewCallback`.
 На Linux — динамическая загрузка GTK через
 [`purego`](https://github.com/ebitengine/purego), подменённый на
 [`pureffi`](https://github.com/unxed/pureffi) директивой `replace` в `go.mod`.
-Если GTK на машине нет, `Init` вернёт ошибку, а не уронит процесс.
+Если GTK на машине нет, `Init` вернёт ошибку, а не уронит процесс. Qt — тоже
+через purego, по манглированным C++-символам (ADR-0013); `QApplication`,
+который роняет процесс без дисплея, создаётся только после собственной
+проверки дисплея и платформенного плагина.
 
 ## Проверено
 
@@ -268,6 +288,12 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 * Модальные диалоги: GTK под Xvfb (ответ снаружи через `gtk_dialog_response`,
   очередь работает под `gtk_dialog_run`) и `MessageBoxW` под Wine (ответ
   через `WM_COMMAND`).
+* Qt 6 и Qt 5 под Xvfb (`backends/qt/qttest`: каждый сценарий в отдельном
+  процессе на каждую версию): раскладка и resize, вето закрытия, клик,
+  `CheckBox`, `Edit` и клавиатура настоящими нажатиями через xdotool, фокус до
+  и после показа, `TextView`, `ComboBox` (выбор с клавиатуры, набор),
+  `ListBox` (выбор, Enter), модальные сообщения с русскими кнопками, файловые
+  диалоги, трей против stalonetray. Showcase — на Qt 6, Qt 5 и GTK глазами.
 * Win32 под Wine (`backends/win32/win32test`: `GOOS=windows go test -c`, потом
   `wine`): фокус, набор, Enter, Tab, `MessageBox` против настоящего окна;
   showcase под Wine с клавиатуры.

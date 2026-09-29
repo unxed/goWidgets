@@ -75,7 +75,9 @@ func RegisterDriver(name string, mk func() PlatformDriver) {
 
 // DefaultOrder is the per-platform fallback chain (§3.3). Backends append
 // themselves; the list is filtered against what is actually registered.
-var DefaultOrder = []string{"win32", "cocoa", "web", "gtk", "ebiten", "headless"}
+// On Linux GTK comes before Qt unless the desktop is a Qt one; see
+// SelectionOrder.
+var DefaultOrder = []string{"win32", "cocoa", "web", "gtk", "qt", "ebiten", "headless"}
 
 // App is the engine instance: one driver, one window tree, one update queue.
 type App struct {
@@ -107,7 +109,8 @@ var ErrNoDriver = errors.New("core: no usable platform driver")
 // NewApp selects a driver per §3.3 and initialises it.
 //
 // Selection order: the goWidgets_BACKEND environment variable (a hard choice —
-// failure is an error, never a silent fallback), then DefaultOrder.
+// failure is an error, never a silent fallback), then DefaultOrder as
+// SelectionOrder adjusts it for the desktop.
 func NewApp() (*App, error) {
 	runtime.LockOSThread()
 	vreactive.BindMainThread()
@@ -135,7 +138,11 @@ func NewApp() (*App, error) {
 		return a, nil
 	}
 
-	for _, name := range DefaultOrder {
+	order, why := SelectionOrder(os.Getenv)
+	if why != "" {
+		a.info.Attempts = append(a.info.Attempts, why)
+	}
+	for _, name := range order {
 		mk, ok := registry[name]
 		if !ok {
 			continue
