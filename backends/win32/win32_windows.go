@@ -85,7 +85,6 @@ var (
 	pGetDC              = user32.NewProc("GetDC")
 	pReleaseDC          = user32.NewProc("ReleaseDC")
 	pInvalidateRect     = user32.NewProc("InvalidateRect")
-	pUpdateWindow       = user32.NewProc("UpdateWindow")
 
 	pCreateFontIndirectW = gdi32.NewProc("CreateFontIndirectW")
 	pSelectObject        = gdi32.NewProc("SelectObject")
@@ -1113,7 +1112,6 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		// vertically clipped until the pointer crossed them. Repaint after the
 		// final geometry is installed so the first visible frame is complete.
 		pInvalidateRect.Call(n.hwnd, 0, 1)
-		pUpdateWindow.Call(n.hwnd)
 		n.rect, n.visible = c.R, c.Visible
 	}
 	if len(changes) > 0 {
