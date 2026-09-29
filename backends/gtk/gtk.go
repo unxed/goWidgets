@@ -83,7 +83,7 @@ var (
 	gtkLabelNew     func(text string) uintptr
 	gtkLabelText    func(label uintptr, text string)
 	gtkLabelXAlign  func(label uintptr, x float32)
-	gtkImageNew     func() uintptr
+	gtkImageNew      func() uintptr
 	gtkImageFromFile func(image uintptr, path string)
 	gtkTextViewNew  func() uintptr
 	gtkTextViewBuf  func(tv uintptr) uintptr
