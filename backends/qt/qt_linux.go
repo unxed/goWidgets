@@ -135,6 +135,15 @@ var (
 	qIconDtor      func(i *qvalue)
 	qVariantInt    func(v *qvalue, i int32)
 	qVariantDtor   func(v *qvalue)
+	qListNew       func(this unsafe.Pointer, parent uintptr)
+	qListInsert    func(l uintptr, row int32, text *qstring)
+	qListClear     func(l uintptr)
+	qListSetRow    func(l uintptr, row int32)
+	qListRowOf     func(l uintptr, item uintptr) int32
+	qListCount     func(l uintptr) int32
+	qFrameWidth    func(f uintptr) int32
+	qVScrollBar    func(a uintptr) uintptr
+	qScrollHint    func(s uintptr) qSize
 
 	sigClicked signal
 	sigToggled signal
@@ -142,9 +151,13 @@ var (
 	sigReturn  signal // QLineEdit::returnPressed()
 	sigTyped   signal // QLineEdit::textEdited(QString): the user's typing only
 	sigPicked  signal // QComboBox::activated(int): the user's pick only
+	sigRow     signal // QListWidget::currentRowChanged(int)
+	sigOpened  signal // QListWidget::itemActivated(QListWidgetItem*)
 
 	slotSizeHint    int
 	slotMinSizeHint int
+	slotRowHint     int // QAbstractItemView::sizeHintForRow
+	slotColumnHint  int // QAbstractItemView::sizeHintForColumn
 )
 
 // qSize and qRect mirror QSize and QRect. QRect stores the far edges
@@ -223,6 +236,17 @@ func (r *resolver) bindAll() {
 	r.fn(&qIconDtor, "_ZN5QIconD1Ev")
 	r.fn(&qVariantInt, "_ZN8QVariantC1Ei")
 	r.fn(&qVariantDtor, "_ZN8QVariantD1Ev")
+	r.fn(&qListNew, "_ZN11QListWidgetC1EP7QWidget")
+	r.fn(&qListInsert, "_ZN11QListWidget10insertItemEiRK7QString") // addItem is inline
+	r.fn(&qListClear, "_ZN11QListWidget5clearEv")
+	r.fn(&qListSetRow, "_ZN11QListWidget13setCurrentRowEi")
+	r.fn(&qListRowOf, "_ZNK11QListWidget3rowEPK15QListWidgetItem")
+	r.fn(&qListCount, "_ZNK11QListWidget5countEv")
+	r.fn(&qFrameWidth, "_ZNK6QFrame10frameWidthEv")
+	r.fn(&qVScrollBar, "_ZNK19QAbstractScrollArea17verticalScrollBarEv")
+	r.fn(&qScrollHint, "_ZNK10QScrollBar8sizeHintEv")
+	sigRow = r.signal("11QListWidget", "_ZN11QListWidget17currentRowChangedEi")
+	sigOpened = r.signal("11QListWidget", "_ZN11QListWidget13itemActivatedEP15QListWidgetItem")
 	sigTyped = r.signal("9QLineEdit", "_ZN9QLineEdit10textEditedERK7QString")
 	sigPicked = r.signal("9QComboBox", "_ZN9QComboBox9activatedEi")
 	sigEdited = r.signal("9QLineEdit", "_ZN9QLineEdit11textChangedERK7QString")
@@ -230,6 +254,13 @@ func (r *resolver) bindAll() {
 
 	if slotSizeHint = vslot("_ZTV7QWidget", "_ZNK7QWidget8sizeHintEv", 64); slotSizeHint < 0 {
 		r.missing = append(r.missing, "QWidget::sizeHint slot")
+	}
+	const itemView = "_ZTV17QAbstractItemView"
+	if slotRowHint = vslot(itemView, "_ZNK17QAbstractItemView14sizeHintForRowEi", 160); slotRowHint < 0 {
+		r.missing = append(r.missing, "QAbstractItemView::sizeHintForRow slot")
+	}
+	if slotColumnHint = vslot(itemView, "_ZNK17QAbstractItemView17sizeHintForColumnEi", 160); slotColumnHint < 0 {
+		r.missing = append(r.missing, "QAbstractItemView::sizeHintForColumn slot")
 	}
 	if slotMinSizeHint = vslot("_ZTV7QWidget", "_ZNK7QWidget15minimumSizeHintEv", 64); slotMinSizeHint < 0 {
 		r.missing = append(r.missing, "QWidget::minimumSizeHint slot")
@@ -515,6 +546,7 @@ type node struct {
 	kind   core.WidgetKind
 	rect   qRect // last geometry applied, for the tab order
 	placed bool
+	items  []string // list box rows, for event text
 }
 
 type window struct {
@@ -568,6 +600,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		const adjustToContents = 0
 		qComboAdjustP(uintptr(obj), adjustToContents)
 		setEditable(uintptr(obj), h, true)
+	case core.KindListBox:
+		qListNew(obj, w.handle)
 	case core.KindTextView:
 		// A log, as in the GTK driver: read-only, the user's fixed-width
 		// font, no wrapping — columns stay columns, long lines scroll.
@@ -598,6 +632,19 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindComboBox:
 		connect(g, sigPicked, func(a *[4]unsafe.Pointer) {
 			emit(core.BackendEvent{Kind: core.EventSelected, H: h, Int: int(*(*int32)(a[1])), Text: takeString(qComboText(g))})
+		})
+	case core.KindListBox:
+		// currentRowChanged also reports setCurrentRow; core drops the
+		// program's own selection by value, as with GTK's row-selected.
+		// itemActivated is the platform's "open": double-click or Enter,
+		// or a single click where the style says so (KDE's can).
+		connect(g, sigRow, func(a *[4]unsafe.Pointer) {
+			i := int(*(*int32)(a[1]))
+			emit(core.BackendEvent{Kind: core.EventSelected, H: h, Int: i, Text: w.itemText(h, i)})
+		})
+		connect(g, sigOpened, func(a *[4]unsafe.Pointer) {
+			i := int(qListRowOf(g, uintptr(*(*unsafe.Pointer)(a[1]))))
+			emit(core.BackendEvent{Kind: core.EventItemActivated, H: h, Int: i, Text: w.itemText(h, i)})
 		})
 	case core.KindEdit:
 		// textChanged, not textEdited: like GTK's "changed" it also reports
@@ -685,6 +732,8 @@ func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
 	switch n.kind {
 	case core.KindComboBox:
 		qComboSetIndex(n.handle, int32(v))
+	case core.KindListBox:
+		qListSetRow(n.handle, int32(v)) // -1 clears
 	}
 }
 
@@ -707,7 +756,21 @@ func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
 		// Qt makes the first item current as soon as there is one; the
 		// contract is that nothing is selected until someone selects.
 		qComboSetIndex(n.handle, -1)
+	case core.KindListBox:
+		n.items = append([]string(nil), items...)
+		qListClear(n.handle)
+		for i, it := range items {
+			qstr(it, func(s *qstring) { qListInsert(n.handle, int32(i), s) })
+		}
 	}
+}
+
+// itemText is a list node's i-th item, or "".
+func (w *window) itemText(h core.Handle, i int) string {
+	if n := w.nodes[h]; n != nil && i >= 0 && i < len(n.items) {
+		return n.items[i]
+	}
+	return ""
 }
 
 // setEditable gives a combo box its text field or takes it away. Qt's
@@ -766,6 +829,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	}
 	natural = sizeHint(n.handle, slotSizeHint)
 	min = sizeHint(n.handle, slotMinSizeHint)
+	if n.kind == core.KindListBox {
+		natural = listNatural(n.handle, natural)
+	}
 	if min.W > natural.W {
 		min.W = natural.W
 	}
@@ -773,6 +839,25 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 		min.H = natural.H
 	}
 	return min, natural
+}
+
+// listRows is the natural height of a list box, in rows — as in the GTK
+// driver. QListWidget's own sizeHint is a fixed 256×192 whatever it holds.
+const listRows = 8
+
+// listNatural is a list's natural size from its rows: as wide as the widest
+// item plus the scroll bar, up to listRows rows high. An empty list keeps
+// Qt's hint.
+func listNatural(l uintptr, fallback core.Size) core.Size {
+	count := int(qListCount(l))
+	if count == 0 {
+		return fallback
+	}
+	frame := 2 * float64(qFrameWidth(l))
+	rowH := float64(int32(vcall(l, slotRowHint, 0)))
+	colW := float64(int32(vcall(l, slotColumnHint, 0)))
+	bar := float64(qScrollHint(qVScrollBar(l)).W)
+	return core.Size{W: colW + bar + frame, H: rowH*float64(min(count, listRows)) + frame}
 }
 
 func (w *window) ApplyLayout(changes []core.BoundsChange) {

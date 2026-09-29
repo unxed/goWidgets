@@ -50,7 +50,14 @@ func perMajor(t *testing.T) *goWidgets.App {
 	}
 	app, err := goWidgets.NewApp()
 	if err != nil {
-		t.Skipf("Qt недоступен: %v", err)
+		// A Qt that is not installed, or cannot reach a display, is a
+		// skip. Anything else — a missing symbol above all — is a bug.
+		for _, why := range []string{"not available", "no display", "not reachable", "platform plugin"} {
+			if strings.Contains(err.Error(), why) {
+				t.Skipf("Qt недоступен: %v", err)
+			}
+		}
+		t.Fatal(err)
 	}
 	if qt.Version() == 0 {
 		t.Skipf("драйвер %s, а проверяется qt", app.Diagnostics().Name)
