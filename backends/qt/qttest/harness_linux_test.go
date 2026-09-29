@@ -12,6 +12,7 @@ package qttest
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,11 @@ func perMajor(t *testing.T) *goWidgets.App {
 		t.Skip("нет дисплея: запускать под Xvfb")
 	}
 	app, err := goWidgets.NewApp()
+	// NewApp locks this goroutine to its thread. A locked goroutine that
+	// ends takes its thread with it, and fakecgo's thread entry does not
+	// survive that exit: the process crashed after the test had passed.
+	// Unlocking first hands the thread back to the scheduler instead.
+	t.Cleanup(runtime.UnlockOSThread)
 	if err != nil {
 		// A Qt that is not installed, or cannot reach a display, is a
 		// skip. Anything else — a missing symbol above all — is a bug.

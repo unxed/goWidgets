@@ -5,6 +5,7 @@ package gtk_test
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -54,6 +55,10 @@ func TestTrayDocksIntoARealPanel(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 
 	app, err := goWidgets.NewApp()
+	// NewApp locks this goroutine to its thread; a locked goroutine that
+	// ends takes the thread with it, and fakecgo's thread entry does not
+	// survive that — the binary crashed after the test had passed.
+	defer runtime.UnlockOSThread()
 	if err != nil {
 		t.Skipf("графическая подсистема недоступна: %v", err)
 	}

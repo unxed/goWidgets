@@ -8,6 +8,7 @@ package keytest
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -59,6 +60,7 @@ func TestKeyEventArrivesAsTypedPointer(t *testing.T) {
 		t.Skip("нет DISPLAY: запускать под Xvfb")
 	}
 	app, err := goWidgets.NewApp()
+	defer runtime.UnlockOSThread() // see backends/gtk/docking_linux_test.go
 	if err != nil {
 		t.Skipf("графическая подсистема недоступна: %v", err)
 	}
