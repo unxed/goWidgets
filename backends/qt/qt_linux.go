@@ -210,6 +210,7 @@ func (r *resolver) bindAll() {
 	r.fn(&qSetChecked, "_ZN15QAbstractButton10setCheckedEb")
 
 	r.bindDialogs()
+	r.bindTray()
 
 	sigClicked = r.signal("15QAbstractButton", "_ZN15QAbstractButton7clickedEb")
 	sigToggled = r.signal("15QAbstractButton", "_ZN15QAbstractButton7toggledEb")
@@ -294,6 +295,7 @@ func (d *driver) Capabilities() core.Caps {
 		FileDialog:      true,
 		Menus:           true,
 		SmoothAnimation: true,
+		TrayIcon:        true, // QSystemTrayIcon; see tray_linux.go
 		MaxCallbacks:    2000, // purego's callback pool
 	}
 }
@@ -513,10 +515,6 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 func (d *driver) Wake() { post(evUser) }
 
 func (d *driver) Shutdown() {}
-
-func (d *driver) CreateTray(spec core.TraySpec) (core.BackendTray, error) {
-	return nil, core.ErrNoTray
-}
 
 func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) {
 	obj := cxxNew(64)
