@@ -4,7 +4,6 @@ package qt
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -404,21 +403,28 @@ func displayReachable(pluginDir string) error {
 	return fmt.Errorf("no Qt %d platform plugin for this display in %s", ver, filepath.Join(pluginDir, "platforms"))
 }
 
-// xReachable tries the local X server socket, for the same reason: Qt aborts
-// on a DISPLAY nobody listens on. Remote displays (host:0) are not checked.
+// xReachable opens and closes an X connection through libxcb — the library
+// Qt's xcb plugin connects with — for the same reason: Qt aborts on a
+// DISPLAY it cannot open. A real connection, unlike a look at the socket,
+// also covers authorisation and remote displays.
 func xReachable(display string) error {
-	if !strings.HasPrefix(display, ":") {
-		return nil
+	xcb, err := purego.Dlopen("libxcb.so.1", purego.RTLD_NOW|purego.RTLD_LOCAL)
+	if err != nil {
+		return fmt.Errorf("libxcb not available: %w", err)
 	}
-	n := strings.TrimPrefix(display, ":")
-	if i := strings.IndexByte(n, '.'); i >= 0 {
-		n = n[:i]
+	var (
+		xcbConnect    func(display *byte, screen *int32) uintptr
+		xcbHasError   func(c uintptr) int32
+		xcbDisconnect func(c uintptr)
+	)
+	purego.RegisterLibFunc(&xcbConnect, xcb, "xcb_connect")
+	purego.RegisterLibFunc(&xcbHasError, xcb, "xcb_connection_has_error")
+	purego.RegisterLibFunc(&xcbDisconnect, xcb, "xcb_disconnect")
+	name := append([]byte(display), 0)
+	c := xcbConnect(&name[0], nil)
+	defer xcbDisconnect(c) // xcb_disconnect also frees a failed connection
+	if c == 0 || xcbHasError(c) != 0 {
+		return fmt.Errorf("X display %s is not reachable", display)
 	}
-	for _, addr := range []string{"/tmp/.X11-unix/X" + n, "@/tmp/.X11-unix/X" + n} {
-		if c, err := net.Dial("unix", addr); err == nil {
-			c.Close()
-			return nil
-		}
-	}
-	return fmt.Errorf("X display %s is not reachable", display)
+	return nil
 }
