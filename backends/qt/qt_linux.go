@@ -113,6 +113,13 @@ var (
 	qLineEditNew   func(this unsafe.Pointer, parent uintptr)
 	qLineEditSet   func(e uintptr, text *qstring)
 	qLineEditText  func(e uintptr) qstring
+	qPlainTextNew  func(this unsafe.Pointer, parent uintptr)
+	qPlainReadOnly func(e uintptr, on bool)
+	qPlainWrap     func(e uintptr, mode int32)
+	qPlainSet      func(e uintptr, text *qstring)
+	qSystemFont    func(which int32) qvalue
+	qFontDtor      func(f *qvalue)
+	qWidgetFont    func(w uintptr, f *qvalue)
 
 	sigClicked signal
 	sigToggled signal
@@ -177,6 +184,13 @@ func (r *resolver) bindAll() {
 	r.fn(&qLineEditNew, "_ZN9QLineEditC1EP7QWidget")
 	r.fn(&qLineEditSet, "_ZN9QLineEdit7setTextERK7QString")
 	r.fn(&qLineEditText, "_ZNK9QLineEdit4textEv")
+	r.fn(&qPlainTextNew, "_ZN14QPlainTextEditC1EP7QWidget")
+	r.fn(&qPlainReadOnly, "_ZN14QPlainTextEdit11setReadOnlyEb")
+	r.fn(&qPlainWrap, "_ZN14QPlainTextEdit15setLineWrapModeENS_12LineWrapModeE")
+	r.fn(&qPlainSet, "_ZN14QPlainTextEdit12setPlainTextERK7QString")
+	r.fn(&qSystemFont, "_ZN13QFontDatabase10systemFontENS_10SystemFontE")
+	r.fn(&qFontDtor, "_ZN5QFontD1Ev")
+	r.fn(&qWidgetFont, "_ZN7QWidget7setFontERK5QFont")
 	sigEdited = r.signal("9QLineEdit", "_ZN9QLineEdit11textChangedERK7QString")
 	sigReturn = r.signal("9QLineEdit", "_ZN9QLineEdit13returnPressedEv")
 
@@ -513,6 +527,16 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		qCheckBoxNew(obj, w.handle)
 	case core.KindEdit:
 		qLineEditNew(obj, w.handle)
+	case core.KindTextView:
+		// A log, as in the GTK driver: read-only, the user's fixed-width
+		// font, no wrapping — columns stay columns, long lines scroll.
+		qPlainTextNew(obj, w.handle)
+		const noWrap, fixedFont = 0, 1
+		qPlainReadOnly(uintptr(obj), true)
+		qPlainWrap(uintptr(obj), noWrap)
+		f := qSystemFont(fixedFont)
+		qWidgetFont(uintptr(obj), &f)
+		qFontDtor(&f)
 	default:
 		return 0, fmt.Errorf("qt: unsupported widget kind %v", kind)
 	}
@@ -567,6 +591,8 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 			qButtonText(n.handle, s) // both are QAbstractButtons
 		case core.KindLabel:
 			qLabelText(n.handle, s)
+		case core.KindTextView:
+			qPlainSet(n.handle, s)
 		case core.KindEdit:
 			// setText with the text the field holds is a no-op, so the
 			// platform's own edit coming round does not move the caret.
