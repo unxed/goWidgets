@@ -1,11 +1,11 @@
 # Для ИИ-ассистентов и новых участников
 
-Работа над клоном FastStone Image Viewer 5.6 (и над фреймворком ради него) ведётся по плану в
-[`docs/faststone/`](docs/faststone/README.md). План составлен моделью более мощной, чем та, что
+Работа над showcase `imgy` (и над фреймворком ради него) ведётся по плану в
+[`docs/imgy/`](docs/imgy/README.md). План составлен моделью более мощной, чем та, что
 обычно работает над этим репозиторием, и **обязателен к исполнению**; отступать можно только по
-процедуре из [`docs/faststone/PLAYBOOK.md`](docs/faststone/PLAYBOOK.md) §1.
+процедуре из [`docs/imgy/PLAYBOOK.md`](docs/imgy/PLAYBOOK.md) §1.
 
-Начни с `docs/faststone/README.md`, затем `docs/faststone/STATUS.md`.
+Начни с `docs/imgy/README.md`, затем `docs/imgy/STATUS.md`.
 
 Всегда действуют: нормативный дизайн `docs/disdoc.md` и решения `docs/adr/`.
 Файл `filelist.md` вручную не править — его пишет другой процесс.

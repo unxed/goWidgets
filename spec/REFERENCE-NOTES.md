@@ -9,5 +9,5 @@
 - First prescribed attempt: `7z.exe l` — command not found.
 - Second prescribed attempt: `innoextract.exe -l` — command not found.
 - `winget install 7zip.7zip --scope user` — no applicable installer (manifest provides MSI only).
-- Default 7-Zip MSI was downloaded and hash-checked, but requested administrator approval; installation was cancelled before approval (exit 1602). 7-Zip is not installed.
-- Wine is not installed/on PATH; do not proceed with installation until the user decides.
+- User approved installing 7-Zip. The official MSI was downloaded and hash-checked; the elevated installation process is currently pending/completing. Confirm installation before extraction.
+- Wine is not installed/on PATH; no Wine installation is required for the currently authorized A1 extraction step.
