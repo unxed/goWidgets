@@ -83,6 +83,8 @@ var (
 	gtkLabelNew     func(text string) uintptr
 	gtkLabelText    func(label uintptr, text string)
 	gtkLabelXAlign  func(label uintptr, x float32)
+	gtkImageNew     func() uintptr
+	gtkImageFromFile func(image uintptr, path string)
 	gtkTextViewNew  func() uintptr
 	gtkTextViewBuf  func(tv uintptr) uintptr
 	gtkTextViewEdit func(tv uintptr, editable int32)
@@ -243,6 +245,8 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkLabelNew, lib, "gtk_label_new")
 	purego.RegisterLibFunc(&gtkLabelText, lib, "gtk_label_set_text")
 	purego.RegisterLibFunc(&gtkLabelXAlign, lib, "gtk_label_set_xalign")
+	purego.RegisterLibFunc(&gtkImageNew, lib, "gtk_image_new")
+	purego.RegisterLibFunc(&gtkImageFromFile, lib, "gtk_image_set_from_file")
 	purego.RegisterLibFunc(&gtkTextViewNew, lib, "gtk_text_view_new")
 	purego.RegisterLibFunc(&gtkTextViewBuf, lib, "gtk_text_view_get_buffer")
 	purego.RegisterLibFunc(&gtkTextViewEdit, lib, "gtk_text_view_set_editable")
@@ -533,6 +537,7 @@ type node struct {
 	inner  uintptr // the text view itself, when different from handle
 	kind   core.WidgetKind
 	items  []string // list box rows, for event text
+	path   string   // image view file
 }
 
 // itemText is a list node's i-th item, or "".
@@ -586,6 +591,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindLabel:
 		g = gtkLabelNew("")
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
+	case core.KindImageView:
+		g = gtkImageNew()
 	case core.KindEdit:
 		g = gtkEntryNew()
 	case core.KindComboBox:
@@ -668,7 +675,15 @@ func (w *window) SetParent(child, parent core.Handle, index int) {
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropText {
+	if n == nil {
+		return
+	}
+	if p == core.PropImagePath && n.kind == core.KindImageView {
+		n.path = v
+		gtkImageFromFile(n.handle, v)
+		return
+	}
+	if p != core.PropText {
 		return
 	}
 	switch n.kind {

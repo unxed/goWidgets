@@ -58,6 +58,8 @@ const (
 	// KindListBox is a scrolling list of strings with one selected —
 	// GtkListBox in a scrolled window on GTK, LISTBOX on Win32.
 	KindListBox
+	// KindImageView displays one image file, scaled to fit its allocated area.
+	KindImageView
 )
 
 func (k WidgetKind) String() string {
@@ -76,6 +78,8 @@ func (k WidgetKind) String() string {
 		return "ComboBox"
 	case KindListBox:
 		return "ListBox"
+	case KindImageView:
+		return "ImageView"
 	}
 	return "Unknown"
 }
@@ -97,6 +101,8 @@ const (
 	// PropDropdownOnly makes a combo box a pure list, no text entry. Set
 	// once, before the widget is shown.
 	PropDropdownOnly
+	// PropImagePath is the file shown by an ImageView.
+	PropImagePath
 )
 
 func (p PropKey) String() string {
@@ -115,6 +121,8 @@ func (p PropKey) String() string {
 		return "dropdownOnly"
 	case PropChecked:
 		return "Checked"
+	case PropImagePath:
+		return "imagePath"
 	}
 	return "Unknown"
 }

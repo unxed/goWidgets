@@ -52,6 +52,7 @@ var (
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	comctl32 = windows.NewLazySystemDLL("comctl32.dll")
 	comdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
+	gdiplus  = windows.NewLazySystemDLL("gdiplus.dll")
 
 	pRegisterClassExW   = user32.NewProc("RegisterClassExW")
 	pCreateWindowExW    = user32.NewProc("CreateWindowExW")
@@ -88,6 +89,12 @@ var (
 	pReleaseDC          = user32.NewProc("ReleaseDC")
 	pInvalidateRect     = user32.NewProc("InvalidateRect")
 
+	pGdiplusStartup            = gdiplus.NewProc("GdiplusStartup")
+	pGdipCreateBitmapFromFile  = gdiplus.NewProc("GdipCreateBitmapFromFile")
+	pGdipCreateHBITMAPFromBmp  = gdiplus.NewProc("GdipCreateHBITMAPFromBitmap")
+	pGdipDisposeImage          = gdiplus.NewProc("GdipDisposeImage")
+	pDeleteObject              = gdi32.NewProc("DeleteObject")
+
 	pCreateFontIndirectW = gdi32.NewProc("CreateFontIndirectW")
 	pSelectObject        = gdi32.NewProc("SelectObject")
 	pGetTextExtentPoint  = gdi32.NewProc("GetTextExtentPoint32W")
@@ -105,6 +112,8 @@ const (
 	wsVisible          = 0x10000000
 	wsTabStop          = 0x00010000
 	ssLeftNoWordWrap   = 0x0000000C
+	ssBitmap           = 0x0000000E
+	ssCenterImage      = 0x00000200
 
 	wmDestroy    = 0x0002
 	wmKeyDown    = 0x0100
@@ -117,6 +126,8 @@ const (
 	wmSize       = 0x0005
 	wmClose      = 0x0010
 	wmSetFont    = 0x0030
+	stmSetImage  = 0x0172
+	stmGetImage  = 0x0173
 	wmCommand    = 0x0111
 	wmDpiChanged = 0x02E0
 	wmApp        = 0x8000
@@ -252,6 +263,19 @@ type actCtxW struct {
 }
 
 type initCommonControlsExT struct{ dwSize, dwICC uint32 }
+
+type gdiplusStartupInput struct {
+	Version                  uint32
+	DebugEventCallback       uintptr
+	SuppressBackgroundThread byte
+	SuppressExternalCodecs   byte
+	Padding                  [6]byte
+}
+
+var (
+	gdiplusOnce  sync.Once
+	gdiplusToken uintptr
+)
 
 type driver struct {
 	hInstance windows.Handle
@@ -574,6 +598,7 @@ type node struct {
 	hwnd    uintptr
 	id      uint32
 	kind    core.WidgetKind
+	bitmap  uintptr
 	rect    core.Rect // last applied, in DIP; for tab order
 	visible bool
 }
@@ -667,6 +692,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		// structure that makes it readable at all.
 		style = wsChild | wsVisible | wsBorder | wsVScroll | wsHScroll |
 			esMultiline | esReadonly | esAutoVScroll | esAutoHScroll
+	case core.KindImageView:
+		class, style = "STATIC", wsChild|wsVisible|ssBitmap|ssCenterImage
 	}
 	hwnd, err := w.createControl(class, style, id)
 	if err != nil {
@@ -705,6 +732,9 @@ func (w *window) createControl(class string, style uintptr, id uint32) (uintptr,
 
 func (w *window) DestroyWidget(h core.Handle) {
 	if n := w.nodes[h]; n != nil {
+		if n.bitmap != 0 {
+			pDeleteObject.Call(n.bitmap)
+		}
 		pDestroyWindow.Call(n.hwnd)
 		regMu.Lock()
 		delete(ctlByID, n.id)
@@ -717,7 +747,14 @@ func (w *window) SetParent(child, parent core.Handle, index int) {}
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropText {
+	if n == nil {
+		return
+	}
+	if p == core.PropImagePath && n.kind == core.KindImageView {
+		w.setImagePath(n, v)
+		return
+	}
+	if p != core.PropText {
 		return
 	}
 	// A multiline EDIT wants CRLF line breaks; a bare LF shows as one long
@@ -727,6 +764,39 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	}
 	if s, err := windows.UTF16PtrFromString(v); err == nil {
 		pSetWindowTextW.Call(n.hwnd, uintptr(unsafe.Pointer(s)))
+	}
+}
+
+func ensureGDIPlus() bool {
+	gdiplusOnce.Do(func() {
+		input := gdiplusStartupInput{Version: 1}
+		var token uintptr
+		status, _, _ := pGdiplusStartup.Call(uintptr(unsafe.Pointer(&token)), uintptr(unsafe.Pointer(&input)), 0)
+		if status == 0 {
+			gdiplusToken = token
+		}
+	})
+	return gdiplusToken != 0
+}
+
+func (w *window) setImagePath(n *node, path string) {
+	var bitmap uintptr
+	if path != "" && ensureGDIPlus() {
+		if p, err := windows.UTF16PtrFromString(path); err == nil {
+			var image uintptr
+			if status, _, _ := pGdipCreateBitmapFromFile.Call(uintptr(unsafe.Pointer(p)), uintptr(unsafe.Pointer(&image))); status == 0 && image != 0 {
+				var hbmp uintptr
+				if status, _, _ := pGdipCreateHBITMAPFromBmp.Call(image, uintptr(unsafe.Pointer(&hbmp)), 0xFFFFFFFF); status == 0 {
+					bitmap = hbmp
+				}
+				pGdipDisposeImage.Call(image)
+			}
+		}
+	}
+	old, _, _ := pSendMessageW.Call(n.hwnd, stmSetImage, 0, bitmap)
+	n.bitmap = bitmap
+	if old != 0 {
+		pDeleteObject.Call(old)
 	}
 }
 
@@ -1075,6 +1145,8 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 		// SM_CXMENUCHECK-sized indicator plus a gap, in physical pixels.
 		nat := core.Size{W: (tw + 24*s) / s, H: (th + 6*s) / s}
 		return core.Size{W: 0, H: nat.H}, nat
+	case core.KindImageView:
+		return core.Size{W: 0, H: 0}, core.Size{W: 80, H: 60}
 	default:
 		nat := core.Size{W: tw / s, H: (th + 6*s) / s}
 		return core.Size{W: 0, H: nat.H}, nat

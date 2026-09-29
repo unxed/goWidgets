@@ -106,6 +106,10 @@ var (
 	qContentsRect  func(w uintptr) qRect
 	qLabelCtor     func(this unsafe.Pointer, parent uintptr, flags int32)
 	qLabelText     func(l uintptr, text *qstring)
+	qLabelPixmap  func(l uintptr, pix unsafe.Pointer)
+	qLabelScaled  func(l uintptr, on bool)
+	qPixmapCtor   func(this unsafe.Pointer, path *qstring, format *byte, flags int32)
+	qPixmapDtor   func(this unsafe.Pointer)
 	qPushButtonNew func(this unsafe.Pointer, parent uintptr)
 	qButtonText    func(b uintptr, text *qstring)
 	qCheckBoxNew   func(this unsafe.Pointer, parent uintptr)
@@ -203,6 +207,10 @@ func (r *resolver) bindAll() {
 	r.fn(&qContentsRect, "_ZNK7QWidget12contentsRectEv")
 	r.fn(&qLabelCtor, "_ZN6QLabelC1EP7QWidget6QFlagsIN2Qt10WindowTypeEE")
 	r.fn(&qLabelText, "_ZN6QLabel7setTextERK7QString")
+	r.fn(&qLabelPixmap, "_ZN6QLabel9setPixmapERK7QPixmap")
+	r.fn(&qLabelScaled, "_ZN6QLabel16setScaledContentsEb")
+	r.fn(&qPixmapCtor, "_ZN7QPixmapC1ERK7QStringPKc6QFlagsIN2Qt19ImageConversionFlagEE")
+	r.fn(&qPixmapDtor, "_ZN7QPixmapD1Ev")
 	r.fn(&qPushButtonNew, "_ZN11QPushButtonC1EP7QWidget")
 	r.fn(&qButtonText, "_ZN15QAbstractButton7setTextERK7QString")
 
@@ -547,6 +555,7 @@ type node struct {
 	rect   qRect // last geometry applied, for the tab order
 	placed bool
 	items  []string // list box rows, for event text
+	path   string   // image view file
 }
 
 type window struct {
@@ -587,6 +596,9 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	switch kind {
 	case core.KindLabel:
 		qLabelCtor(obj, w.handle, 0)
+	case core.KindImageView:
+		qLabelCtor(obj, w.handle, 0)
+		qLabelScaled(uintptr(obj), true)
 	case core.KindButton:
 		qPushButtonNew(obj, w.handle)
 	case core.KindCheckBox:
@@ -674,7 +686,20 @@ func (w *window) SetParent(child, parent core.Handle, index int) {
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropText {
+	if n == nil {
+		return
+	}
+	if p == core.PropImagePath && n.kind == core.KindImageView {
+		n.path = v
+		pix := cxxNew(128)
+		qstr(v, func(path *qstring) {
+			qPixmapCtor(pix, path, nil, 0)
+			qLabelPixmap(n.handle, pix)
+			qPixmapDtor(pix)
+		})
+		return
+	}
+	if p != core.PropText {
 		return
 	}
 	qstr(v, func(s *qstring) {

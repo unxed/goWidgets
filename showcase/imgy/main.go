@@ -1,10 +1,7 @@
-// Command imgy is the first walking skeleton of the goWidgets image viewer.
+// Command imgy is the first working increment of the goWidgets image viewer.
 //
-// Stage 1 follows the FastStone Image Viewer help's primary loop: choose a
-// folder, browse its images, select one, and keep the selected image's preview
-// area and metadata visible. The preview is deliberately a platform-neutral
-// placeholder in this increment; decoding, zooming, and edge fly-outs follow
-// once the browser shell is useful and testable.
+// The first increment implements the core browse loop: choose a folder, browse
+// its images, select one, and keep the selected image and metadata visible.
 //
 // Every relationship is declared through goWidgets constraints. The showcase
 // contains no pixel coordinates, so the same shell can become a real image
@@ -13,6 +10,10 @@ package main
 
 import (
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -56,14 +57,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	title, _ := win.AddLabel("imgy — FastStone-inspired image browser")
+	title, _ := win.AddLabel("imgy — image browser")
 	pathEdit, _ := win.AddEdit(root)
 	open, _ := win.AddButton("Открыть папку")
 	files, _ := win.AddListBox(nil)
-	preview, _ := win.AddLabel("Выберите изображение\n\nPreview")
+	preview, _ := win.AddImageView()
 	info, _ := win.AddLabel("Файлов: 0")
 	fullscreen, _ := win.AddButton("Полный экран")
-	status, _ := win.AddLabel("Этап 1: браузер папки и preview-каркас")
+	status, _ := win.AddLabel("Выберите изображение")
 
 	const pad = 12
 	if err := win.Constrain(
@@ -138,7 +139,7 @@ func main() {
 		files.Select(-1)
 		pathEdit.Text.Set(folder)
 		info.Text.Set(fmt.Sprintf("Файлов: %d", len(entries)))
-		preview.Text.Set("Выберите изображение\n\nPreview")
+		preview.SetPath("")
 		status.Text.Set("Папка открыта: " + folder)
 	}
 	selectEntry := func(i int) {
@@ -146,11 +147,9 @@ func main() {
 			return
 		}
 		e := entries[i]
-		// image.DecodeConfig is intentionally not used yet: this increment keeps
-		// the browser backend-neutral and leaves the real ImageView decoder as a
-		// focused next step.
-		preview.Text.Set("IMAGE PREVIEW\n\n" + e.name)
-		info.Text.Set(fmt.Sprintf("%s  •  %s", e.name, formatBytes(e.size)))
+		preview.SetPath(e.path)
+		dimensions := imageDimensions(e.path)
+		info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
 		status.Text.Set("Выбрано: " + e.path)
 	}
 
@@ -158,14 +157,27 @@ func main() {
 	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { load(pathEdit.Text.Get()) })
 	pathEdit.Activated.On(app.Scope(), func(string) { load(pathEdit.Text.Get()) })
 	fullscreen.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
-		fullscreen.Text.Set("Полный экран (этап 2)")
-		status.Text.Set("Полноэкранный режим запланирован для этапа 2")
+		fullscreen.Text.Set("Полный экран (следующий этап)")
+		status.Text.Set("Просмотр и метаданные работают; полноэкранное управление — следующий этап")
 	})
 	load(root)
 
 	if err := app.Run(win); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func imageDimensions(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return "размеры недоступны"
+	}
+	defer f.Close()
+	config, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return "размеры недоступны"
+	}
+	return fmt.Sprintf("%d × %d", config.Width, config.Height)
 }
 
 func formatBytes(n int64) string {

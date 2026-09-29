@@ -102,6 +102,7 @@ func (d *driver) Shutdown() {}
 type node struct {
 	kind    core.WidgetKind
 	text    string
+	path    string
 	enabled bool
 	visible bool
 	checked bool
@@ -154,7 +155,14 @@ func (w *window) SetParent(child, parent core.Handle, index int) {
 }
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
-	if n := w.nodes[h]; n != nil && p == core.PropText {
+	if n := w.nodes[h]; n != nil {
+		if p == core.PropImagePath && n.kind == core.KindImageView {
+			n.path = v
+			return
+		}
+		if p != core.PropText {
+			return
+		}
 		n.text = v
 		w.textWrites++
 		// Both real platforms report a programmatic write to a text field as
@@ -398,6 +406,8 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindTextView:
 		// A fixed, tall rectangle — the layout gives it a definite height.
 		return core.Size{W: 0, H: 120}, core.Size{W: textW, H: 120}
+	case core.KindImageView:
+		return core.Size{W: 0, H: 0}, core.Size{W: 80, H: 60}
 	case core.KindCheckBox:
 		s := core.Size{W: CheckBoxBox + CheckBoxGap + textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: CheckBoxBox, H: s.H}, s
@@ -439,6 +449,9 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		text := ""
 		if n != nil {
 			kind, text = n.kind.String(), n.text
+			if n.kind == core.KindImageView {
+				text = n.path
+			}
 		}
 		w.log = append(w.log, fmt.Sprintf("%s(%q) x=%.1f y=%.1f w=%.1f h=%.1f visible=%v",
 			kind, text, c.R.X, c.R.Y, c.R.W, c.R.H, c.Visible))
