@@ -177,16 +177,25 @@ func TestEditFocusAndKeys(t *testing.T) {
 		}
 		openBoxFound = box != 0
 		if openBoxFound {
-			time.Sleep(300 * time.Millisecond) // the dialog populates its controls after showing
+			// The dialog fills in its controls after it shows, and which of
+			// the two name fields is live depends on the Windows version;
+			// one early attempt at one of them left the box up now and
+			// then (seen on the Windows runner). So: every field there is,
+			// then OK, again until the box is gone.
 			pth, _ := syscall.UTF16PtrFromString(tmpFile)
-			for _, id := range []uintptr{1152, 1148} {
-				if item, _, _ := pGetDlgItem.Call(box, id); item != 0 {
-					pSetDlgText.Call(box, id, uintptr(unsafe.Pointer(pth)))
-					editFound = true
+			for deadline := time.Now().Add(8 * time.Second); time.Now().Before(deadline); {
+				time.Sleep(300 * time.Millisecond)
+				if still, _, _ := pFindWindow.Call(0, uintptr(unsafe.Pointer(otitle))); still == 0 {
 					break
 				}
+				for _, id := range []uintptr{1148, 1152} {
+					if item, _, _ := pGetDlgItem.Call(box, id); item != 0 {
+						pSetDlgText.Call(box, id, uintptr(unsafe.Pointer(pth)))
+						editFound = true
+					}
+				}
+				pPostMessage.Call(box, wmCommand, idOK, 0)
 			}
-			pPostMessage.Call(box, wmCommand, idOK, 0)
 		}
 		select {
 		case <-openDone:

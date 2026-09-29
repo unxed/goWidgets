@@ -19,7 +19,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/unxed/goWidgets/core"
@@ -261,6 +263,11 @@ type driver struct {
 
 	pumpMu sync.Mutex
 	pump   func()
+
+	// loopGen numbers the runs of RunMainLoop. A request to end a loop
+	// carries the number of the run it is for, so one that arrives late
+	// cannot end the next run (a test binary runs several applications).
+	loopGen atomic.Uintptr
 }
 
 var (
@@ -416,11 +423,25 @@ func (d *driver) RunMainLoop(ctx context.Context, pump func()) error {
 	d.pumpMu.Unlock()
 	pump()
 
+	gen := d.loopGen.Add(1)
+	returned := make(chan struct{})
+	defer close(returned)
 	go func() {
 		<-ctx.Done()
 		// PostQuitMessage only works on the loop's own thread, so ask that
-		// thread to call it.
-		pPostMessageW.Call(uintptr(d.msgWnd), wmEndLoop, 0, 0)
+		// thread to call it — and keep asking until this loop has returned.
+		// A modal loop running at that moment (a message box, a common
+		// dialog) takes the WM_QUIT for itself and ends, and the loop here
+		// would never see it: the application hung in GetMessage (seen in
+		// CI, win32test, a quit while the open-file dialog was still up).
+		for {
+			pPostMessageW.Call(uintptr(d.msgWnd), wmEndLoop, gen, 0)
+			select {
+			case <-returned:
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
 	}()
 
 	var m msgW
@@ -855,7 +876,11 @@ func (w *window) FileDialog(save bool, title, suggested string, filters []core.F
 	if r == 0 {
 		return "", false
 	}
-	return windows.UTF16ToString(file), true
+	// A dialog ended by a WM_QUIT from outside (an application quitting
+	// while it is up) comes back TRUE with no file name — seen on the
+	// Windows runner. No path is no answer.
+	path := windows.UTF16ToString(file)
+	return path, path != ""
 }
 
 // utf16z encodes s as UTF-16 with a terminating NUL.
@@ -1204,7 +1229,9 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		return 0
 
 	case wmEndLoop:
-		pPostQuitMessage.Call(0)
+		if wParam == d.loopGen.Load() {
+			pPostQuitMessage.Call(0)
+		}
 		return 0
 
 	case wmTrayIcon:
