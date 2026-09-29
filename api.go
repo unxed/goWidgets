@@ -124,7 +124,9 @@ func (a *App) NewWindow(title string, w, h float64) (*Window, error) {
 	a.eng.SetKeyHandler(func(k core.KeyEvent) { win.keys.Emit(k) })
 	a.eng.SetCloseHandler(func() bool {
 		req := &CloseRequest{}
-		win.Closing.Emit(req)
+		// EmitNow, not Emit: the close is dispatched under Batch, and a
+		// queued handler would set Cancel after it had been read.
+		win.Closing.EmitNow(req)
 		return !req.Cancel
 	})
 	return win, nil

@@ -493,6 +493,14 @@ func Resize(w, h float64) {
 	current.events <- core.BackendEvent{Kind: core.EventResized, H: current.root, Size: current.size}
 }
 
+// RequestClose asks to close the window, as the title-bar cross would.
+func RequestClose() {
+	if current == nil {
+		return
+	}
+	current.events <- core.BackendEvent{Kind: core.EventCloseRequested}
+}
+
 // TypeIntoEdit replaces the contents of the first text field, as if the
 // user had typed, and reports whether there is one.
 func TypeIntoEdit(text string) bool {

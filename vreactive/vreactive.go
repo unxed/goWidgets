@@ -192,6 +192,18 @@ func (e *Event[T]) Emit(v T) {
 	}
 }
 
+// EmitNow delivers v to every subscriber before it returns, batch or no
+// batch. It is for events whose handlers answer something the emitter reads
+// back — a veto: under Batch, which is where every platform event is
+// dispatched, Emit would only queue the handlers, and the emitter would read
+// the answer before anyone had given it.
+func (e *Event[T]) EmitNow(v T) {
+	assertMainThread("Event.EmitNow")
+	for _, h := range e.subs {
+		h(v)
+	}
+}
+
 // On subscribes h for the lifetime of s.
 func (e *Event[T]) On(s *Scope, h func(T)) {
 	assertMainThread("Event.On")

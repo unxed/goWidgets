@@ -122,6 +122,39 @@ func TestClickReachesHandler(t *testing.T) {
 	}
 }
 
+// Closing can veto the close. The request is dispatched under Batch like
+// every platform event, so the handler has to run before the veto is read —
+// with a queued handler the application quit whatever it answered.
+func TestClosingCanCancel(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("crescent", 400, 300)
+	asked := 0
+	win.Closing.On(app.Scope(), func(r *goWidgets.CloseRequest) {
+		asked++
+		r.Cancel = true
+	})
+	stillRunning := make(chan bool, 2)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		headless.RequestClose()
+		time.Sleep(200 * time.Millisecond)
+		// If the close went through, the loop is gone and this never runs.
+		app.QueueUpdate(func() { stillRunning <- true })
+		time.Sleep(200 * time.Millisecond)
+		stillRunning <- false
+		app.Quit()
+	}()
+	if err := app.Run(win); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 {
+		t.Errorf("Closing fired %d times, want 1", asked)
+	}
+	if !<-stillRunning {
+		t.Error("the application quit although Closing cancelled")
+	}
+}
+
 // NFR "Утечки подписок": closing a scope must drop every subscription.
 //
 // This test and the next build no App, so nothing binds the UI goroutine for
