@@ -251,6 +251,33 @@ type Label struct{ *widget }
 // log, an output pane.
 type TextView struct{ *widget }
 
+// ImageView displays an image file in its allocated area, preserving its
+// aspect ratio. Set Path to replace the image; an empty path clears it.
+type ImageView struct {
+	*widget
+	Path *vreactive.Property[string]
+}
+
+// AddImageView appends an empty image surface. Give it space with the same
+// constraints as any other widget; the backend fits the image into that area.
+func (w *Window) AddImageView() (*ImageView, error) {
+	wd, err := w.newWidget(core.KindImageView, "")
+	if err != nil {
+		return nil, err
+	}
+	view := &ImageView{widget: wd, Path: vreactive.NewProperty("")}
+	bw := w.app.eng.Window()
+	view.Path.OnChange(w.app.scope, func(path, _ string) {
+		bw.SetString(wd.node.H, core.PropImagePath, path)
+		w.app.eng.Invalidate()
+	})
+	return view, nil
+}
+
+// SetPath changes the displayed image. Supported formats are those provided
+// by the platform's native image decoder.
+func (v *ImageView) SetPath(path string) { v.Path.Set(path) }
+
 // SetText replaces the whole contents.
 func (t *TextView) SetText(s string) { t.Text.Set(s) }
 

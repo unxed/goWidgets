@@ -7,18 +7,19 @@ import (
 	"github.com/unxed/goWidgets/backends/headless"
 )
 
-// The imgy stage-1 dialog, as a regression: in a column with slack, the
-// slack goes to the list (and the preview tied to it), not to a one-line
-// field nor to a label that hugs its height. Before one-line controls held
+// The imgy browser, as a regression: in a column with slack, it goes to the
+// list and preview, not to a one-line field nor to a label that hugs its height.
+// Before one-line controls held
 // their natural height at medium, the text field came out 444 pixels tall.
 func TestColumnSlackGoesToTheList(t *testing.T) {
 	app := newHeadlessApp(t)
 	win, _ := app.NewWindow("imgy", 1040, 680)
-	title, _ := win.AddLabel("imgy — FastStone-inspired image browser")
+	title, _ := win.AddLabel("imgy — image browser")
 	pathEdit, _ := win.AddEdit("/tmp")
 	open, _ := win.AddButton("Открыть папку")
 	files, _ := win.AddListBox(nil)
-	preview, _ := win.AddLabel("Выберите изображение\n\nPreview")
+	preview, _ := win.AddImageView()
+	preview.SetPath("selected.png")
 	info, _ := win.AddLabel("Файлов: 0")
 	fullscreen, _ := win.AddButton("Полный экран")
 	status, _ := win.AddLabel("Этап 1")

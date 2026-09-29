@@ -221,7 +221,7 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h),
-		Stretchy:   kind == KindListBox || kind == KindTextView,
+		Stretchy:   kind == KindListBox || kind == KindTextView || kind == KindImageView,
 		SingleLine: kind == KindButton || kind == KindCheckBox || kind == KindEdit || kind == KindComboBox}
 	a.nodes[h] = n
 	root := a.nodes[a.root]

@@ -64,87 +64,89 @@ func NthWidgetHandle(kind core.WidgetKind, i int) uintptr {
 }
 
 var (
-	gtkInitCheck    func(argc, argv uintptr) int32
-	gtkMain         func()
-	gtkMainQuit     func()
-	gtkWindowNew    func(kind int32) uintptr
-	gtkWinSetTitle  func(win uintptr, title string)
-	gtkWinSetSize   func(win uintptr, w, h int32)
-	gtkContAdd      func(container, child uintptr)
-	gtkFixedNew     func() uintptr
-	gtkFixedPut     func(fixed, child uintptr, x, y int32)
-	gtkFixedMove    func(fixed, child uintptr, x, y int32)
-	gtkSetSizeReq   func(w uintptr, width, height int32)
-	gtkButtonNew    func(label string) uintptr
-	gtkButtonLabel  func(button uintptr, label string)
-	gtkCheckNew     func(label string) uintptr
-	gtkToggleGet    func(w uintptr) int32
-	gtkToggleSet    func(w uintptr, active int32)
-	gtkLabelNew     func(text string) uintptr
-	gtkLabelText    func(label uintptr, text string)
-	gtkLabelXAlign  func(label uintptr, x float32)
-	gtkTextViewNew  func() uintptr
-	gtkTextViewBuf  func(tv uintptr) uintptr
-	gtkTextViewEdit func(tv uintptr, editable int32)
-	gtkTextViewWrap func(tv uintptr, mode int32)
-	gtkTextBufSet   func(buf uintptr, text string, length int32)
-	gtkScrollNew    func(h, v uintptr) uintptr
-	gtkScrollPolicy func(sw uintptr, h, v int32)
-	gtkTextViewMono func(tv uintptr, mono int32)
-	gtkEntryNew     func() uintptr
-	gtkGrabFocus    func(w uintptr)
-	gtkDialogNew    func() uintptr
-	gtkDialogArea   func(d uintptr) uintptr
-	gtkDialogAddBtn func(d uintptr, text string, response int32) uintptr
-	gtkDialogDefRsp func(d uintptr, response int32)
-	gtkDialogRun    func(d uintptr) int32
-	gtkDialogResp   func(d uintptr, response int32)
-	gtkWinTransient func(win, parent uintptr)
-	gtkWinSetModal  func(win uintptr, modal int32)
-	gtkWinResizable func(win uintptr, resizable int32)
-	gtkContBorder   func(container uintptr, width uint32)
-	gtkLabelWrap    func(label uintptr, wrap int32)
-	gDgettext       func(domain, msgid string) string
-	gFree           func(p *byte)
-	gtkChooserNew   func(action int32) uintptr
-	gtkChooserGet   func(chooser uintptr) *byte
-	gtkChooserSet   func(chooser uintptr, filename string) int32
-	gtkChooserName  func(chooser uintptr, name string)
-	gtkChooserFilt  func(chooser uintptr, filter uintptr)
-	gtkChooserOverw func(chooser uintptr, confirm int32)
-	gtkFilterNew    func() uintptr
-	gtkFilterName   func(filter uintptr, name string)
-	gtkFilterAddPat func(filter uintptr, pattern string)
-	gtkBoxPack      func(box, child uintptr, expand, fill int32, padding uint32)
-	gtkComboNew     func() uintptr
-	gtkComboNewEnt  func() uintptr
-	gtkComboAppend  func(cb uintptr, text string)
-	gtkComboClear   func(cb uintptr)
-	gtkComboActive  func(cb uintptr) int32
-	gtkComboSetAct  func(cb uintptr, index int32)
-	gtkComboText    func(cb uintptr) *byte
-	gtkListNew      func() uintptr
-	gtkListInsert   func(box, child uintptr, position int32)
-	gtkListSelect   func(box, row uintptr)
-	gtkListUnselect func(box uintptr)
-	gtkListRowAt    func(box uintptr, index int32) uintptr
-	gtkListRowIndex func(row uintptr) int32
-	gtkListSelRow   func(box uintptr) uintptr
-	gtkListActivate func(box uintptr, single int32)
-	gtkMarginStart  func(w uintptr, margin int32)
-	gtkMarginEnd    func(w uintptr, margin int32)
-	gtkEntrySetText func(e uintptr, text string)
-	gtkEntryGetText func(e uintptr) string
-	gtkWidgetShow   func(w uintptr)
-	gtkWidgetHide   func(w uintptr)
-	gtkWidgetDestr  func(w uintptr)
-	gtkSetSensit    func(w uintptr, sensitive int32)
-	gtkPreferred    func(w uintptr, min, nat unsafe.Pointer)
-	gtkScaleFactor  func(w uintptr) int32
-	gtkAllocW       func(w uintptr) int32
-	gtkAllocH       func(w uintptr) int32
-	gSignalConnect  func(inst uintptr, sig string, handler, data, destroy uintptr, flags uint32) uint64
-	gIdleAdd        func(fn, data uintptr) uint32
+	gtkInitCheck     func(argc, argv uintptr) int32
+	gtkMain          func()
+	gtkMainQuit      func()
+	gtkWindowNew     func(kind int32) uintptr
+	gtkWinSetTitle   func(win uintptr, title string)
+	gtkWinSetSize    func(win uintptr, w, h int32)
+	gtkContAdd       func(container, child uintptr)
+	gtkFixedNew      func() uintptr
+	gtkFixedPut      func(fixed, child uintptr, x, y int32)
+	gtkFixedMove     func(fixed, child uintptr, x, y int32)
+	gtkSetSizeReq    func(w uintptr, width, height int32)
+	gtkButtonNew     func(label string) uintptr
+	gtkButtonLabel   func(button uintptr, label string)
+	gtkCheckNew      func(label string) uintptr
+	gtkToggleGet     func(w uintptr) int32
+	gtkToggleSet     func(w uintptr, active int32)
+	gtkLabelNew      func(text string) uintptr
+	gtkLabelText     func(label uintptr, text string)
+	gtkLabelXAlign   func(label uintptr, x float32)
+	gtkImageNew      func() uintptr
+	gtkImageFromFile func(image uintptr, path string)
+	gtkTextViewNew   func() uintptr
+	gtkTextViewBuf   func(tv uintptr) uintptr
+	gtkTextViewEdit  func(tv uintptr, editable int32)
+	gtkTextViewWrap  func(tv uintptr, mode int32)
+	gtkTextBufSet    func(buf uintptr, text string, length int32)
+	gtkScrollNew     func(h, v uintptr) uintptr
+	gtkScrollPolicy  func(sw uintptr, h, v int32)
+	gtkTextViewMono  func(tv uintptr, mono int32)
+	gtkEntryNew      func() uintptr
+	gtkGrabFocus     func(w uintptr)
+	gtkDialogNew     func() uintptr
+	gtkDialogArea    func(d uintptr) uintptr
+	gtkDialogAddBtn  func(d uintptr, text string, response int32) uintptr
+	gtkDialogDefRsp  func(d uintptr, response int32)
+	gtkDialogRun     func(d uintptr) int32
+	gtkDialogResp    func(d uintptr, response int32)
+	gtkWinTransient  func(win, parent uintptr)
+	gtkWinSetModal   func(win uintptr, modal int32)
+	gtkWinResizable  func(win uintptr, resizable int32)
+	gtkContBorder    func(container uintptr, width uint32)
+	gtkLabelWrap     func(label uintptr, wrap int32)
+	gDgettext        func(domain, msgid string) string
+	gFree            func(p *byte)
+	gtkChooserNew    func(action int32) uintptr
+	gtkChooserGet    func(chooser uintptr) *byte
+	gtkChooserSet    func(chooser uintptr, filename string) int32
+	gtkChooserName   func(chooser uintptr, name string)
+	gtkChooserFilt   func(chooser uintptr, filter uintptr)
+	gtkChooserOverw  func(chooser uintptr, confirm int32)
+	gtkFilterNew     func() uintptr
+	gtkFilterName    func(filter uintptr, name string)
+	gtkFilterAddPat  func(filter uintptr, pattern string)
+	gtkBoxPack       func(box, child uintptr, expand, fill int32, padding uint32)
+	gtkComboNew      func() uintptr
+	gtkComboNewEnt   func() uintptr
+	gtkComboAppend   func(cb uintptr, text string)
+	gtkComboClear    func(cb uintptr)
+	gtkComboActive   func(cb uintptr) int32
+	gtkComboSetAct   func(cb uintptr, index int32)
+	gtkComboText     func(cb uintptr) *byte
+	gtkListNew       func() uintptr
+	gtkListInsert    func(box, child uintptr, position int32)
+	gtkListSelect    func(box, row uintptr)
+	gtkListUnselect  func(box uintptr)
+	gtkListRowAt     func(box uintptr, index int32) uintptr
+	gtkListRowIndex  func(row uintptr) int32
+	gtkListSelRow    func(box uintptr) uintptr
+	gtkListActivate  func(box uintptr, single int32)
+	gtkMarginStart   func(w uintptr, margin int32)
+	gtkMarginEnd     func(w uintptr, margin int32)
+	gtkEntrySetText  func(e uintptr, text string)
+	gtkEntryGetText  func(e uintptr) string
+	gtkWidgetShow    func(w uintptr)
+	gtkWidgetHide    func(w uintptr)
+	gtkWidgetDestr   func(w uintptr)
+	gtkSetSensit     func(w uintptr, sensitive int32)
+	gtkPreferred     func(w uintptr, min, nat unsafe.Pointer)
+	gtkScaleFactor   func(w uintptr) int32
+	gtkAllocW        func(w uintptr) int32
+	gtkAllocH        func(w uintptr) int32
+	gSignalConnect   func(inst uintptr, sig string, handler, data, destroy uintptr, flags uint32) uint64
+	gIdleAdd         func(fn, data uintptr) uint32
 )
 
 // requisition mirrors GtkRequisition.
@@ -243,6 +245,8 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkLabelNew, lib, "gtk_label_new")
 	purego.RegisterLibFunc(&gtkLabelText, lib, "gtk_label_set_text")
 	purego.RegisterLibFunc(&gtkLabelXAlign, lib, "gtk_label_set_xalign")
+	purego.RegisterLibFunc(&gtkImageNew, lib, "gtk_image_new")
+	purego.RegisterLibFunc(&gtkImageFromFile, lib, "gtk_image_set_from_file")
 	purego.RegisterLibFunc(&gtkTextViewNew, lib, "gtk_text_view_new")
 	purego.RegisterLibFunc(&gtkTextViewBuf, lib, "gtk_text_view_get_buffer")
 	purego.RegisterLibFunc(&gtkTextViewEdit, lib, "gtk_text_view_set_editable")
@@ -533,6 +537,7 @@ type node struct {
 	inner  uintptr // the text view itself, when different from handle
 	kind   core.WidgetKind
 	items  []string // list box rows, for event text
+	path   string   // image view file
 }
 
 // itemText is a list node's i-th item, or "".
@@ -586,6 +591,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindLabel:
 		g = gtkLabelNew("")
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
+	case core.KindImageView:
+		g = gtkImageNew()
 	case core.KindEdit:
 		g = gtkEntryNew()
 	case core.KindComboBox:
@@ -668,7 +675,15 @@ func (w *window) SetParent(child, parent core.Handle, index int) {
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropText {
+	if n == nil {
+		return
+	}
+	if p == core.PropImagePath && n.kind == core.KindImageView {
+		n.path = v
+		gtkImageFromFile(n.handle, v)
+		return
+	}
+	if p != core.PropText {
 		return
 	}
 	switch n.kind {

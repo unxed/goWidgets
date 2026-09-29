@@ -409,6 +409,10 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		n.view, n.inner = newList()
 	case core.KindTextView:
 		n.view, n.inner = newTextView()
+	case core.KindImageView:
+		n.view = msg(msg(cls("NSImageView"), "alloc"), "initWithFrame:", nsRect{})
+		msg(n.view, "autorelease")
+		msg(n.view, "setImageScaling:", uint64(3)) // NSImageScaleProportionallyUpOrDown
 	default:
 		return 0, fmt.Errorf("cocoa: unsupported widget kind %v", kind)
 	}
@@ -498,7 +502,18 @@ func (w *window) SetParent(child, parent core.Handle, index int) {}
 
 func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	n := w.nodes[h]
-	if n == nil || p != core.PropText {
+	if n == nil {
+		return
+	}
+	if p == core.PropImagePath && n.kind == core.KindImageView {
+		var image objc.ID
+		if v != "" {
+			image = msg(cls("NSImage"), "imageWithContentsOfFile:", nsString(v))
+		}
+		msg(n.view, "setImage:", image)
+		return
+	}
+	if p != core.PropText {
 		return
 	}
 	switch n.kind {
