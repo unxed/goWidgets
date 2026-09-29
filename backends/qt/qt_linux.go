@@ -209,6 +209,8 @@ func (r *resolver) bindAll() {
 	r.fn(&qCheckBoxNew, "_ZN9QCheckBoxC1EP7QWidget")
 	r.fn(&qSetChecked, "_ZN15QAbstractButton10setCheckedEb")
 
+	r.bindDialogs()
+
 	sigClicked = r.signal("15QAbstractButton", "_ZN15QAbstractButton7clickedEb")
 	sigToggled = r.signal("15QAbstractButton", "_ZN15QAbstractButton7toggledEb")
 	r.fn(&qLineEditNew, "_ZN9QLineEditC1EP7QWidget")
@@ -803,14 +805,6 @@ func (w *window) Focus(h core.Handle) {
 	}
 }
 
-func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogResult {
-	return core.DialogCancel
-}
-
-func (w *window) FileDialog(save bool, title, suggested string, filters []core.FileFilter) (string, bool) {
-	return "", false
-}
-
 // sizeHint calls a virtual QSize-returning getter; QSize comes back packed in
 // one register. An invalid size (-1) reads as zero.
 func sizeHint(obj uintptr, slot int) core.Size {
@@ -910,6 +904,3 @@ func (w *window) sortTabOrder() {
 		qSetTabOrder(ns[i-1].handle, ns[i].handle)
 	}
 }
-
-// loadTranslations is filled in with the dialogs, whose button texts need it.
-func loadTranslations() {}
