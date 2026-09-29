@@ -8,7 +8,6 @@ package win32test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
