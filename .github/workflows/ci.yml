@@ -13,14 +13,19 @@ jobs:
         with:
           go-version: '1.26'
 
-      # GTK is loaded at run time through purego, so it is needed for the tests
-      # but never linked. stalonetray is a standalone panel: it is what turns
-      # "does the icon dock?" from a question for a human into an assertion.
-      - name: Install GTK and a tray manager
+      # GTK and Qt are loaded at run time through purego, so they are needed
+      # for the tests but never linked. Both Qt majors: backends/qt/qttest runs
+      # every scenario on Qt 6 and on Qt 5. The translations are what makes
+      # a message box say «Да»; xdotool types real keystrokes through the X
+      # server. stalonetray is a standalone panel: it is what turns "does the
+      # icon dock?" from a question for a human into an assertion.
+      - name: Install GTK, Qt 6, Qt 5 and a tray manager
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-3-0 libglib2.0-0 xvfb stalonetray
+            libgtk-3-0 libglib2.0-0 xvfb stalonetray xdotool \
+            libqt6widgets6t64 libqt5widgets5t64 \
+            qt6-translations-l10n qttranslations5-l10n
 
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -30,8 +35,8 @@ jobs:
           go vet ./...
           GOOS=windows go vet ./...
 
-      # Xvfb gives a display, stalonetray gives a panel, so the GTK backend and
-      # the tray are exercised for real rather than skipped.
+      # Xvfb gives a display, stalonetray gives a panel, so the GTK and Qt
+      # backends and the tray are exercised for real rather than skipped.
       - name: Tests with a display and a panel
         run: xvfb-run -a go test -race ./...
 
