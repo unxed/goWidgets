@@ -511,6 +511,16 @@ func (w *Window) AddCheckBox(text string, checked bool) (*CheckBox, error) {
 // Key is a keystroke, in the winkeys vocabulary shared with unxed/vtinput.
 type Key = core.KeyEvent
 
+// MacKeyboard says how Command and Option read on a Mac: Wine's Mac driver
+// options, with Wine's defaults (Command is Alt, Option types characters).
+// See core.MacKeyboard.
+type MacKeyboard = core.MacKeyboard
+
+// SetMacKeyboard sets the Mac keyboard options, for instance Command as
+// Ctrl. Without it the goWidgets_MAC_KEYBOARD environment variable decides.
+// Other platforms ignore it.
+func SetMacKeyboard(k MacKeyboard) { core.SetMacKeyboard(k) }
+
 // KeyPressed fires for every key pressed or released while the window has
 // focus. Handlers run on the UI thread like every other event.
 //

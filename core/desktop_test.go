@@ -47,3 +47,14 @@ func indexOf(xs []string, x string) int {
 	}
 	return -1
 }
+
+func TestParseMacKeyboard(t *testing.T) {
+	got := ParseMacKeyboard(" LeftCommandIsCtrl, rightcommandisctrl,,RightOptionIsAlt,bogus")
+	want := MacKeyboard{LeftCommandIsCtrl: true, RightCommandIsCtrl: true, RightOptionIsAlt: true}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+	if (ParseMacKeyboard("") != MacKeyboard{}) {
+		t.Error("empty string should be Wine's defaults, all off")
+	}
+}
