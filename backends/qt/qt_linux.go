@@ -108,8 +108,11 @@ var (
 	qLabelText     func(l uintptr, text *qstring)
 	qPushButtonNew func(this unsafe.Pointer, parent uintptr)
 	qButtonText    func(b uintptr, text *qstring)
+	qCheckBoxNew   func(this unsafe.Pointer, parent uintptr)
+	qSetChecked    func(b uintptr, on bool)
 
 	sigClicked signal
+	sigToggled signal
 
 	slotSizeHint    int
 	slotMinSizeHint int
@@ -161,7 +164,11 @@ func (r *resolver) bindAll() {
 	r.fn(&qPushButtonNew, "_ZN11QPushButtonC1EP7QWidget")
 	r.fn(&qButtonText, "_ZN15QAbstractButton7setTextERK7QString")
 
+	r.fn(&qCheckBoxNew, "_ZN9QCheckBoxC1EP7QWidget")
+	r.fn(&qSetChecked, "_ZN15QAbstractButton10setCheckedEb")
+
 	sigClicked = r.signal("15QAbstractButton", "_ZN15QAbstractButton7clickedEb")
+	sigToggled = r.signal("15QAbstractButton", "_ZN15QAbstractButton7toggledEb")
 
 	if slotSizeHint = vslot("_ZTV7QWidget", "_ZNK7QWidget8sizeHintEv", 64); slotSizeHint < 0 {
 		r.missing = append(r.missing, "QWidget::sizeHint slot")
@@ -481,6 +488,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		qLabelCtor(obj, w.handle, 0)
 	case core.KindButton:
 		qPushButtonNew(obj, w.handle)
+	case core.KindCheckBox:
+		qCheckBoxNew(obj, w.handle)
 	default:
 		return 0, fmt.Errorf("qt: unsupported widget kind %v", kind)
 	}
@@ -491,6 +500,12 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindButton:
 		connect(g, sigClicked, func(*[4]unsafe.Pointer) {
 			emit(core.BackendEvent{Kind: core.EventClicked, H: h})
+		})
+	case core.KindCheckBox:
+		// toggled(bool) fires for setChecked too, like GTK's "toggled";
+		// core tells the program's own writes apart by value.
+		connect(g, sigToggled, func(a *[4]unsafe.Pointer) {
+			emit(core.BackendEvent{Kind: core.EventToggled, H: h, Bool: *(*bool)(a[1])})
 		})
 	}
 	qWidgetShow(g)
@@ -515,8 +530,8 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 	}
 	qstr(v, func(s *qstring) {
 		switch n.kind {
-		case core.KindButton:
-			qButtonText(n.handle, s)
+		case core.KindButton, core.KindCheckBox:
+			qButtonText(n.handle, s) // both are QAbstractButtons
 		case core.KindLabel:
 			qLabelText(n.handle, s)
 		}
@@ -536,6 +551,10 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 			qWidgetShow(n.handle)
 		} else {
 			qWidgetHide(n.handle)
+		}
+	case core.PropChecked:
+		if n.kind == core.KindCheckBox {
+			qSetChecked(n.handle, v)
 		}
 	}
 }
