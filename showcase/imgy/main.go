@@ -166,4 +166,3 @@ func formatBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.1f KiB", float64(n)/1024)
 }
-
