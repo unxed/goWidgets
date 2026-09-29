@@ -89,11 +89,11 @@ var (
 	pReleaseDC          = user32.NewProc("ReleaseDC")
 	pInvalidateRect     = user32.NewProc("InvalidateRect")
 
-	pGdiplusStartup            = gdiplus.NewProc("GdiplusStartup")
-	pGdipCreateBitmapFromFile  = gdiplus.NewProc("GdipCreateBitmapFromFile")
-	pGdipCreateHBITMAPFromBmp  = gdiplus.NewProc("GdipCreateHBITMAPFromBitmap")
-	pGdipDisposeImage          = gdiplus.NewProc("GdipDisposeImage")
-	pDeleteObject              = gdi32.NewProc("DeleteObject")
+	pGdiplusStartup           = gdiplus.NewProc("GdiplusStartup")
+	pGdipCreateBitmapFromFile = gdiplus.NewProc("GdipCreateBitmapFromFile")
+	pGdipCreateHBITMAPFromBmp = gdiplus.NewProc("GdipCreateHBITMAPFromBitmap")
+	pGdipDisposeImage         = gdiplus.NewProc("GdipDisposeImage")
+	pDeleteObject             = gdi32.NewProc("DeleteObject")
 
 	pCreateFontIndirectW = gdi32.NewProc("CreateFontIndirectW")
 	pSelectObject        = gdi32.NewProc("SelectObject")
