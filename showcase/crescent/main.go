@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/unxed/goWidgets"
+	_ "github.com/unxed/goWidgets/backends/cocoa"
 	_ "github.com/unxed/goWidgets/backends/gtk"
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"

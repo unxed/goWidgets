@@ -78,3 +78,40 @@ jobs:
         run: go build -ldflags="-H windowsgui" -o crescent.exe ./showcase/crescent
         env:
           CGO_ENABLED: 0
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: go vet
+        run: go vet ./...
+
+      # The runner has a logged-in GUI session, so backends/cocoa/cocoatest
+      # opens real AppKit windows, alerts, panels and a status item. The
+      # snapshot is the controls window rendered by AppKit itself, kept as
+      # an artifact for a human to look at.
+      - name: Cocoa tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/snapshots"
+          go test -v -count=1 ./backends/cocoa/...
+        env:
+          GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
+
+      - name: Tests
+        run: go test ./...
+
+      - name: Build the showcase
+        run: go build -o /tmp/crescent ./showcase/crescent
+        env:
+          CGO_ENABLED: 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-snapshots
+          path: ${{ runner.temp }}/snapshots
+          if-no-files-found: ignore

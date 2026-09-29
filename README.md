@@ -1,16 +1,17 @@
 # goWidgets
 
 Кроссплатформенный GUI для Go на **нативных контролах ОС**, без CGO.
-Один и тот же код открывает окно с настоящими Win32-контролами на Windows, а на
-Linux — с настоящими GTK- или Qt-виджетами, смотря какой тулкит родной для
-рабочего стола.
+Один и тот же код открывает окно с настоящими Win32-контролами на Windows,
+с настоящими AppKit-контролами на macOS, а на Linux — с GTK- или
+Qt-виджетами, смотря какой тулкит родной для рабочего стола.
 
 Нормативный дизайн: [`docs/disdoc.md`](docs/disdoc.md). Решения, отклоняющиеся
 от него, фиксируются в [`docs/adr/`](docs/adr/).
 
 > **Статус: ранняя итерация.** Работают окно, `Label`, `Button`, `CheckBox`,
 > `Edit`, `ComboBox`, `ListBox`, `TextView`, модальные сообщения и файловые диалоги, иконка в трее с меню, layout на констрейнтах (Cassowary) и
-> реактивные свойства — на Win32, GTK 3 и Qt (6 и 5). Нет: анимаций, Cocoa, Web.
+> реактивные свойства — на Win32, Cocoa (macOS), GTK 3 и Qt (6 и 5). Нет:
+> анимаций, Web.
 
 ## Пример
 
@@ -19,6 +20,7 @@ package main
 
 import (
 	"github.com/unxed/goWidgets"
+	_ "github.com/unxed/goWidgets/backends/cocoa"
 	_ "github.com/unxed/goWidgets/backends/gtk"
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"
@@ -204,6 +206,24 @@ Lumina, Lomiri; для старых сессий — `KDE_FULL_SESSION`/`DESKTOP
 `goWidgets_BACKEND=qt6` или `qt5` фиксирует версию. Как Qt без C API
 вызывается без CGO — ADR-0013.
 
+### macOS
+
+Драйвер `cocoa` — AppKit через рантайм Objective-C, тоже без CGO
+(ADR-0014). AppKit работает только на главном потоке, поэтому
+`goWidgets.NewApp` нужно вызывать из `main` (пакет драйвера сам
+закрепляет главную горутину за главным потоком).
+
+Клавиши переводятся в `Key` так же, как это делает Mac-драйвер Wine:
+Command читается как Alt, Option печатает символы. Привычную многим
+перестановку «Command — это Ctrl» (и Option как Alt) включают те же
+переключатели, что и в Wine:
+
+```go
+goWidgets.SetMacKeyboard(goWidgets.MacKeyboard{LeftCommandIsCtrl: true, RightCommandIsCtrl: true, LeftOptionIsAlt: true})
+```
+
+или, без изменения программы, `goWidgets_MAC_KEYBOARD=LeftCommandIsCtrl,RightCommandIsCtrl`.
+
 ## Трей
 
 ```go
@@ -221,7 +241,8 @@ tray.Activated.On(app.Scope(), func(struct{}) { win.Show() })
 ради этого трей и нужен. Закрытие окна отменяется через `Closing` и превращается
 в `Hide`.
 
-На Windows это `Shell_NotifyIcon`. На Qt — `QSystemTrayIcon`, который сам
+На Windows это `Shell_NotifyIcon`, на macOS — `NSStatusItem` в строке меню
+(левый клик — `Activated`, правый — меню). На Qt — `QSystemTrayIcon`, который сам
 выбирает протокол: `StatusNotifierItem` по D-Bus там, где он есть (Plasma),
 XEmbed-трей в остальных случаях. На GTK — `GtkStatusIcon`: он объявлен
 устаревшим в GTK 3.14, но присутствует и работает в 3.24, и панели Cinnamon,
@@ -241,7 +262,7 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
         │                  Handle + Rect в DIP, батч-команды
    core                    node registry, scheduler, конвейер кадра
         │
-   backends/*              headless | gtk | qt | win32
+   backends/*              headless | cocoa | gtk | qt | win32
 ```
 
 Строгое правило: `backends/* → core` можно, `core → backends/*` нельзя.
@@ -249,8 +270,10 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
 
 **Layout принадлежит Core.** Нативные sizer'ы не используются: Core считает
 абсолютные прямоугольники и отдаёт их бэкенду батчем. На Win32 это `SetWindowPos`,
-на GTK — `GtkFixed`, на Qt — `setGeometry` детей окна без `QLayout`. Естественные размеры при этом спрашиваются у платформы
-(`MeasureIntrinsic`), иначе текст не разместить корректно.
+на GTK — `GtkFixed`, на Qt — `setGeometry` детей окна без `QLayout`, на
+Cocoa — `setFrame:` в перевёрнутом content view, без Auto Layout.
+Естественные размеры при этом спрашиваются у платформы (`MeasureIntrinsic`),
+иначе текст не разместить корректно.
 
 **Без CGO.** На Windows — `golang.org/x/sys/windows` и `syscall.NewCallback`.
 На Linux — динамическая загрузка GTK через
@@ -270,7 +293,7 @@ XFCE, MATE и KDE его принимают. `StatusNotifierItem` формаль
   диагностика, тест двусторонней привязки `CheckBox`, тест на утечки
   подписок, тест glitch-free `Batch`.
 * `CGO_ENABLED=0` сборка под `windows/amd64`, `windows/arm64`, `linux/amd64`,
-  `linux/arm64`, `darwin/arm64` (последняя уходит на headless — драйвера Cocoa ещё нет).
+  `linux/arm64`, `darwin/arm64`.
 * GTK 3: `Edit` под Xvfb — текст в обе стороны, `Changed`, `Activated`,
   без эха; скриншот showcase с полем ввода.
 * GTK 3: клавиатурное событие, построенное через `gdk_event_new` и поданное в
