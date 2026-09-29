@@ -101,6 +101,12 @@ func main() {
 	info.HugHeight()
 	fullscreen.HugWidth()
 	open.HugWidth()
+	// The title and the status line are one-line rows: the vertical slack
+	// belongs to the list and the preview between them. Without these the
+	// solver gave it to the status line, which is one label and so cheaper
+	// to stretch than the list and the preview together.
+	title.HugHeight()
+	status.HugHeight()
 
 	var entries []imageEntry
 	var folder string
