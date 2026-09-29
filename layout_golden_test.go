@@ -61,6 +61,34 @@ func TestGoldenStackLayout(t *testing.T) {
 	}
 }
 
+// This is the layout-side gate for the Win32 first-frame clipping bug: a
+// bottom-anchored button must remain wholly inside the client area on the
+// first solve, independently of any native repaint or hover event.
+func TestAutoLayoutKeepsBottomButtonInsideClient(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, err := app.NewWindow("first-frame", 400, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	button, err := win.AddButton("Пауза")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := win.Constrain(
+		button.Left().Eq(win.Left().Plus(8)),
+		button.Right().Eq(win.Right().Minus(8)),
+		button.Bottom().Eq(win.Bottom().Minus(8)),
+	); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+
+	if got := strings.TrimSpace(headless.Golden()); !strings.Contains(got,
+		`Button("Пауза") x=8.0 y=256.0 w=384.0 h=36.0 visible=true`) {
+		t.Fatalf("bottom button escaped the client area or changed size:\n%s", got)
+	}
+}
+
 // A text change must invalidate the cached intrinsic size. Asserting on
 // rectangles would be wrong here: in a full-width stack neither the width nor
 // the height of a row depends on its text, so a correct implementation emits no

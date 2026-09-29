@@ -8,7 +8,6 @@ package win32test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -228,7 +227,9 @@ func TestEditFocusAndKeys(t *testing.T) {
 	} else if !editFound {
 		t.Error("no file-name field (1152/1148) in the open-file dialog")
 	}
-	if !openedOK || !strings.EqualFold(openedPath, tmpFile) {
+	openedInfo, openedErr := os.Stat(openedPath)
+	wantInfo, wantErr := os.Stat(tmpFile)
+	if !openedOK || openedErr != nil || wantErr != nil || !os.SameFile(openedInfo, wantInfo) {
 		t.Errorf("OpenFile = %q, %v; want %q, true", openedPath, openedOK, tmpFile)
 	}
 }

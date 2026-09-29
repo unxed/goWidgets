@@ -13,6 +13,7 @@ package win32
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,14 +74,17 @@ var (
 	pGetKeyState        = user32.NewProc("GetKeyState")
 	pSetWindowPos       = user32.NewProc("SetWindowPos")
 	pGetClientRect      = user32.NewProc("GetClientRect")
+	pAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
 	pEnableWindow       = user32.NewProc("EnableWindow")
 	pLoadCursorW        = user32.NewProc("LoadCursorW")
 	pSysParamsInfoW     = user32.NewProc("SystemParametersInfoW")
 	pGetDpiForWindow    = user32.NewProc("GetDpiForWindow")
+	pGetDpiForSystem    = user32.NewProc("GetDpiForSystem")
 	pSetProcessDpiCtx   = user32.NewProc("SetProcessDpiAwarenessContext")
 	pSetProcessDPIAware = user32.NewProc("SetProcessDPIAware")
 	pGetDC              = user32.NewProc("GetDC")
 	pReleaseDC          = user32.NewProc("ReleaseDC")
+	pInvalidateRect     = user32.NewProc("InvalidateRect")
 
 	pCreateFontIndirectW = gdi32.NewProc("CreateFontIndirectW")
 	pSelectObject        = gdi32.NewProc("SelectObject")
@@ -499,10 +503,11 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 	if err != nil {
 		return nil, err
 	}
+	width, height := outerWindowSize(spec.Size)
 	h, _, e := pCreateWindowExW.Call(0,
 		uintptr(unsafe.Pointer(d.className)), uintptr(unsafe.Pointer(title)),
 		wsOverlappedWindow, cwUseDefault, cwUseDefault,
-		uintptr(int32(spec.Size.W)), uintptr(int32(spec.Size.H)),
+		width, height,
 		0, 0, uintptr(d.hInstance), 0)
 	if h == 0 {
 		return nil, fmt.Errorf("CreateWindowExW: %v", e)
@@ -519,6 +524,29 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 	w.nodes[w.root] = &node{hwnd: h}
 	d.win = w
 	return w, nil
+}
+
+// outerWindowSize converts the requested client area (which is expressed in
+// DIP by the public API) into the size CreateWindowEx expects: physical pixels
+// including the title bar and frame. Passing the client size as the outer size
+// makes the first layout larger than the actual client area. The first paint
+// then clips controls at the bottom until another repaint (for example, a
+// mouse hover) happens.
+func outerWindowSize(client core.Size) (uintptr, uintptr) {
+	s := 1.0
+	if pGetDpiForSystem.Find() == nil {
+		if dpi, _, _ := pGetDpiForSystem.Call(); dpi > 0 {
+			s = float64(dpi) / 96.0
+		}
+	}
+	r := rectW{
+		right:  int32(math.Round(client.W * s)),
+		bottom: int32(math.Round(client.H * s)),
+	}
+	if pAdjustWindowRectEx.Find() == nil {
+		pAdjustWindowRectEx.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+	}
+	return uintptr(int32(r.right - r.left)), uintptr(int32(r.bottom - r.top))
 }
 
 type node struct {
@@ -1076,8 +1104,14 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 			h += float64(ih) / s * comboListRows
 		}
 		pSetWindowPos.Call(n.hwnd, 0,
-			uintptr(int32(c.R.X*s)), uintptr(int32(c.R.Y*s)),
-			uintptr(int32(c.R.W*s)), uintptr(int32(h*s)), flags)
+			uintptr(int32(math.Round(c.R.X*s))), uintptr(int32(math.Round(c.R.Y*s))),
+			uintptr(int32(math.Round(c.R.W*s))), uintptr(int32(math.Round(h*s))), flags)
+		// A hidden child can receive its final bounds before the parent is
+		// shown. Some themed BUTTON implementations retain the first, tiny
+		// paint until another invalidation, which made the controls look
+		// vertically clipped until the pointer crossed them. Repaint after the
+		// final geometry is installed so the first visible frame is complete.
+		pInvalidateRect.Call(n.hwnd, 0, 1)
 		n.rect, n.visible = c.R, c.Visible
 	}
 	if len(changes) > 0 {
