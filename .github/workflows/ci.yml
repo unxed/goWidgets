@@ -23,7 +23,9 @@ jobs:
             libgtk-3-0 libglib2.0-0 xvfb stalonetray
 
       - name: gofmt
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+        run: |
+          gofmt -d showcase/imgy/main.go
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
 
       - name: go vet
         run: |
