@@ -292,7 +292,13 @@ func (w *window) SetBool(h core.Handle, p core.PropKey, v bool) {
 	case core.PropVisible:
 		n.visible = v
 	case core.PropChecked:
-		n.checked = v
+		// Like GTK's "toggled" and Qt's toggled(bool), a write the state
+		// changes is reported back; the program's own write must not reach
+		// Toggled, and a test can only see that if the event arrives.
+		if n.checked != v {
+			n.checked = v
+			w.events <- core.BackendEvent{Kind: core.EventToggled, H: h, Bool: v}
+		}
 	}
 }
 

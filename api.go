@@ -497,6 +497,10 @@ func (w *Window) AddCheckBox(text string, checked bool) (*CheckBox, error) {
 		bw.SetBool(wd.node.H, core.PropChecked, v)
 	})
 	wd.node.OnToggled = func(v bool) {
+		if v == cb.platformChecked {
+			// GTK and Qt report the program's own write as a toggle.
+			return
+		}
 		cb.platformChecked = v
 		cb.Checked.Set(v)
 		cb.Toggled.Emit(v)
