@@ -19,15 +19,17 @@ import (
 )
 
 var (
-	user32       = syscall.NewLazyDLL("user32.dll")
-	pGetFocus    = user32.NewProc("GetFocus")
-	pPostMessage = user32.NewProc("PostMessageW")
-	pFindWindow  = user32.NewProc("FindWindowW")
-	pGetDlgItem  = user32.NewProc("GetDlgItem")
-	pSetDlgText  = user32.NewProc("SetDlgItemTextW")
-	pSendMessage = user32.NewProc("SendMessageW")
-	pGetCtrlID   = user32.NewProc("GetDlgCtrlID")
-	pGetParent   = user32.NewProc("GetParent")
+	user32               = syscall.NewLazyDLL("user32.dll")
+	pGetFocus            = user32.NewProc("GetFocus")
+	pPostMessage         = user32.NewProc("PostMessageW")
+	pFindWindow          = user32.NewProc("FindWindowW")
+	pGetDlgItem          = user32.NewProc("GetDlgItem")
+	pSetDlgText          = user32.NewProc("SetDlgItemTextW")
+	pSendMessage         = user32.NewProc("SendMessageW")
+	pGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	pGetClassName        = user32.NewProc("GetClassNameW")
+	pGetCtrlID           = user32.NewProc("GetDlgCtrlID")
+	pGetParent           = user32.NewProc("GetParent")
 )
 
 const (
@@ -240,5 +242,59 @@ func TestEditFocusAndKeys(t *testing.T) {
 	wantInfo, wantErr := os.Stat(tmpFile)
 	if !openedOK || openedErr != nil || wantErr != nil || !os.SameFile(openedInfo, wantInfo) {
 		t.Errorf("OpenFile = %q, %v; want %q, true", openedPath, openedOK, tmpFile)
+	}
+}
+
+func TestSelectFolderDialog(t *testing.T) {
+	app, err := goWidgets.NewApp()
+	if err != nil {
+		t.Skipf("графическая подсистема недоступна: %v", err)
+	}
+	if app.Diagnostics().Name != "win32" {
+		t.Skipf("драйвер %s, а проверяется win32", app.Diagnostics().Name)
+	}
+	win, err := app.NewWindow("folder-dialog-test", 300, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := t.TempDir()
+	var got string
+	var ok bool
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		app.QueueUpdate(func() {
+			got, ok = win.SelectFolder("Выберите каталог", want)
+			close(done)
+		})
+		deadline := time.Now().Add(8 * time.Second)
+		for time.Now().Before(deadline) {
+			hwnd, _, _ := pGetForegroundWindow.Call()
+			className := make([]uint16, 64)
+			if hwnd != 0 {
+				pGetClassName.Call(hwnd, uintptr(unsafe.Pointer(&className[0])), uintptr(len(className)))
+				if syscall.UTF16ToString(className) == "#32770" {
+					pPostMessage.Call(hwnd, wmCommand, idOK, 0)
+					break
+				}
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+		}
+		app.Quit()
+	}()
+	if err := app.Run(win); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("native folder chooser never returned")
+	}
+	if !ok || got != want {
+		t.Errorf("SelectFolder = %q, %v; want %q, true", got, ok, want)
 	}
 }

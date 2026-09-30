@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	qMsgInformation  func(parent uintptr, title, text *qstring, buttons, def int32) int32
-	qMsgQuestion     func(parent uintptr, title, text *qstring, buttons, def int32) int32
-	qGetOpenFileName func(parent uintptr, caption, dir, filter *qstring, selected uintptr, options int32) qstring
-	qGetSaveFileName func(parent uintptr, caption, dir, filter *qstring, selected uintptr, options int32) qstring
-	qModalWidget     func() uintptr
+	qMsgInformation       func(parent uintptr, title, text *qstring, buttons, def int32) int32
+	qMsgQuestion          func(parent uintptr, title, text *qstring, buttons, def int32) int32
+	qGetOpenFileName      func(parent uintptr, caption, dir, filter *qstring, selected uintptr, options int32) qstring
+	qGetSaveFileName      func(parent uintptr, caption, dir, filter *qstring, selected uintptr, options int32) qstring
+	qGetExistingDirectory func(parent uintptr, caption, dir *qstring, options int32) qstring
+	qModalWidget          func() uintptr
 
 	qTranslatorCtor func(this unsafe.Pointer, parent uintptr)
 	qTranslatorLoad func(tr unsafe.Pointer, locale *qvalue, name, prefix, dir, suffix *qstring) bool
@@ -30,6 +31,7 @@ func (r *resolver) bindDialogs() {
 	const fileArgs = "EP7QWidgetRK7QStringS4_S4_PS2_6QFlagsINS_6OptionEE"
 	r.fn(&qGetOpenFileName, "_ZN11QFileDialog15getOpenFileName"+fileArgs)
 	r.fn(&qGetSaveFileName, "_ZN11QFileDialog15getSaveFileName"+fileArgs)
+	r.fn(&qGetExistingDirectory, "_ZN11QFileDialog20getExistingDirectoryEP7QWidgetRK7QStringS4_6QFlagsINS_6OptionEE")
 	r.fn(&qModalWidget, "_ZN12QApplication17activeModalWidgetEv")
 
 	r.fn(&qTranslatorCtor, "_ZN11QTranslatorC1EP7QObject")
@@ -128,6 +130,15 @@ func (w *window) FileDialog(save bool, title, suggested string, filters []core.F
 		} else {
 			path = takeString(qGetOpenFileName(w.handle, q[0], q[1], q[2], 0, 0))
 		}
+	})
+	return path, path != ""
+}
+
+// FolderDialog uses QFileDialog's native existing-directory picker.
+func (w *window) FolderDialog(title, initial string) (string, bool) {
+	var path string
+	withQStrings([]string{title, initial}, func(q []*qstring) {
+		path = takeString(qGetExistingDirectory(w.handle, q[0], q[1], 1)) // ShowDirsOnly
 	})
 	return path, path != ""
 }

@@ -106,3 +106,58 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 		t.Errorf("SaveFile = %q, %v; want …/новые-цели.txt, true", savedPath, savedOK)
 	}
 }
+
+func TestFolderDialogAgainstGTK(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("нет DISPLAY: запускать под Xvfb")
+	}
+	app, err := goWidgets.NewApp()
+	defer runtime.UnlockOSThread()
+	if err != nil {
+		t.Skipf("графическая подсистема недоступна: %v", err)
+	}
+	if app.Diagnostics().Name != "gtk" {
+		t.Skipf("драйвер %s, а проверяется gtk", app.Diagnostics().Name)
+	}
+	win, err := app.NewWindow("folder-dialog", 300, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := t.TempDir()
+	var got string
+	var ok bool
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		app.QueueUpdate(func() {
+			got, ok = win.SelectFolder("Выберите каталог", want)
+			close(done)
+		})
+		deadline := time.Now().Add(5 * time.Second)
+		for gtk.DialogHandle() == 0 && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		d := gtk.DialogHandle()
+		if d != 0 {
+			app.QueueUpdate(func() { gtk.SelectFolder(want) })
+			time.Sleep(300 * time.Millisecond)
+			app.QueueUpdate(func() { gtk.RespondDialog(d, 1) })
+		}
+		select {
+		case <-done:
+		case <-time.After(8 * time.Second):
+		}
+		app.Quit()
+	}()
+	if err := app.Run(win); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("folder chooser never returned")
+	}
+	if !ok || got != want {
+		t.Errorf("SelectFolder = %q, %v; want %q, true", got, ok, want)
+	}
+}

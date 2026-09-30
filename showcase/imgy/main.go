@@ -426,7 +426,11 @@ func main() {
 			}
 		})
 	}
-	openFolder.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { loadFolder(pathEdit.Text.Get()) })
+	openFolder.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if folder, ok := win.SelectFolder("Выберите папку с изображениями", pathEdit.Text.Get()); ok {
+			loadFolder(folder)
+		}
+	})
 	openImage.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { chooseImage() })
 	pathEdit.Activated.On(app.Scope(), func(string) { loadFolder(pathEdit.Text.Get()) })
 	win.KeyPressed().On(app.Scope(), func(key goWidgets.Key) {

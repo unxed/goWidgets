@@ -97,6 +97,7 @@ func (d *driver) Capabilities() core.Caps {
 		NativeControls:  true,
 		Clipboard:       true,
 		FileDialog:      true,
+		FolderDialog:    true,
 		Menus:           true,
 		Canvas:          true,
 		SmoothAnimation: true,
@@ -667,6 +668,10 @@ func (w *window) Dialog(kind core.DialogKind, title, text string) core.DialogRes
 
 func (w *window) FileDialog(save bool, title, suggested string, filters []core.FileFilter) (string, bool) {
 	return runPanel(save, title, suggested, filters)
+}
+
+func (w *window) FolderDialog(title, initial string) (string, bool) {
+	return runFolderPanel(title, initial)
 }
 
 // listRows is the natural height of a list box, in rows, as in the other

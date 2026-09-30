@@ -116,21 +116,23 @@ type node struct {
 }
 
 type window struct {
-	drv         *driver
-	title       string
-	size        core.Size
-	root        core.Handle
-	nextH       core.Handle
-	nodes       map[core.Handle]*node
-	events      chan core.BackendEvent
-	focused     core.Handle
-	textWrites  int
-	dialogs     []DialogRecord
-	answers     []core.DialogResult
-	fileDialogs []FileDialogRecord
-	fileAnswers []string
-	scale       core.ScaleInfo
-	canvases    map[core.Handle]*image.RGBA
+	drv           *driver
+	title         string
+	size          core.Size
+	root          core.Handle
+	nextH         core.Handle
+	nodes         map[core.Handle]*node
+	events        chan core.BackendEvent
+	focused       core.Handle
+	textWrites    int
+	dialogs       []DialogRecord
+	answers       []core.DialogResult
+	fileDialogs   []FileDialogRecord
+	fileAnswers   []string
+	folderDialogs []FolderDialogRecord
+	folderAnswers []string
+	scale         core.ScaleInfo
+	canvases      map[core.Handle]*image.RGBA
 
 	mu       sync.Mutex
 	log      []string
@@ -224,6 +226,46 @@ func (w *window) FileDialog(save bool, title, suggested string, filters []core.F
 		return p, p != ""
 	}
 	return "", false
+}
+
+// FolderDialog records a directory chooser and answers it from AnswerFolders;
+// with no scripted answer it behaves like a user cancelling the dialog.
+func (w *window) FolderDialog(title, initial string) (string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.folderDialogs = append(w.folderDialogs, FolderDialogRecord{Title: title, Initial: initial})
+	if len(w.folderAnswers) > 0 {
+		p := w.folderAnswers[0]
+		w.folderAnswers = w.folderAnswers[1:]
+		return p, p != ""
+	}
+	return "", false
+}
+
+// FolderDialogRecord is one directory chooser the program showed.
+type FolderDialogRecord struct {
+	Title, Initial string
+}
+
+// AnswerFolders scripts the selected paths for the next directory choosers;
+// an empty path is a cancel.
+func AnswerFolders(paths ...string) {
+	if current == nil {
+		return
+	}
+	current.mu.Lock()
+	current.folderAnswers = append(current.folderAnswers, paths...)
+	current.mu.Unlock()
+}
+
+// FolderDialogs lists the directory choosers shown so far.
+func FolderDialogs() []FolderDialogRecord {
+	if current == nil {
+		return nil
+	}
+	current.mu.Lock()
+	defer current.mu.Unlock()
+	return append([]FolderDialogRecord(nil), current.folderDialogs...)
 }
 
 // FileDialogRecord is one file dialog the program showed.

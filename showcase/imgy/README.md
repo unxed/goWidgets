@@ -16,7 +16,7 @@ Run it from this module with:
 go run ./showcase/imgy [image-file-or-folder]
 ```
 
-Use **Open folder** to browse a directory, select an image in the list, or use
+Use **Open folder** to choose a directory, select an image in the list, or use
 **Open image…** / **Ctrl+O** to choose a file. The mouse wheel goes to the
 previous or next naturally sorted image; **Ctrl+wheel** zooms around the
 pointer; **Shift+left-click / Shift+right-click** zoom in / out at the pointer.

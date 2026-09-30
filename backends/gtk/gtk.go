@@ -111,6 +111,7 @@ var (
 	gtkChooserNew    func(action int32) uintptr
 	gtkChooserGet    func(chooser uintptr) *byte
 	gtkChooserSet    func(chooser uintptr, filename string) int32
+	gtkChooserFolder func(chooser uintptr, filename string) int32
 	gtkChooserName   func(chooser uintptr, name string)
 	gtkChooserFilt   func(chooser uintptr, filter uintptr)
 	gtkChooserOverw  func(chooser uintptr, confirm int32)
@@ -193,6 +194,7 @@ func (d *driver) Capabilities() core.Caps {
 		NativeControls:  true,
 		Clipboard:       true,
 		FileDialog:      true,
+		FolderDialog:    true,
 		Menus:           true,
 		SmoothAnimation: true,
 		Canvas:          true,
@@ -277,6 +279,7 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkChooserNew, lib, "gtk_file_chooser_widget_new")
 	purego.RegisterLibFunc(&gtkChooserGet, lib, "gtk_file_chooser_get_filename")
 	purego.RegisterLibFunc(&gtkChooserSet, lib, "gtk_file_chooser_set_filename")
+	purego.RegisterLibFunc(&gtkChooserFolder, lib, "gtk_file_chooser_set_current_folder")
 	purego.RegisterLibFunc(&gtkChooserName, lib, "gtk_file_chooser_set_current_name")
 	purego.RegisterLibFunc(&gtkChooserFilt, lib, "gtk_file_chooser_add_filter")
 	purego.RegisterLibFunc(&gtkChooserOverw, lib, "gtk_file_chooser_set_do_overwrite_confirmation")
@@ -849,6 +852,43 @@ func (w *window) FileDialog(save bool, title, suggested string, filters []core.F
 	return path, path != ""
 }
 
+// FolderDialog uses GTK's native folder-selection action and can return only
+// a directory, never a file.
+func (w *window) FolderDialog(title, initial string) (string, bool) {
+	const (
+		actionSelectFolder = 2
+		responseAccept     = 1
+		responseReject     = 2
+	)
+	d := gtkDialogNew()
+	gtkWinSetTitle(d, title)
+	gtkWinTransient(d, w.handle)
+	gtkWinSetModal(d, 1)
+	gtkWinSetSize(d, 720, 520)
+	chooser := gtkChooserNew(actionSelectFolder)
+	if initial != "" {
+		gtkChooserFolder(chooser, initial)
+	}
+	gtkBoxPack(gtkDialogArea(d), chooser, 1, 1, 0)
+	gtkWidgetShow(chooser)
+	gtkDialogAddBtn(d, gDgettext("gtk30", "_Cancel"), responseReject)
+	gtkDialogAddBtn(d, gDgettext("gtk30", "_Select"), responseAccept)
+	gtkDialogDefRsp(d, responseAccept)
+	dialogMu.Lock()
+	dialogCurrent, chooserCurrent = d, chooser
+	dialogMu.Unlock()
+	resp := gtkDialogRun(d)
+	path := ""
+	if resp == responseAccept {
+		path = cString(gtkChooserGet(chooser))
+	}
+	dialogMu.Lock()
+	dialogCurrent, chooserCurrent = 0, 0
+	dialogMu.Unlock()
+	gtkWidgetDestr(d)
+	return path, path != ""
+}
+
 // cString copies a NUL-terminated string GTK allocated and frees it.
 func cString(p *byte) string {
 	if p == nil {
@@ -875,6 +915,14 @@ func SelectFile(path string) bool {
 	c := chooserCurrent
 	dialogMu.Unlock()
 	return c != 0 && gtkChooserSet(c, path) != 0
+}
+
+// SelectFolder points an active native folder chooser at path (test hook).
+func SelectFolder(path string) bool {
+	dialogMu.Lock()
+	c := chooserCurrent
+	dialogMu.Unlock()
+	return c != 0 && gtkChooserFolder(c, path) != 0
 }
 
 // DialogHandle returns the GtkDialog* currently running, or 0. A test hook:

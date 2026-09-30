@@ -114,3 +114,52 @@ func TestModalDialogs(t *testing.T) {
 		t.Errorf("SaveFile = %q, %v; want …/новые-цели.txt, true", savedPath, savedOK)
 	}
 }
+
+func TestExistingDirectoryDialog(t *testing.T) {
+	app := perMajor(t)
+	if app == nil {
+		return
+	}
+	win, _ := app.NewWindow("folder-dialog", 300, 100)
+	want := t.TempDir()
+	var got string
+	var ok bool
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		app.QueueUpdate(func() {
+			got, ok = win.SelectFolder("Выберите каталог", want)
+			close(done)
+		})
+		var d uintptr
+		deadline := time.Now().Add(5 * time.Second)
+		for d == 0 && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+			ready := make(chan uintptr, 1)
+			app.QueueUpdate(func() { ready <- qt.ModalWidget() })
+			d = <-ready
+		}
+		if d != 0 {
+			app.QueueUpdate(func() {
+				qt.CallWithString(qt.Sym("_ZN11QFileDialog12setDirectoryERK7QString"), d, want)
+				qt.Call(qt.Sym("_ZN11QFileDialog6acceptEv"), d)
+			})
+		}
+		select {
+		case <-done:
+		case <-time.After(8 * time.Second):
+		}
+		app.Quit()
+	}()
+	if err := app.Run(win); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("directory chooser never returned")
+	}
+	if !ok || got != want {
+		t.Errorf("SelectFolder = %q, %v; want %q, true", got, ok, want)
+	}
+}

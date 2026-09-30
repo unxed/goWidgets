@@ -118,6 +118,28 @@ func runPanel(save bool, title, suggested string, filters []core.FileFilter) (st
 	return path, path != ""
 }
 
+// runFolderPanel is NSOpenPanel configured to accept directories, not files.
+func runFolderPanel(title, initial string) (string, bool) {
+	p := msg(cls("NSOpenPanel"), "openPanel")
+	msg(p, "setCanChooseFiles:", false)
+	msg(p, "setCanChooseDirectories:", true)
+	msg(p, "setAllowsMultipleSelection:", false)
+	msg(p, "setCanCreateDirectories:", true)
+	msg(p, "setTitle:", nsString(title))
+	msg(p, "setMessage:", nsString(title))
+	if initial != "" {
+		msg(p, "setDirectoryURL:", msg(cls("NSURL"), "fileURLWithPath:", nsString(initial)))
+	}
+	setDialog(p)
+	r := int64(msg(p, "runModal"))
+	setDialog(0)
+	if r != modalResponseOK {
+		return "", false
+	}
+	path := goString(msg(msg(p, "URL"), "path"))
+	return path, path != ""
+}
+
 func extensions(filters []core.FileFilter) ([]string, bool) {
 	var exts []string
 	for _, f := range filters {

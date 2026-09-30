@@ -308,6 +308,7 @@ func (d *driver) Capabilities() core.Caps {
 		NativeControls:  true,
 		Clipboard:       true,
 		FileDialog:      true,
+		FolderDialog:    true,
 		Menus:           true,
 		SmoothAnimation: true,
 		TrayIcon:        true, // QSystemTrayIcon; see tray_linux.go

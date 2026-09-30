@@ -16,6 +16,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -49,46 +50,51 @@ func WidgetHandle(kind core.WidgetKind) uintptr {
 var (
 	user32   = windows.NewLazySystemDLL("user32.dll")
 	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
+	shell32  = windows.NewLazySystemDLL("shell32.dll")
+	ole32    = windows.NewLazySystemDLL("ole32.dll")
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	comctl32 = windows.NewLazySystemDLL("comctl32.dll")
 	comdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
 	gdiplus  = windows.NewLazySystemDLL("gdiplus.dll")
 
-	pRegisterClassExW   = user32.NewProc("RegisterClassExW")
-	pCreateWindowExW    = user32.NewProc("CreateWindowExW")
-	pDestroyWindow      = user32.NewProc("DestroyWindow")
-	pDefWindowProcW     = user32.NewProc("DefWindowProcW")
-	pGetMessageW        = user32.NewProc("GetMessageW")
-	pIsDialogMessageW   = user32.NewProc("IsDialogMessageW")
-	pSetFocus           = user32.NewProc("SetFocus")
-	pGetFocus           = user32.NewProc("GetFocus")
-	pGetNextDlgTabItem  = user32.NewProc("GetNextDlgTabItem")
-	pIsWindowVisible    = user32.NewProc("IsWindowVisible")
-	pMessageBoxW        = user32.NewProc("MessageBoxW")
-	pGetOpenFileNameW   = comdlg32.NewProc("GetOpenFileNameW")
-	pGetSaveFileNameW   = comdlg32.NewProc("GetSaveFileNameW")
-	pTranslateMessage   = user32.NewProc("TranslateMessage")
-	pDispatchMessageW   = user32.NewProc("DispatchMessageW")
-	pPostQuitMessage    = user32.NewProc("PostQuitMessage")
-	pPostMessageW       = user32.NewProc("PostMessageW")
-	pSendMessageW       = user32.NewProc("SendMessageW")
-	pShowWindow         = user32.NewProc("ShowWindow")
-	pSetWindowTextW     = user32.NewProc("SetWindowTextW")
-	pGetKeyState        = user32.NewProc("GetKeyState")
-	pSetWindowPos       = user32.NewProc("SetWindowPos")
-	pGetClientRect      = user32.NewProc("GetClientRect")
-	pRedrawWindow       = user32.NewProc("RedrawWindow")
-	pAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
-	pEnableWindow       = user32.NewProc("EnableWindow")
-	pLoadCursorW        = user32.NewProc("LoadCursorW")
-	pSysParamsInfoW     = user32.NewProc("SystemParametersInfoW")
-	pGetDpiForWindow    = user32.NewProc("GetDpiForWindow")
-	pGetDpiForSystem    = user32.NewProc("GetDpiForSystem")
-	pSetProcessDpiCtx   = user32.NewProc("SetProcessDpiAwarenessContext")
-	pSetProcessDPIAware = user32.NewProc("SetProcessDPIAware")
-	pGetDC              = user32.NewProc("GetDC")
-	pReleaseDC          = user32.NewProc("ReleaseDC")
-	pInvalidateRect     = user32.NewProc("InvalidateRect")
+	pRegisterClassExW     = user32.NewProc("RegisterClassExW")
+	pCreateWindowExW      = user32.NewProc("CreateWindowExW")
+	pDestroyWindow        = user32.NewProc("DestroyWindow")
+	pDefWindowProcW       = user32.NewProc("DefWindowProcW")
+	pGetMessageW          = user32.NewProc("GetMessageW")
+	pIsDialogMessageW     = user32.NewProc("IsDialogMessageW")
+	pSetFocus             = user32.NewProc("SetFocus")
+	pGetFocus             = user32.NewProc("GetFocus")
+	pGetNextDlgTabItem    = user32.NewProc("GetNextDlgTabItem")
+	pIsWindowVisible      = user32.NewProc("IsWindowVisible")
+	pMessageBoxW          = user32.NewProc("MessageBoxW")
+	pGetOpenFileNameW     = comdlg32.NewProc("GetOpenFileNameW")
+	pGetSaveFileNameW     = comdlg32.NewProc("GetSaveFileNameW")
+	pTranslateMessage     = user32.NewProc("TranslateMessage")
+	pDispatchMessageW     = user32.NewProc("DispatchMessageW")
+	pPostQuitMessage      = user32.NewProc("PostQuitMessage")
+	pPostMessageW         = user32.NewProc("PostMessageW")
+	pSendMessageW         = user32.NewProc("SendMessageW")
+	pSHBrowseForFolderW   = shell32.NewProc("SHBrowseForFolderW")
+	pSHGetPathFromIDListW = shell32.NewProc("SHGetPathFromIDListW")
+	pCoTaskMemFree        = ole32.NewProc("CoTaskMemFree")
+	pShowWindow           = user32.NewProc("ShowWindow")
+	pSetWindowTextW       = user32.NewProc("SetWindowTextW")
+	pGetKeyState          = user32.NewProc("GetKeyState")
+	pSetWindowPos         = user32.NewProc("SetWindowPos")
+	pGetClientRect        = user32.NewProc("GetClientRect")
+	pRedrawWindow         = user32.NewProc("RedrawWindow")
+	pAdjustWindowRectEx   = user32.NewProc("AdjustWindowRectEx")
+	pEnableWindow         = user32.NewProc("EnableWindow")
+	pLoadCursorW          = user32.NewProc("LoadCursorW")
+	pSysParamsInfoW       = user32.NewProc("SystemParametersInfoW")
+	pGetDpiForWindow      = user32.NewProc("GetDpiForWindow")
+	pGetDpiForSystem      = user32.NewProc("GetDpiForSystem")
+	pSetProcessDpiCtx     = user32.NewProc("SetProcessDpiAwarenessContext")
+	pSetProcessDPIAware   = user32.NewProc("SetProcessDPIAware")
+	pGetDC                = user32.NewProc("GetDC")
+	pReleaseDC            = user32.NewProc("ReleaseDC")
+	pInvalidateRect       = user32.NewProc("InvalidateRect")
 
 	pGdiplusStartup           = gdiplus.NewProc("GdiplusStartup")
 	pGdipCreateBitmapFromFile = gdiplus.NewProc("GdipCreateBitmapFromFile")
@@ -315,6 +321,7 @@ func (d *driver) Capabilities() core.Caps {
 		TreeView:       true,
 		GridView:       true,
 		FileDialog:     true,
+		FolderDialog:   true,
 		Menus:          true,
 		Clipboard:      true,
 		TrayIcon:       true, // Shell_NotifyIcon; wired up in a later phase
@@ -972,6 +979,67 @@ func (w *window) FileDialog(save bool, title, suggested string, filters []core.F
 	// Windows runner. No path is no answer.
 	path := windows.UTF16ToString(file)
 	return path, path != ""
+}
+
+type browseInfoW struct {
+	hwndOwner      uintptr
+	pidlRoot       uintptr
+	pszDisplayName *uint16
+	lpszTitle      *uint16
+	ulFlags        uint32
+	lpfn           uintptr
+	lParam         uintptr
+	iImage         int32
+}
+
+// FolderDialog uses the shell's Explorer-style native folder picker. The
+// callback selects the requested initial directory when it is provided.
+func (w *window) FolderDialog(title, initial string) (string, bool) {
+	const (
+		bifReturnOnlyFSDirs = 0x0001
+		bifEditBox          = 0x0010
+		bifNewDialogStyle   = 0x0040
+		bffmInitialized     = 1
+		bffmSetSelectionW   = 0x0467
+	)
+	titlePtr, err := windows.UTF16PtrFromString(title)
+	if err != nil {
+		return "", false
+	}
+	displayName := make([]uint16, 260)
+	var initialPtr *uint16
+	var callback uintptr
+	if initial != "" {
+		initialPtr, err = windows.UTF16PtrFromString(initial)
+		if err != nil {
+			return "", false
+		}
+		callback = syscall.NewCallback(func(hwnd, msg, _, _ uintptr) uintptr {
+			if msg == bffmInitialized {
+				pSendMessageW.Call(hwnd, bffmSetSelectionW, 1, uintptr(unsafe.Pointer(initialPtr)))
+			}
+			return 0
+		})
+	}
+	info := browseInfoW{
+		hwndOwner:      w.hwnd,
+		pszDisplayName: &displayName[0],
+		lpszTitle:      titlePtr,
+		ulFlags:        bifReturnOnlyFSDirs | bifEditBox | bifNewDialogStyle,
+		lpfn:           callback,
+	}
+	pidl, _, _ := pSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&info)))
+	runtime.KeepAlive(initialPtr)
+	if pidl == 0 {
+		return "", false
+	}
+	defer pCoTaskMemFree.Call(pidl)
+	path := make([]uint16, 32768)
+	if ok, _, _ := pSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&path[0]))); ok == 0 {
+		return "", false
+	}
+	selected := windows.UTF16ToString(path)
+	return selected, selected != ""
 }
 
 // utf16z encodes s as UTF-16 with a terminating NUL.

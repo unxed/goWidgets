@@ -747,6 +747,24 @@ func TestFileDialogsScripted(t *testing.T) {
 	}
 }
 
+func TestFolderDialogsScripted(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, _ := app.NewWindow("imgy", 400, 300)
+	pumpUntilIdle(t, app)
+
+	headless.AnswerFolders("/tmp/изображения", "")
+	if p, ok := win.SelectFolder("Выберите папку", "/tmp/start"); !ok || p != "/tmp/изображения" {
+		t.Errorf("SelectFolder = %q, %v", p, ok)
+	}
+	if p, ok := win.SelectFolder("Выберите папку", ""); ok || p != "" {
+		t.Errorf("scripted cancel = %q, %v", p, ok)
+	}
+	ds := headless.FolderDialogs()
+	if len(ds) != 2 || ds[0].Title != "Выберите папку" || ds[0].Initial != "/tmp/start" {
+		t.Errorf("FolderDialogs = %+v", ds)
+	}
+}
+
 // ComboBox: a pick from the list reaches Text, Changed and Selected; Select
 // from the program reaches the platform and Text but is not reported as the
 // user's; SetItems clears the selection.

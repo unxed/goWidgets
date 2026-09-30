@@ -176,6 +176,7 @@ type Caps struct {
 	TreeView        bool
 	GridView        bool
 	FileDialog      bool
+	FolderDialog    bool
 	Menus           bool
 	Clipboard       bool
 	IME             bool
@@ -417,4 +418,13 @@ type BackendWindow interface {
 	RootHandle() Handle
 
 	Events() <-chan BackendEvent
+}
+
+// FolderDialogWindow is an optional capability for drivers with a native
+// directory chooser. Keeping it separate lets existing custom drivers satisfy
+// BackendWindow without changing their implementation.
+type FolderDialogWindow interface {
+	// FolderDialog asks the user to select an existing directory. initial is
+	// the directory to show first; an empty path leaves that choice to the OS.
+	FolderDialog(title, initial string) (path string, ok bool)
 }

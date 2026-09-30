@@ -197,6 +197,16 @@ func (w *Window) SaveFile(title, suggested string, filters ...FileFilter) (path 
 	return w.app.eng.Window().FileDialog(true, title, suggested, filters)
 }
 
+// SelectFolder shows the platform's native directory chooser, starting in
+// initial when it names an existing directory. ok is false when cancelled.
+func (w *Window) SelectFolder(title, initial string) (path string, ok bool) {
+	dialog, supported := w.app.eng.Window().(core.FolderDialogWindow)
+	if !supported {
+		return "", false
+	}
+	return dialog.FolderDialog(title, initial)
+}
+
 // Scale reports the window's current DPI scaling.
 func (w *Window) Scale() ScaleInfo { return w.app.eng.Window().Scale() }
 
