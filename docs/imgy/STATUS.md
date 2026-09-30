@@ -7,7 +7,7 @@
 
 ## Где мы
 
-- Текущая итерация: **B4 — showcase `imgy` v0.1**. Приложение реализовано на Canvas с ImageView fallback, поддерживает GIF/JPEG/PNG, выбор файла/папки и вписывание; локальные тесты проходят. CI теперь собирает `imgy` для целевых платформ и снимает GTK-окно под Xvfb; проверка этих изменений ещё ожидается.
+- Текущая итерация: **B4 — showcase `imgy` v0.1**. Приложение реализовано на Canvas с ImageView fallback, поддерживает GIF/JPEG/PNG, выбор файла/папки и вписывание; локальные тесты проходят. Windows/macOS CI и сборки `imgy` зелёные; Linux дошёл до GTK screenshot, но smoke-шаг завис на закрытии окна. Добавлен тайм-аут и корректная отправка Esc; повторная проверка ожидается.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless прошёл `go test ./...` локально и Linux/Windows/macOS CI в goWidgets PR #4. vtui PR #183 добавляет `Canvas` в vocabulary и реализует терминальный Canvas через `ImageSurface`/`GraphicsLayer`; полный CI PR #183 зелёный.
@@ -37,4 +37,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: опубликовать B4 для CI-проверки, просмотреть GTK screenshot, исправить найденное; затем B5 расширит паритет Canvas на Qt. BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: повторить Linux GTK smoke, просмотреть screenshot, затем B5 расширит паритет Canvas на Qt. BMP отложен до явного разрешения `golang.org/x/image` (Q4).
