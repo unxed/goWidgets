@@ -113,7 +113,7 @@ cv.Invalidate() // запросить перерисовку через план
 | C1 | браузер: открытие, навигация, сортировка | готово | сортировка по имени/типу/размеру/дате и направлению сохраняет текущий выбор; CI `36732117667` зелёный на всех платформах, GTK screenshot проверен |
 | C1a | навигация колесом и полные клавиатурные сокращения | готово | MOU-007/MOU-009: wheel previous/next, Ctrl+wheel zoom, Space/Backspace; scroll-up = previous; Windows/Linux/macOS CI `36737201020` зелёный, GTK screenshot просмотрен |
 | C1b | точные мышь/клавиатура для зума | готово | MOU-008/MOU-010/MOU-011: Shift-click, 100–900%, actual/fit aliases, `+/-`; CI `36740867091` зелёный; GUI-тесты запущены с `-count=1`, обязательные GTK/Win32/Cocoa artifacts получены и проверены |
-| C1c | нативный выбор папки в браузере | в работе | `Window.SelectFolder` для headless/GTK/Win32/Qt 5/6/Cocoa; подключается к кнопке открытия каталога, тестируется в каждом GUI backend |
+| C1c | нативный выбор папки в браузере | готово | `Window.SelectFolder` для headless/GTK/Win32/Qt 5/6/Cocoa подключён к кнопке открытия каталога; CI `36743514989` зелёный на Windows/Linux/macOS, включая GTK/Qt 5/6 GUI-тесты и сборки |
 | G1 | открытие BMP/TIFF/WebP | готово | x/image v0.46.0; BMP/TIFF decode fixtures и сборки Windows/Linux/macOS CI `36734709011` зелёные; WebP только decode |
 | C2 | миниатюры и множественный выбор | следующая | Canvas-grid подтверждён; сначала спайк текста/кириллицы, затем виртуализированная сетка |
 
