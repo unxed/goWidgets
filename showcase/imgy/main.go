@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
+	"github.com/unxed/goWidgets/showcase/imgy/viewport"
 )
 
 var imageExtensions = map[string]bool{
@@ -127,9 +129,12 @@ func main() {
 	var entries []imageEntry
 	var currentImage image.Image
 	var folder string
+	selectedIndex := -1
+	viewState := viewport.New(viewport.Size{}, viewport.Size{})
 	if canvas != nil {
 		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
-			fitImage(frame.Image, currentImage)
+			viewState.Area = viewport.Size{W: float64(frame.Image.Bounds().Dx()), H: float64(frame.Image.Bounds().Dy())}
+			paintViewport(frame.Image, currentImage, viewState)
 		})
 	}
 	loadFolder := func(dir string) bool {
@@ -140,6 +145,7 @@ func main() {
 			return false
 		}
 		entries = entries[:0]
+		selectedIndex = -1
 		for _, item := range read {
 			if item.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(item.Name()))] {
 				continue
@@ -150,7 +156,7 @@ func main() {
 				entries = append(entries, imageEntry{name: item.Name(), path: path, size: st.Size()})
 			}
 		}
-		sort.Slice(entries, func(i, j int) bool { return strings.ToLower(entries[i].name) < strings.ToLower(entries[j].name) })
+		sort.Slice(entries, func(i, j int) bool { return naturalLess(entries[i].name, entries[j].name) })
 		folder = dir
 		labels := make([]string, len(entries))
 		for i := range entries {
@@ -161,6 +167,9 @@ func main() {
 		pathEdit.Text.Set(folder)
 		info.Text.Set(fmt.Sprintf("Файлов: %d", len(entries)))
 		currentImage = nil
+		viewState.Image = viewport.Size{}
+		viewState.Pan = viewport.Point{}
+		viewState.Zoom = 1
 		if canvas != nil {
 			canvas.Invalidate()
 		} else {
@@ -173,6 +182,7 @@ func main() {
 		if i < 0 || i >= len(entries) {
 			return
 		}
+		selectedIndex = i
 		e := entries[i]
 		if canvas != nil {
 			img, dimensions, err := decodeImage(e.path)
@@ -183,6 +193,9 @@ func main() {
 				return
 			}
 			currentImage = img
+			mode := viewState.Mode
+			viewState = viewport.New(viewport.Size{W: float64(img.Bounds().Dx()), H: float64(img.Bounds().Dy())}, viewState.Area)
+			viewState.Mode = mode
 			canvas.Invalidate()
 			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
 		} else {
@@ -211,8 +224,66 @@ func main() {
 			selectPath(path)
 		}
 	}
+	setViewMode := func(mode viewport.Mode) {
+		viewState.SetMode(mode)
+		if canvas != nil {
+			canvas.Invalidate()
+		}
+	}
+	navigate := func(index int) {
+		if len(entries) == 0 {
+			return
+		}
+		if index < 0 {
+			index = 0
+		}
+		if index >= len(entries) {
+			index = len(entries) - 1
+		}
+		files.Select(index)
+		selectEntry(index)
+	}
 
 	files.Selected.On(app.Scope(), selectEntry)
+	if canvas != nil {
+		var dragging bool
+		var lastPointer goWidgets.MouseInfo
+		canvas.MouseWheel.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if currentImage == nil {
+				return
+			}
+			scale := win.Scale().Scale
+			if scale <= 0 {
+				scale = 1
+			}
+			viewState.ZoomAt(viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}, math.Pow(1.2, mouse.Delta))
+			viewState.ClampPan()
+			canvas.Invalidate()
+		})
+		canvas.MouseDown.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if mouse.Button == goWidgets.MouseLeft && currentImage != nil {
+				dragging, lastPointer = true, mouse
+			}
+		})
+		canvas.MouseMove.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if !dragging {
+				return
+			}
+			scale := win.Scale().Scale
+			if scale <= 0 {
+				scale = 1
+			}
+			viewState.PanBy(viewport.Point{X: (mouse.X - lastPointer.X) * scale, Y: (mouse.Y - lastPointer.Y) * scale})
+			viewState.ClampPan()
+			lastPointer = mouse
+			canvas.Invalidate()
+		})
+		canvas.MouseUp.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if mouse.Button == goWidgets.MouseLeft {
+				dragging = false
+			}
+		})
+	}
 	openFolder.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { loadFolder(pathEdit.Text.Get()) })
 	openImage.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { chooseImage() })
 	pathEdit.Activated.On(app.Scope(), func(string) { loadFolder(pathEdit.Text.Get()) })
@@ -224,6 +295,23 @@ func main() {
 			chooseImage()
 		} else if key.VirtualKeyCode == 0x1B { // Escape
 			app.Quit()
+		} else if key.Char == 'f' || key.Char == 'F' {
+			setViewMode(viewport.Fit)
+		} else if key.Char == '1' {
+			setViewMode(viewport.Actual)
+		} else if key.Char == '2' {
+			setViewMode(viewport.Fill)
+		} else {
+			switch key.VirtualKeyCode {
+			case 0x25, 0x21: // Left, Page Up
+				navigate(selectedIndex - 1)
+			case 0x27, 0x22: // Right, Page Down
+				navigate(selectedIndex + 1)
+			case 0x24: // Home
+				navigate(0)
+			case 0x23: // End
+				navigate(len(entries) - 1)
+			}
 		}
 	})
 
@@ -257,6 +345,31 @@ func fitImage(dst *image.RGBA, src image.Image) {
 	if dst == nil {
 		return
 	}
+	v := viewport.New(
+		viewport.Size{W: float64(srcSizeX(src)), H: float64(srcSizeY(src))},
+		viewport.Size{W: float64(dst.Bounds().Dx()), H: float64(dst.Bounds().Dy())},
+	)
+	paintViewport(dst, src, v)
+}
+
+func srcSizeX(src image.Image) int {
+	if src == nil {
+		return 0
+	}
+	return src.Bounds().Dx()
+}
+
+func srcSizeY(src image.Image) int {
+	if src == nil {
+		return 0
+	}
+	return src.Bounds().Dy()
+}
+
+func paintViewport(dst *image.RGBA, src image.Image, view viewport.Viewport) {
+	if dst == nil {
+		return
+	}
 	clear(dst.Pix)
 	for i := 0; i < len(dst.Pix); i += 4 {
 		dst.Pix[i], dst.Pix[i+1], dst.Pix[i+2], dst.Pix[i+3] = 248, 248, 248, 255
@@ -265,32 +378,74 @@ func fitImage(dst *image.RGBA, src image.Image) {
 		return
 	}
 	sb, db := src.Bounds(), dst.Bounds()
-	scaleX, scaleY := float64(db.Dx())/float64(sb.Dx()), float64(db.Dy())/float64(sb.Dy())
-	scale := scaleX
-	if scaleY < scale {
-		scale = scaleY
+	view.Image = viewport.Size{W: float64(sb.Dx()), H: float64(sb.Dy())}
+	view.Area = viewport.Size{W: float64(db.Dx()), H: float64(db.Dy())}
+	transform := view.Transform()
+	if transform.Scale <= 0 {
+		return
 	}
-	w, h := int(float64(sb.Dx())*scale), int(float64(sb.Dy())*scale)
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
-	}
-	left, top := db.Min.X+(db.Dx()-w)/2, db.Min.Y+(db.Dy()-h)/2
-	for y := 0; y < h; y++ {
-		sy := sb.Min.Y + y*sb.Dy()/h
-		for x := 0; x < w; x++ {
-			sx := sb.Min.X + x*sb.Dx()/w
+	for y := db.Min.Y; y < db.Max.Y; y++ {
+		sy := sb.Min.Y + int(math.Floor((float64(y-db.Min.Y)+0.5-transform.Offset.Y)/transform.Scale))
+		if sy < sb.Min.Y || sy >= sb.Max.Y {
+			continue
+		}
+		for x := db.Min.X; x < db.Max.X; x++ {
+			sx := sb.Min.X + int(math.Floor((float64(x-db.Min.X)+0.5-transform.Offset.X)/transform.Scale))
+			if sx < sb.Min.X || sx >= sb.Max.X {
+				continue
+			}
 			r, g, b, a := src.At(sx, sy).RGBA()
 			alpha := uint8(a >> 8)
-			di := dst.PixOffset(left+x, top+y)
+			di := dst.PixOffset(x, y)
 			dst.Pix[di+0] = overLight(uint8(r>>8), alpha)
 			dst.Pix[di+1] = overLight(uint8(g>>8), alpha)
 			dst.Pix[di+2] = overLight(uint8(b>>8), alpha)
 			dst.Pix[di+3] = 255
 		}
 	}
+}
+
+func naturalLess(a, b string) bool {
+	x, y := []rune(strings.ToLower(a)), []rune(strings.ToLower(b))
+	for i, j := 0, 0; i < len(x) && j < len(y); {
+		if x[i] >= '0' && x[i] <= '9' && y[j] >= '0' && y[j] <= '9' {
+			xEnd, yEnd := i, j
+			for xEnd < len(x) && x[xEnd] >= '0' && x[xEnd] <= '9' {
+				xEnd++
+			}
+			for yEnd < len(y) && y[yEnd] >= '0' && y[yEnd] <= '9' {
+				yEnd++
+			}
+			xSig, ySig := i, j
+			for xSig < xEnd-1 && x[xSig] == '0' {
+				xSig++
+			}
+			for ySig < yEnd-1 && y[ySig] == '0' {
+				ySig++
+			}
+			if xEnd-xSig != yEnd-ySig {
+				return xEnd-xSig < yEnd-ySig
+			}
+			for k := 0; k < xEnd-xSig; k++ {
+				if x[xSig+k] != y[ySig+k] {
+					return x[xSig+k] < y[ySig+k]
+				}
+			}
+			if xEnd-i != yEnd-j {
+				return xEnd-i < yEnd-j
+			}
+			i, j = xEnd, yEnd
+			continue
+		}
+		if x[i] != y[j] {
+			return x[i] < y[j]
+		}
+		i, j = i+1, j+1
+	}
+	if len(x) != len(y) {
+		return len(x) < len(y)
+	}
+	return a < b
 }
 
 func overLight(premultiplied, alpha uint8) uint8 {

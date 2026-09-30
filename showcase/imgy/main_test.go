@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -60,5 +61,16 @@ func TestDecodeImagePNG(t *testing.T) {
 	}
 	if dimensions != "17 × 9" {
 		t.Fatalf("dimensions = %q, want %q", dimensions, "17 × 9")
+	}
+}
+
+func TestNaturalLessSortsNumberedImages(t *testing.T) {
+	names := []string{"scan10.png", "scan2.png", "scan01.png", "scan1.png"}
+	sort.Slice(names, func(i, j int) bool { return naturalLess(names[i], names[j]) })
+	want := []string{"scan1.png", "scan01.png", "scan2.png", "scan10.png"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("natural order = %v, want %v", names, want)
+		}
 	}
 }

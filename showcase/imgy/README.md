@@ -1,10 +1,10 @@
 # imgy
 
-`imgy` is an image-viewer showcase for goWidgets. The first increment provides a
-constraint-laid-out window, a folder listing, file/folder selection, and a
-centered “fit to window” preview. It currently decodes GIF, JPEG, and PNG using
-the Go standard library. BMP support is deferred until an image-decoder
-dependency is explicitly approved.
+`imgy` is an image-viewer showcase for goWidgets. It provides a constraint-laid-
+out window, a folder listing, file/folder selection, and an image preview with
+fit, actual-size, fill, cursor-centered zoom, and drag-to-pan. It currently
+decodes GIF, JPEG, and PNG using the Go standard library. BMP support is
+deferred until an image-decoder dependency is explicitly approved.
 
 All interface placement uses goWidgets Auto Layout. Canvas is used only for
 image pixels; on backends that do not yet support Canvas, the preview falls
@@ -17,6 +17,10 @@ go run ./showcase/imgy [image-file-or-folder]
 ```
 
 Use **Open folder** to browse a directory, select an image in the list, or use
-**Open image…** / **Ctrl+O** to choose a file. **Esc** exits.
+**Open image…** / **Ctrl+O** to choose a file. The mouse wheel zooms around the
+pointer; drag the image to pan. **F** fits the whole image, **1** shows actual
+size, and **2** fills the preview area. **← / →** or **Page Up / Page Down** go
+to the previous or next naturally sorted image; **Home / End** go to the first
+or last. **Esc** exits.
 
 We like FastStone and use it as an example of a good image viewer.
