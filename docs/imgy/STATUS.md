@@ -3,11 +3,11 @@
 Обновляется в **каждом** ответе с патчем: правкой существующих строк, а не дописыванием журнала.
 Не длиннее ~40 строк. История — в `git log`.
 
-Обновлено: 2026-09-30 (Qt 5/6 Canvas CI зелёный; Qt Canvas screenshot просмотрен).
+Обновлено: 2026-09-30 (Cocoa Canvas опубликован, CI выполняется).
 
 ## Где мы
 
-- Текущая итерация: **B5c — Canvas на Cocoa**. B1–B5 реализованы в `goWidgets/main`; Qt 5/6 теперь показывают RGBA через QLabel/QPixmap, а Qt ABI offsets фиксируются C++ probe и проверяются в CI. GitHub run `36704317386` зелёный на Windows/Linux/macOS; Qt screenshot просмотрен. Ручные тесты в этой среде не запускались.
+- Текущая итерация: **B5c — Canvas на Cocoa**. Реализация AppKit RGBA presenter, мышиных событий и Auto Layout screenshot-теста опубликована в `goWidgets/main` (`d4b86e1`); GitHub run `36705824131` ожидает запуска. B1–B5 уже в `main`; Qt run `36704317386` зелёный на Windows/Linux/macOS, Qt screenshot просмотрен. Ручные тесты в этой среде не запускались.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless и терминальный Canvas в `vtui/main`.
@@ -29,13 +29,13 @@
 - Точные приоритеты и сроки возможностей ещё не согласованы; A2 фиксирует их без исключения из охвата.
 - Применимость указанной в справке поддержки XP–10 и минимальных требований к новому приложению не решена (`SYS-001`).
 - Wine не найден; он нужен только для необязательной A3 автоматизации эталона.
-- Canvas parity для Qt 5/6 закрыт по Xvfb; Cocoa остаётся единственным отсутствующим backend.
+- Canvas parity для Qt 5/6 закрыт по Xvfb; Cocoa presenter и CI-тест есть, но паритет отмечается только после зелёного macOS CI.
 
 ## Как это узнать
 
 - Canvas уже опубликован в `vtui/main` и `goWidgets/main`; устаревшие накопившиеся PR #6–8 закрыты после прямой публикации изменений в main.
-- Следующий шаг: Cocoa Canvas presenter + Auto Layout input/screenshot CI, затем перейти к B6 — зум, пан и соседние файлы.
+- `goWidgets/main` commit `d4b86e1` содержит Cocoa Canvas presenter + pointer input и CI-тест с Auto Layout/screenshot.
 
 ## Следующий шаг
 
-- Следующий шаг: выполнить B5c на macOS CI и закрыть D6 Canvas parity; затем начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: дождаться run `36705824131`; при успехе закрыть B5c/D6 и начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).

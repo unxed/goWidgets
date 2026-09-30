@@ -107,7 +107,7 @@ cv.Invalidate() // запросить перерисовку через план
 | B3 | Canvas: Win32 | готово | `main`: Windows local + serialized Windows CI; PNG-артефакт проверен |
 | B4 | `showcase/imgy` v0.1: открыть и показать | готово | `main`: Windows/Linux/macOS CI; GTK screenshot приложения проверен |
 | B5 | Canvas на Qt 5/6 | готово | `main`: Xvfb проверяет первый кадр, click/wheel и ABI offsets; CI зелёный, Qt screenshot проверен |
-| B5c | Canvas на Cocoa | в работе | по порядку D6 — последняя незакрытая реализация Canvas |
+| B5c | Canvas на Cocoa | в работе | `main` d4b86e1: AppKit presenter, pointer events, Auto Layout/screenshot CI; ждём macOS CI |
 | B6 | просмотр: зум, пан, соседние файлы | не начата | после Canvas parity всех драйверов |
 | B7 | ревизия плана с пользователем | не начата | без кода |
 
@@ -203,7 +203,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5/B5c | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | ✓ (Qt 5, Xvfb) | ✓ (Qt 6, Xvfb) | — |
+| Canvas | B1–B3/B5/B5c | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | ✓ (Qt 5, Xvfb) | ✓ (Qt 6, Xvfb) | ◐ (реализация в main, GitHub CI) |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |
