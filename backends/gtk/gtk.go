@@ -719,7 +719,7 @@ func (w *window) SetString(h core.Handle, p core.PropKey, v string) {
 		// gtk_entry_set_text emits "changed" only when the text differs, so
 		// the property's own write does not come back as an edit.
 		gtkEntrySetText(n.handle, v)
-	case core.KindComboBox, core.KindListBox:
+	case core.KindComboBox, core.KindListBox, core.KindCanvas:
 		// Text is not a property of these; the list holds items.
 	default:
 		gtkLabelText(n.handle, v)

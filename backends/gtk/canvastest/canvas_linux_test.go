@@ -62,7 +62,8 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var (
-		gtkWindowMove       func(uintptr, int32, int32)
+		gtkWidgetGetWindow  func(uintptr) uintptr
+		gtkWidgetTranslate  func(uintptr, uintptr, int32, int32, *int32, *int32) int32
 		gtkWidgetDraw       func(uintptr, uintptr)
 		gtkAllocW           func(uintptr) int32
 		gtkAllocH           func(uintptr) int32
@@ -73,7 +74,14 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		cairoSurfaceFlush   func(uintptr)
 		cairoWritePNG       func(uintptr, string) int32
 	)
-	purego.RegisterLibFunc(&gtkWindowMove, gtkLib, "gtk_window_move")
+	purego.RegisterLibFunc(&gtkWidgetGetWindow, gtkLib, "gtk_widget_get_window")
+	purego.RegisterLibFunc(&gtkWidgetTranslate, gtkLib, "gtk_widget_translate_coordinates")
+	gdkLib, err := purego.Dlopen("libgdk-3.so.0", purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gdkWindowGetOrigin func(uintptr, *int32, *int32) int32
+	purego.RegisterLibFunc(&gdkWindowGetOrigin, gdkLib, "gdk_window_get_origin")
 	purego.RegisterLibFunc(&gtkWidgetDraw, gtkLib, "gtk_widget_draw")
 	purego.RegisterLibFunc(&gtkAllocW, gtkLib, "gtk_widget_get_allocated_width")
 	purego.RegisterLibFunc(&gtkAllocH, gtkLib, "gtk_widget_get_allocated_height")
@@ -83,7 +91,8 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	purego.RegisterLibFunc(&cairoSurfaceDestroy, cairoLib, "cairo_surface_destroy")
 	purego.RegisterLibFunc(&cairoSurfaceFlush, cairoLib, "cairo_surface_flush")
 	purego.RegisterLibFunc(&cairoWritePNG, cairoLib, "cairo_surface_write_to_png")
-	gtkWindowMove(gtk.WindowHandle(), 0, 0)
+	windowWidget := gtk.WindowHandle()
+	canvasWidget := gtk.WidgetHandle(core.KindCanvas)
 
 	var screenshot string
 	if dir := os.Getenv("GOWIDGETS_SNAPSHOT_DIR"); dir != "" {
@@ -92,10 +101,25 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		}
 		screenshot = filepath.Join(dir, "gtk-canvas.png")
 	}
+	var inputErr error
 	go func() {
 		time.Sleep(350 * time.Millisecond)
-		// The window is placed at (0,0); the auto-flow Canvas starts at (8,8).
-		_ = exec.Command("xdotool", "mousemove", "24", "24", "click", "1", "click", "4").Run()
+		pointerAt := make(chan [2]int, 1)
+		app.QueueUpdate(func() {
+			var rootX, rootY, canvasX, canvasY int32
+			if gdkWindowGetOrigin(gtkWidgetGetWindow(windowWidget), &rootX, &rootY) == 0 ||
+				gtkWidgetTranslate(canvasWidget, windowWidget, gtkAllocW(canvasWidget)/2, gtkAllocH(canvasWidget)/2, &canvasX, &canvasY) == 0 {
+				pointerAt <- [2]int{-1, -1}
+				return
+			}
+			pointerAt <- [2]int{int(rootX + canvasX), int(rootY + canvasY)}
+		})
+		coords := <-pointerAt
+		if coords[0] < 0 {
+			inputErr = fmt.Errorf("could not resolve GTK Canvas screen coordinates")
+		} else {
+			inputErr = exec.Command("xdotool", "mousemove", fmt.Sprint(coords[0]), fmt.Sprint(coords[1]), "click", "1", "click", "4").Run()
+		}
 		time.Sleep(180 * time.Millisecond)
 		app.QueueUpdate(func() {
 			if screenshot != "" {
@@ -110,7 +134,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !down || !wheel {
-		t.Fatalf("GTK pointer events down=%v wheel=%v; expected xdotool input", down, wheel)
+		t.Fatalf("GTK pointer events down=%v wheel=%v, xdotool err=%v; expected Canvas-center input", down, wheel, inputErr)
 	}
 	if screenshot != "" {
 		f, err := os.Open(screenshot)
