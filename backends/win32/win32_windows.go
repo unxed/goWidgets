@@ -306,6 +306,7 @@ func (d *driver) Name() string { return "win32" }
 func (d *driver) Capabilities() core.Caps {
 	return core.Caps{
 		NativeControls: true,
+		Canvas:         true,
 		TreeView:       true,
 		GridView:       true,
 		FileDialog:     true,
@@ -359,6 +360,9 @@ func (d *driver) Init() error {
 	}
 	if r, _, e := pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))); r == 0 {
 		return fmt.Errorf("RegisterClassExW: %v", e)
+	}
+	if err := registerCanvasClass(d.hInstance); err != nil {
+		return err
 	}
 	d.font = uiFont()
 	d.monoFont = monoFont()
@@ -595,12 +599,15 @@ func outerWindowSize(client core.Size) (uintptr, uintptr) {
 }
 
 type node struct {
-	hwnd    uintptr
-	id      uint32
-	kind    core.WidgetKind
-	bitmap  uintptr
-	rect    core.Rect // last applied, in DIP; for tab order
-	visible bool
+	hwnd         uintptr
+	id           uint32
+	kind         core.WidgetKind
+	bitmap       uintptr
+	canvasPixels []byte
+	canvasWidth  int32
+	canvasHeight int32
+	rect         core.Rect // last applied, in DIP; for tab order
+	visible      bool
 }
 
 // isOurs reports whether hwnd is the window or one of its controls.
@@ -694,6 +701,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 			esMultiline | esReadonly | esAutoVScroll | esAutoHScroll
 	case core.KindImageView:
 		class, style = "STATIC", wsChild|wsVisible|ssBitmap|ssCenterImage
+	case core.KindCanvas:
+		class, style = "goWidgetsCanvas", wsChild|wsVisible|wsTabStop
 	}
 	hwnd, err := w.createControl(class, style, id)
 	if err != nil {

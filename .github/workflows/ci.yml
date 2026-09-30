@@ -83,6 +83,15 @@ jobs:
       # driver covers the layout pipeline everywhere.
       - name: Tests
         run: go test ./...
+        env:
+          GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win32-snapshots
+          path: ${{ runner.temp }}/snapshots
+          if-no-files-found: ignore
 
       - name: Build as a GUI application
         run: go build -ldflags="-H windowsgui" -o crescent.exe ./showcase/crescent

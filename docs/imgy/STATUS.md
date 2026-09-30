@@ -3,15 +3,16 @@
 Обновляется в **каждом** ответе с патчем: правкой существующих строк, а не дописыванием журнала.
 Не длиннее ~40 строк. История — в `git log`.
 
-Обновлено: 2026-09-30 (B1 CI зелёный; начата B2 GTK).
+Обновлено: 2026-09-30 (B1/B2 CI зелёные; B3 Win32 локально проходит).
 
 ## Где мы
 
-- Текущая итерация: **B2** (GTK реализация написана, Xvfb/CI ещё не проверена).
+- Текущая итерация: **B3 — Canvas: Win32**. Presenter и input path реализованы; локальный Windows UI-тест, полный `go test ./...` и `go vet ./...` зелёные; GitHub CI ещё предстоит.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
-- B1: Canvas API/core/headless прошёл `go test ./...` локально и Linux/Windows/macOS CI в goWidgets PR #4. vtui PR #183 расширен по найденному в CI factory contract: терминальный Canvas размещает `ImageSurface` через `GraphicsLayer`; повторная CI-проверка ожидается.
-- B2: GTK получает `GtkDrawingArea`, Cairo-owned ARGB32 surface, scale-aware display, DIP pointer/wheel events и тест со скриншотом для CI-артефакта. Linux test package нельзя собрать локально: `pureffi` отсутствует в кэше, скачивание из sandbox запрещено.
+- B1: Canvas API/core/headless прошёл `go test ./...` локально и Linux/Windows/macOS CI в goWidgets PR #4. vtui PR #183 добавляет `Canvas` в vocabulary и реализует терминальный Canvas через `ImageSurface`/`GraphicsLayer`; полный CI PR #183 зелёный.
+- B2: GTK Canvas реализован в goWidgets PR #5 через `GtkDrawingArea` и Cairo-owned ARGB32 surface; GitHub Linux/Xvfb проверил отрисовку пикселей и настоящие click/wheel события. Windows и macOS jobs PR #5 зелёные. Визуальная проверка доступна как CI screenshot-артефакт.
+- B3: начат Win32 presenter на top-down 32-bit DIB; локальный UI-тест проверяет Auto Layout размер, первый пиксель до ввода, click/modifier, release и wheel coordinates/delta; screenshot сохраняется в `GOWIDGETS_SNAPSHOT_DIR`.
 - План включает требования владельца: Auto Layout для нового UI и кода размещения виджетов; регрессионную проверку, что контролы целиком видны сразу после показа окна; паритет каждого нового контрола во всех драйверах; локальную проверку Windows и CI со скриншотами для Linux/macOS; инструкции для продолжения из чистого диалога.
 
 ## Что мы узнали на предыдущем шаге
@@ -36,4 +37,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: дождаться CI vtui PR #183 и отправить B2 GTK stacked PR поверх goWidgets PR #4.
+- Следующий шаг: отправить B3 как PR поверх goWidgets PR #5, получить Windows/Linux/macOS CI и screenshot-артефакты; затем продолжить B4/B5 по плану.

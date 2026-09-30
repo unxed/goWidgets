@@ -102,9 +102,9 @@ cv.Invalidate() // запросить перерисовку через план
 | A1 | получить и прочитать эталон | готово | NSIS 2; извлечён CHM, оглавление и кодировка записаны в `spec/REFERENCE-NOTES.md` |
 | A2 | инвентарь фич из help | готово | проверены все 7 разделов оглавления; 65 функциональных требований в `spec/INVENTORY.md`; License/Contact отмечены как справочные |
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
-| B1 | Canvas: core + headless | в работе | публичный API и headless-путь готовы; запись vtui выполняется отдельным PR |
-| B2 | Canvas: GTK | в работе | Cairo-owned image surface, pointer events, Xvfb screenshot test |
-| B3 | Canvas: Win32 | не начата | |
+| B1 | Canvas: core + headless | готово | goWidgets PR #4 и vtui PR #183: CI зелёный на всех заявленных платформах |
+| B2 | Canvas: GTK | готово | goWidgets PR #5: Linux/Xvfb, настоящие click/wheel, пиксельный screenshot; Windows/macOS CI зелёный |
+| B3 | Canvas: Win32 | в работе | Win32 DIB presenter и UI-тест с pixels/input проходят локально; GitHub CI ожидается |
 | B4 | `showcase/imgy` v0.1: открыть и показать | не начата | первый релиз |
 | B5 | спайк: Canvas на Qt | не начата | ответ да/нет/как |
 | B6 | просмотр: зум, пан, соседние файлы | не начата | |
@@ -194,7 +194,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5 | ✓ | ✓ | ◐ | — | — | — | — |
+| Canvas | B1–B3/B5 | ✓ | ✓ | ✓ (GitHub Xvfb) | ◐ (Windows local) | — | — | — |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |
