@@ -7,7 +7,7 @@
 
 ## Где мы
 
-- Текущая итерация: **B6 — зум/пан/навигация**. Canvas теперь реализован в core/headless/GTK/Win32/Qt 5/6/Cocoa; run `36726555566` зелёный на Windows/Linux/macOS. Cocoa screenshot `cocoa-canvas.png` просмотрен: Canvas заполняет окно сплошным цветом из RGBA-буфера. Cocoa pointer test проверяет преобразование AppKit events без входа в modal mouse tracking. Ручные тесты в этой среде не запускались.
+- Текущая итерация: **B6 — зум/пан/навигация**. Canvas parity закрыт, run `36726555566` зелёный на Windows/Linux/macOS; Cocoa screenshot `cocoa-canvas.png` просмотрен. Чистая `showcase/imgy/viewport` модель Fit/Actual/Fill, zoom вокруг курсора и pan/clamp опубликована в `main` (`f4c9998`); CI run `36727555271` проверяет табличные тесты геометрии. Ручные тесты в этой среде не запускались.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless и терминальный Canvas в `vtui/main`.
@@ -38,4 +38,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: B6 — реализовать viewport modes (fit/1:1/fill), zoom вокруг курсора, pan и natural-sorted соседние файлы; BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: подключить viewport к Canvas и клавишам/колесу/перетаскиванию в `imgy`, затем добавить natural-sorted переход по соседним файлам; BMP отложен до явного разрешения `golang.org/x/image` (Q4).
