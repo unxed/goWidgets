@@ -62,6 +62,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	var (
+		gtkWindowPresent    func(uintptr)
 		gtkWidgetGetWindow  func(uintptr) uintptr
 		gtkWidgetTranslate  func(uintptr, uintptr, int32, int32, *int32, *int32) int32
 		gtkWidgetDraw       func(uintptr, uintptr)
@@ -74,6 +75,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		cairoSurfaceFlush   func(uintptr)
 		cairoWritePNG       func(uintptr, string) int32
 	)
+	purego.RegisterLibFunc(&gtkWindowPresent, gtkLib, "gtk_window_present")
 	purego.RegisterLibFunc(&gtkWidgetGetWindow, gtkLib, "gtk_widget_get_window")
 	purego.RegisterLibFunc(&gtkWidgetTranslate, gtkLib, "gtk_widget_translate_coordinates")
 	gdkLib, err := purego.Dlopen("libgdk-3.so.0", purego.RTLD_NOW|purego.RTLD_GLOBAL)
@@ -106,6 +108,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		time.Sleep(350 * time.Millisecond)
 		pointerAt := make(chan [2]int, 1)
 		app.QueueUpdate(func() {
+			gtkWindowPresent(windowWidget)
 			var rootX, rootY, canvasX, canvasY int32
 			if gdkWindowGetOrigin(gtkWidgetGetWindow(windowWidget), &rootX, &rootY) == 0 ||
 				gtkWidgetTranslate(canvasWidget, windowWidget, gtkAllocW(canvasWidget)/2, gtkAllocH(canvasWidget)/2, &canvasX, &canvasY) == 0 {
@@ -115,6 +118,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 			pointerAt <- [2]int{int(rootX + canvasX), int(rootY + canvasY)}
 		})
 		coords := <-pointerAt
+		time.Sleep(150 * time.Millisecond) // let GTK/X raise the toplevel over concurrent test windows
 		if coords[0] < 0 {
 			inputErr = fmt.Errorf("could not resolve GTK Canvas screen coordinates")
 		} else {
