@@ -42,6 +42,14 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
+	if err := win.Constrain(
+		canvas.Left().Eq(win.Left()),
+		canvas.Top().Eq(win.Top()),
+		canvas.Right().Eq(win.Right()),
+		canvas.Bottom().Eq(win.Bottom()),
+	); err != nil {
+		t.Fatal(err)
+	}
 	want := color.RGBA{R: 51, G: 102, B: 153, A: 255}
 	canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
 		for i := 0; i < len(frame.Image.Pix); i += 4 {
