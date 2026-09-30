@@ -31,6 +31,10 @@ func TestModalDialogs(t *testing.T) {
 		var yes, confirmed, savedOK, openedOK, folderOK bool
 		var savedPath, folderPath string
 		folderDir := t.TempDir()
+		folderDir, err := filepath.EvalSymlinks(folderDir)
+		if err != nil {
+			t.Fatal(err)
+		}
 		answered := make(chan struct{})
 		go func() {
 			time.Sleep(400 * time.Millisecond)

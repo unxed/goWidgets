@@ -48,14 +48,14 @@ func WidgetHandle(kind core.WidgetKind) uintptr {
 }
 
 var (
-	user32   = windows.NewLazySystemDLL("user32.dll")
-	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
-	shell32  = windows.NewLazySystemDLL("shell32.dll")
-	ole32    = windows.NewLazySystemDLL("ole32.dll")
-	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	comctl32 = windows.NewLazySystemDLL("comctl32.dll")
-	comdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
-	gdiplus  = windows.NewLazySystemDLL("gdiplus.dll")
+	user32         = windows.NewLazySystemDLL("user32.dll")
+	gdi32          = windows.NewLazySystemDLL("gdi32.dll")
+	shellDialogDLL = windows.NewLazySystemDLL("shell32.dll")
+	ole32          = windows.NewLazySystemDLL("ole32.dll")
+	kernel32       = windows.NewLazySystemDLL("kernel32.dll")
+	comctl32       = windows.NewLazySystemDLL("comctl32.dll")
+	comdlg32       = windows.NewLazySystemDLL("comdlg32.dll")
+	gdiplus        = windows.NewLazySystemDLL("gdiplus.dll")
 
 	pRegisterClassExW     = user32.NewProc("RegisterClassExW")
 	pCreateWindowExW      = user32.NewProc("CreateWindowExW")
@@ -75,8 +75,8 @@ var (
 	pPostQuitMessage      = user32.NewProc("PostQuitMessage")
 	pPostMessageW         = user32.NewProc("PostMessageW")
 	pSendMessageW         = user32.NewProc("SendMessageW")
-	pSHBrowseForFolderW   = shell32.NewProc("SHBrowseForFolderW")
-	pSHGetPathFromIDListW = shell32.NewProc("SHGetPathFromIDListW")
+	pSHBrowseForFolderW   = shellDialogDLL.NewProc("SHBrowseForFolderW")
+	pSHGetPathFromIDListW = shellDialogDLL.NewProc("SHGetPathFromIDListW")
 	pCoTaskMemFree        = ole32.NewProc("CoTaskMemFree")
 	pShowWindow           = user32.NewProc("ShowWindow")
 	pSetWindowTextW       = user32.NewProc("SetWindowTextW")
