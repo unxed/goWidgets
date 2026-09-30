@@ -20,7 +20,9 @@
 
 Формат: `дата — где — что — по умолчанию в конец`.
 
-- (пока пусто)
+- Нет других находок.
+
+- 2026-09-30 — B1 implementation: headless advertises and presents Canvas; other backends remain unsupported until B2/B3/B5 parity work.
 
 ## 3. Известные риски
 

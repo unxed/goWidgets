@@ -9,6 +9,7 @@ package headless
 import (
 	"context"
 	"fmt"
+	"image"
 	"strings"
 	"sync"
 
@@ -51,7 +52,7 @@ func (d *driver) Init() error {
 }
 
 func (d *driver) Capabilities() core.Caps {
-	return core.Caps{NativeControls: false, MaxCallbacks: 1 << 30}
+	return core.Caps{NativeControls: false, Canvas: true, MaxCallbacks: 1 << 30}
 }
 
 func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) {
@@ -65,6 +66,7 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 		nodes:  map[core.Handle]*node{},
 		events: make(chan core.BackendEvent, 64),
 		nextH:  1,
+		scale:  core.ScaleInfo{Scale: DefaultDPIS, FontScale: 1},
 	}
 	w.nodes[w.nextH] = &node{kind: 0, visible: true} // root
 	w.root = w.nextH
@@ -110,6 +112,7 @@ type node struct {
 
 	items    []string // combo box
 	selected int
+	bounds   core.Rect
 }
 
 type window struct {
@@ -126,6 +129,8 @@ type window struct {
 	answers     []core.DialogResult
 	fileDialogs []FileDialogRecord
 	fileAnswers []string
+	scale       core.ScaleInfo
+	canvases    map[core.Handle]*image.RGBA
 
 	mu       sync.Mutex
 	log      []string
@@ -135,7 +140,7 @@ type window struct {
 func (w *window) SetTitle(s string)                { w.title = s }
 func (w *window) Show()                            {}
 func (w *window) Close()                           { close(w.events) }
-func (w *window) Scale() core.ScaleInfo            { return core.ScaleInfo{Scale: DefaultDPIS, FontScale: 1} }
+func (w *window) Scale() core.ScaleInfo            { return w.scale }
 func (w *window) RootHandle() core.Handle          { return w.root }
 func (w *window) Events() <-chan core.BackendEvent { return w.events }
 
@@ -408,6 +413,8 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 		return core.Size{W: 0, H: 120}, core.Size{W: textW, H: 120}
 	case core.KindImageView:
 		return core.Size{W: 0, H: 0}, core.Size{W: 80, H: 60}
+	case core.KindCanvas:
+		return core.Size{W: 1, H: 1}, core.Size{W: 320, H: 200}
 	case core.KindCheckBox:
 		s := core.Size{W: CheckBoxBox + CheckBoxGap + textW, H: LineHeight + 2*LabelPadY}
 		return core.Size{W: CheckBoxBox, H: s.H}, s
@@ -448,6 +455,7 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		kind := "root"
 		text := ""
 		if n != nil {
+			n.bounds = c.R
 			kind, text = n.kind.String(), n.text
 			if n.kind == core.KindImageView {
 				text = n.path
@@ -456,6 +464,15 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		w.log = append(w.log, fmt.Sprintf("%s(%q) x=%.1f y=%.1f w=%.1f h=%.1f visible=%v",
 			kind, text, c.R.X, c.R.Y, c.R.W, c.R.H, c.Visible))
 	}
+}
+
+func (w *window) PresentCanvas(h core.Handle, frame *core.CanvasFrame) {
+	if w.canvases == nil {
+		w.canvases = map[core.Handle]*image.RGBA{}
+	}
+	copyFrame := image.NewRGBA(frame.Image.Rect)
+	copy(copyFrame.Pix, frame.Image.Pix)
+	w.canvases[h] = copyFrame
 }
 
 // GoldenLog returns every ApplyLayout entry recorded so far, one per line.
@@ -488,6 +505,44 @@ func Reset() {
 	current.mu.Lock()
 	current.log = nil
 	current.mu.Unlock()
+}
+
+// PresentedCanvas returns the last headless Canvas frame, if any.
+func PresentedCanvas() *image.RGBA {
+	if current == nil || len(current.canvases) == 0 {
+		return nil
+	}
+	for _, frame := range current.canvases {
+		clone := image.NewRGBA(frame.Rect)
+		copy(clone.Pix, frame.Pix)
+		return clone
+	}
+	return nil
+}
+
+// SetScale simulates a monitor-DPI change and schedules the normal core event.
+func SetScale(scale float64) {
+	if current == nil {
+		return
+	}
+	current.scale = core.ScaleInfo{Scale: scale, FontScale: 1}
+	current.events <- core.BackendEvent{Kind: core.EventScaleChanged, Scale: current.scale}
+}
+
+// SendCanvasMouse injects pointer input at a window-relative DIP position.
+// The event is routed to the canvas whose most recently solved bounds contain it.
+func SendCanvasMouse(kind core.EventKind, x, y float64, button core.MouseButton, mods core.Modifiers, delta float64) bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind != core.KindCanvas || x < n.bounds.X || y < n.bounds.Y || x >= n.bounds.X+n.bounds.W || y >= n.bounds.Y+n.bounds.H {
+			continue
+		}
+		current.events <- core.BackendEvent{Kind: kind, H: h, Mouse: core.MouseInfo{X: x - n.bounds.X, Y: y - n.bounds.Y, Button: button, Mods: mods, Delta: delta}}
+		return true
+	}
+	return false
 }
 
 // MeasureCount reports how many times core has asked the platform for an

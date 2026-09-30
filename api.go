@@ -25,10 +25,26 @@ type (
 	Rect = core.Rect
 	// ScaleInfo describes a window's DPI scaling.
 	ScaleInfo = core.ScaleInfo
+	// CanvasFrame is one reusable physical-pixel RGBA frame.
+	CanvasFrame = core.CanvasFrame
+	// MouseInfo carries pointer coordinates relative to a Canvas, in DIP.
+	MouseInfo   = core.MouseInfo
+	MouseButton = core.MouseButton
+	Modifiers   = core.Modifiers
 	// DriverInfo answers "why am I not seeing native controls?".
 	DriverInfo = core.DriverInfo
 	// Scope owns subscriptions.
 	Scope = vreactive.Scope
+)
+
+const (
+	MouseNone   = core.MouseNone
+	MouseLeft   = core.MouseLeft
+	MouseMiddle = core.MouseMiddle
+	MouseRight  = core.MouseRight
+	ModShift    = core.ModShift
+	ModControl  = core.ModControl
+	ModAlt      = core.ModAlt
 )
 
 // ClickInfo carries the details of a click. Empty in iteration 1; it exists so
@@ -257,6 +273,58 @@ type ImageView struct {
 	*widget
 	Path *vreactive.Property[string]
 }
+
+// Canvas is a pixel-buffer drawing surface. Paint handlers draw into an RGBA
+// frame whose dimensions are physical pixels; pointer positions and layout
+// bounds use device-independent pixels. Call Invalidate after changing content.
+type Canvas struct {
+	*widget
+	Paint      *vreactive.Event[*CanvasFrame]
+	MouseDown  *vreactive.Event[MouseInfo]
+	MouseUp    *vreactive.Event[MouseInfo]
+	MouseMove  *vreactive.Event[MouseInfo]
+	MouseWheel *vreactive.Event[MouseInfo]
+	Scale      *vreactive.Property[float64]
+}
+
+// AddCanvas appends a drawing surface. The selected backend must advertise
+// Canvas support; unsupported backends fail explicitly.
+func (w *Window) AddCanvas() (*Canvas, error) {
+	if !w.app.eng.CanvasSupported() {
+		return nil, core.ErrCanvasUnsupported
+	}
+	wd, err := w.newWidget(core.KindCanvas, "")
+	if err != nil {
+		return nil, err
+	}
+	c := &Canvas{
+		widget:     wd,
+		Paint:      vreactive.NewEvent[*CanvasFrame](),
+		MouseDown:  vreactive.NewEvent[MouseInfo](),
+		MouseUp:    vreactive.NewEvent[MouseInfo](),
+		MouseMove:  vreactive.NewEvent[MouseInfo](),
+		MouseWheel: vreactive.NewEvent[MouseInfo](),
+		Scale:      vreactive.NewProperty(w.app.eng.Window().Scale().Scale),
+	}
+	wd.node.OnCanvasPaint = func(frame *core.CanvasFrame) { c.Paint.Emit(frame) }
+	wd.node.OnCanvasScale = func(scale float64) { c.Scale.Set(scale) }
+	wd.node.OnCanvasMouse = func(kind core.EventKind, info core.MouseInfo) {
+		switch kind {
+		case core.EventMouseDown:
+			c.MouseDown.Emit(info)
+		case core.EventMouseUp:
+			c.MouseUp.Emit(info)
+		case core.EventMouseMove:
+			c.MouseMove.Emit(info)
+		case core.EventMouseWheel:
+			c.MouseWheel.Emit(info)
+		}
+	}
+	return c, nil
+}
+
+// Invalidate schedules a coalesced paint on the next UI frame.
+func (c *Canvas) Invalidate() { c.app.eng.InvalidateCanvas(c.node) }
 
 // AddImageView appends an empty image surface. Give it space with the same
 // constraints as any other widget; the backend fits the image into that area.
