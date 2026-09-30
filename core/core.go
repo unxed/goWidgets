@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"math"
 	"os"
 	"runtime"
 	"sync"
@@ -51,6 +53,11 @@ type Node struct {
 	OnActivated   func(string)
 	OnSelected    func(int, string)
 	OnItemOpened  func(int, string)
+	OnCanvasPaint func(*CanvasFrame)
+	OnCanvasMouse func(EventKind, MouseInfo)
+	OnCanvasScale func(float64)
+	canvasFrame   *CanvasFrame
+	paintDirty    bool
 
 	// Vars are the node's Cassowary variables (core/layout.go).
 	Vars *Vars
@@ -104,6 +111,7 @@ type App struct {
 	queue   []func()
 
 	dirtyLayout bool
+	dirtyPaint  bool
 	cancel      context.CancelFunc
 	onClose     closeHandler
 	onKey       func(KeyEvent)
@@ -175,6 +183,13 @@ func (a *App) adopt(d PlatformDriver) {
 // Diagnostics reports which driver won and what was tried (§3.3.4).
 func (a *App) Diagnostics() DriverInfo { return a.info }
 
+// CanvasSupported reports a declared Canvas capability with the required
+// presentation extension actually implemented by the window.
+func (a *App) CanvasSupported() bool {
+	_, presents := a.win.(CanvasPresenter)
+	return a.info.Caps.Canvas && presents
+}
+
 // Scope is the application-wide subscription owner.
 func (a *App) Scope() *vreactive.Scope { return a.scope }
 
@@ -221,8 +236,12 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h),
-		Stretchy:   kind == KindListBox || kind == KindTextView || kind == KindImageView,
+		Stretchy:   kind == KindListBox || kind == KindTextView || kind == KindImageView || kind == KindCanvas,
 		SingleLine: kind == KindButton || kind == KindCheckBox || kind == KindEdit || kind == KindComboBox}
+	if kind == KindCanvas {
+		n.paintDirty = true
+		a.dirtyPaint = true
+	}
 	a.nodes[h] = n
 	root := a.nodes[a.root]
 	if root != nil {
@@ -245,6 +264,16 @@ func (a *App) Invalidate() {
 			}
 		}
 	}
+	a.driver.Wake()
+}
+
+// InvalidateCanvas schedules one paint for n at the next frame.
+func (a *App) InvalidateCanvas(n *Node) {
+	if n == nil || n.Kind != KindCanvas {
+		return
+	}
+	n.paintDirty = true
+	a.dirtyPaint = true
 	a.driver.Wake()
 }
 
@@ -285,7 +314,7 @@ func (a *App) PumpOnce() bool {
 	pending := len(a.queue)
 	a.queueMu.Unlock()
 	dirty := a.dirtyLayout
-	if pending == 0 && !dirty {
+	if pending == 0 && !dirty && !a.dirtyPaint {
 		return false
 	}
 	a.DrainQueue()
@@ -296,13 +325,46 @@ func (a *App) PumpOnce() bool {
 // drain → (re)measure → solve → apply. Nothing happens when nothing is dirty,
 // which is what keeps idle CPU at zero.
 func (a *App) Frame() {
-	if !a.dirtyLayout || a.win == nil {
+	if a.win == nil {
 		return
 	}
-	a.dirtyLayout = false
-	changes := a.solveLayout()
-	if len(changes) > 0 {
-		a.win.ApplyLayout(changes)
+	if a.dirtyLayout {
+		a.dirtyLayout = false
+		changes := a.solveLayout()
+		if len(changes) > 0 {
+			a.win.ApplyLayout(changes)
+			for _, change := range changes {
+				if n := a.nodes[change.H]; n != nil && n.Kind == KindCanvas {
+					n.paintDirty = true
+					a.dirtyPaint = true
+				}
+			}
+		}
+	}
+	if a.dirtyPaint {
+		a.dirtyPaint = false
+		for _, n := range a.nodes {
+			if n.Kind != KindCanvas || !n.Visible || !n.paintDirty || n.Bounds.W <= 0 || n.Bounds.H <= 0 {
+				continue
+			}
+			scale := a.win.Scale().Scale
+			if scale <= 0 {
+				scale = 1
+			}
+			width, height := int(math.Ceil(n.Bounds.W*scale)), int(math.Ceil(n.Bounds.H*scale))
+			if n.canvasFrame == nil || n.canvasFrame.Image.Rect.Dx() != width || n.canvasFrame.Image.Rect.Dy() != height {
+				n.canvasFrame = &CanvasFrame{Image: image.NewRGBA(image.Rect(0, 0, width, height))}
+			}
+			n.canvasFrame.Scale = scale
+			n.paintDirty = false
+			clear(n.canvasFrame.Image.Pix)
+			if n.OnCanvasPaint != nil {
+				n.OnCanvasPaint(n.canvasFrame)
+			}
+			if p, ok := a.win.(CanvasPresenter); ok {
+				p.PresentCanvas(n.H, n.canvasFrame)
+			}
+		}
 	}
 }
 
@@ -332,6 +394,10 @@ func (a *App) dispatch(ev BackendEvent) {
 		if n := a.nodes[ev.H]; n != nil && n.OnItemOpened != nil {
 			n.OnItemOpened(ev.Int, ev.Text)
 		}
+	case EventMouseDown, EventMouseUp, EventMouseMove, EventMouseWheel:
+		if n := a.nodes[ev.H]; n != nil && n.OnCanvasMouse != nil {
+			n.OnCanvasMouse(ev.Kind, ev.Mouse)
+		}
 	case EventResized:
 		if n := a.nodes[a.root]; n != nil {
 			n.Bounds = Rect{W: ev.Size.W, H: ev.Size.H}
@@ -340,6 +406,17 @@ func (a *App) dispatch(ev BackendEvent) {
 	case EventScaleChanged:
 		for _, n := range a.nodes {
 			n.measured = false
+			if n.Kind == KindCanvas {
+				n.paintDirty = true
+				a.dirtyPaint = true
+				if n.OnCanvasScale != nil {
+					scale := ev.Scale.Scale
+					if scale <= 0 {
+						scale = 1
+					}
+					n.OnCanvasScale(scale)
+				}
+			}
 		}
 		a.dirtyLayout = true
 	case EventKey:

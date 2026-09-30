@@ -8,6 +8,7 @@ package core
 import (
 	"context"
 	"errors"
+	"image"
 )
 
 // ------------------------------------------------------------- §4.1 geometry
@@ -60,6 +61,7 @@ const (
 	KindListBox
 	// KindImageView displays one image file, scaled to fit its allocated area.
 	KindImageView
+	KindCanvas
 )
 
 func (k WidgetKind) String() string {
@@ -80,6 +82,8 @@ func (k WidgetKind) String() string {
 		return "ListBox"
 	case KindImageView:
 		return "ImageView"
+	case KindCanvas:
+		return "Canvas"
 	}
 	return "Unknown"
 }
@@ -178,6 +182,7 @@ type Caps struct {
 	A11y            bool
 	SmoothAnimation bool
 	TrayIcon        bool // added for the crescent showcase, see ADR-0003
+	Canvas          bool // pixel-buffer drawing surface with pointer input
 	MaxCallbacks    int
 }
 
@@ -208,6 +213,10 @@ const (
 	// EventItemActivated is a list item opened (double-click or Enter);
 	// Int is its index, Text its text.
 	EventItemActivated
+	EventMouseDown
+	EventMouseUp
+	EventMouseMove
+	EventMouseWheel
 )
 
 // BackendEvent travels from the platform to core. It carries no pointers, so a
@@ -246,6 +255,45 @@ type BackendEvent struct {
 	Key   KeyEvent // EventKey: the keystroke
 	Text  string   // EventTextChanged, EventActivated, EventSelected: text
 	Int   int      // EventSelected: the index
+	Mouse MouseInfo
+}
+
+// MouseInfo uses DIP coordinates relative to the canvas.
+type MouseInfo struct {
+	X, Y   float64
+	Button MouseButton
+	Mods   Modifiers
+	Delta  float64 // wheel delta, positive away from the user
+}
+
+type MouseButton uint8
+
+const (
+	MouseNone MouseButton = iota
+	MouseLeft
+	MouseMiddle
+	MouseRight
+)
+
+type Modifiers uint8
+
+const (
+	ModShift Modifiers = 1 << iota
+	ModControl
+	ModAlt
+)
+
+// CanvasFrame is a reusable top-down RGBA8 pixel buffer. Its dimensions are
+// physical pixels; Bounds and pointer coordinates remain in DIP.
+type CanvasFrame struct {
+	Image *image.RGBA
+	Scale float64
+}
+
+// CanvasPresenter is an optional backend extension for presenting a completed
+// CanvasFrame. Drivers advertise Caps.Canvas only when they implement it.
+type CanvasPresenter interface {
+	PresentCanvas(Handle, *CanvasFrame)
 }
 
 // MenuItem is one entry of the tray menu. A separator ignores Label.
