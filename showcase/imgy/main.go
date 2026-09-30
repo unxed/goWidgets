@@ -373,6 +373,12 @@ func main() {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
 		canvas.MouseWheel.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if mouse.Mods&goWidgets.ModControl == 0 {
+				if step := wheelNavigationDelta(mouse.Delta); step != 0 {
+					navigate(selectedIndex + step)
+				}
+				return
+			}
 			if currentImage == nil {
 				return
 			}
@@ -426,15 +432,15 @@ func main() {
 		} else if key.Char == '2' {
 			setViewMode(viewport.Fill)
 		} else {
-			switch key.VirtualKeyCode {
-			case 0x25, 0x21: // Left, Page Up
-				navigate(selectedIndex - 1)
-			case 0x27, 0x22: // Right, Page Down
-				navigate(selectedIndex + 1)
-			case 0x24: // Home
-				navigate(0)
-			case 0x23: // End
-				navigate(len(entries) - 1)
+			if step := keyNavigationDelta(key.VirtualKeyCode); step != 0 {
+				navigate(selectedIndex + step)
+			} else {
+				switch key.VirtualKeyCode {
+				case 0x24: // Home
+					navigate(0)
+				case 0x23: // End
+					navigate(len(entries) - 1)
+				}
 			}
 		}
 	})
@@ -445,6 +451,27 @@ func main() {
 	}
 	if err := app.Run(win); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func wheelNavigationDelta(delta float64) int {
+	if delta > 0 {
+		return -1
+	}
+	if delta < 0 {
+		return 1
+	}
+	return 0
+}
+
+func keyNavigationDelta(virtualKeyCode uint16) int {
+	switch virtualKeyCode {
+	case 0x08, 0x25, 0x21: // Backspace, Left, Page Up
+		return -1
+	case 0x20, 0x27, 0x22: // Space, Right, Page Down
+		return 1
+	default:
+		return 0
 	}
 }
 

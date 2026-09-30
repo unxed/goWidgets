@@ -148,6 +148,29 @@ func TestNaturalLessSortsNumberedImages(t *testing.T) {
 	}
 }
 
+func TestWheelNavigatesInScrollDirection(t *testing.T) {
+	for _, tt := range []struct {
+		delta float64
+		want  int
+	}{{delta: 1, want: -1}, {delta: -1, want: 1}, {delta: 0, want: 0}} {
+		if got := wheelNavigationDelta(tt.delta); got != tt.want {
+			t.Errorf("wheelNavigationDelta(%v) = %d, want %d", tt.delta, got, tt.want)
+		}
+	}
+}
+
+func TestKeyboardNavigationMatchesViewerShortcuts(t *testing.T) {
+	for _, tt := range []struct {
+		key  uint16
+		want int
+	}{{key: 0x08, want: -1}, {key: 0x25, want: -1}, {key: 0x21, want: -1},
+		{key: 0x20, want: 1}, {key: 0x27, want: 1}, {key: 0x22, want: 1}, {key: 0x24, want: 0}} {
+		if got := keyNavigationDelta(tt.key); got != tt.want {
+			t.Errorf("keyNavigationDelta(%#x) = %d, want %d", tt.key, got, tt.want)
+		}
+	}
+}
+
 func TestSortEntriesByTypeSizeAndDate(t *testing.T) {
 	base := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 	entries := []imageEntry{
