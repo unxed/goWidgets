@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 )
 
 func TestFitImageCentersAndPreservesAspect(t *testing.T) {
@@ -93,6 +96,44 @@ func TestDecodeImagePNG(t *testing.T) {
 	}
 	if dimensions != "17 × 9" {
 		t.Fatalf("dimensions = %q, want %q", dimensions, "17 × 9")
+	}
+}
+
+func TestDecodeImageBMPAndTIFF(t *testing.T) {
+	source := image.NewRGBA(image.Rect(0, 0, 17, 9))
+	source.SetRGBA(0, 0, color.RGBA{R: 200, G: 80, B: 30, A: 255})
+	encoders := []struct {
+		name   string
+		encode func(io.Writer, image.Image) error
+	}{
+		{name: "sample.bmp", encode: bmp.Encode},
+		{name: "sample.tiff", encode: func(w io.Writer, img image.Image) error { return tiff.Encode(w, img, nil) }},
+	}
+	for _, tc := range encoders {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), tc.name)
+			f, err := os.Create(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tc.encode(f, source); err != nil {
+				f.Close()
+				t.Fatal(err)
+			}
+			if err := f.Close(); err != nil {
+				t.Fatal(err)
+			}
+			decoded, dimensions, err := decodeImage(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := decoded.Bounds().Size(), image.Pt(17, 9); got != want {
+				t.Fatalf("decoded size = %v, want %v", got, want)
+			}
+			if dimensions != "17 × 9" {
+				t.Fatalf("dimensions = %q, want %q", dimensions, "17 × 9")
+			}
+		})
 	}
 }
 

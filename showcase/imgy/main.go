@@ -26,16 +26,20 @@ import (
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
 var imageExtensions = map[string]bool{
-	".gif": true, ".jpeg": true, ".jpg": true, ".png": true,
+	".bmp": true, ".gif": true, ".jpeg": true, ".jpg": true,
+	".png": true, ".tif": true, ".tiff": true, ".webp": true,
 }
 
 var imageFilter = goWidgets.FileFilter{
 	Name: "Изображения",
 	Patterns: []string{
-		"*.gif", "*.jpeg", "*.jpg", "*.png",
+		"*.bmp", "*.gif", "*.jpeg", "*.jpg", "*.png", "*.tif", "*.tiff", "*.webp",
 	},
 }
 

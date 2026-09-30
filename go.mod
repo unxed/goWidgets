@@ -6,7 +6,8 @@ require (
 	github.com/ebitengine/purego v0.9.0
 	github.com/unxed/kiwi-go v0.1.0
 	github.com/unxed/winkeys v0.1.1
-	golang.org/x/sys v0.31.0
+	golang.org/x/image v0.46.0
+	golang.org/x/sys v0.48.0
 )
 
 require github.com/go-webgpu/goffi v0.6.2 // indirect

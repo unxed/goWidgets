@@ -2,9 +2,9 @@
 
 `imgy` is an image-viewer showcase for goWidgets. It provides a constraint-laid-
 out window, a folder listing, file/folder selection, and an image preview with
-fit, actual-size, fill, cursor-centered zoom, and drag-to-pan. It currently
-decodes GIF, JPEG, and PNG using the Go standard library. BMP support is
-deferred until an image-decoder dependency is explicitly approved.
+fit, actual-size, fill, cursor-centered zoom, and drag-to-pan. It decodes GIF,
+JPEG, and PNG using the Go standard library, plus BMP, TIFF, and WebP with
+`golang.org/x/image` v0.46.0. WebP support is decode-only for now.
 
 All interface placement uses goWidgets Auto Layout. Canvas is used only for
 image pixels; on backends that do not yet support Canvas, the preview falls
