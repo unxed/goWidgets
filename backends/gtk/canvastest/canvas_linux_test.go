@@ -40,7 +40,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = color.RGBA{R: 51, G: 102, B: 153, A: 255}
+	want := color.RGBA{R: 51, G: 102, B: 153, A: 255}
 	canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
 		for i := 0; i < len(frame.Image.Pix); i += 4 {
 			frame.Image.Pix[i+0] = want.R
