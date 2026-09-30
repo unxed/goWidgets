@@ -3,11 +3,11 @@
 Обновляется в **каждом** ответе с патчем: правкой существующих строк, а не дописыванием журнала.
 Не длиннее ~40 строк. История — в `git log`.
 
-Обновлено: 2026-09-30 (Cocoa Canvas опубликован, CI выполняется).
+Обновлено: 2026-09-30 (исправлена ошибка Cocoa Canvas CI, повторная проверка запущена).
 
 ## Где мы
 
-- Текущая итерация: **B5c — Canvas на Cocoa**. Реализация AppKit RGBA presenter, мышиных событий и Auto Layout screenshot-теста опубликована в `goWidgets/main` (`d4b86e1`); GitHub run `36705824131` ожидает запуска. B1–B5 уже в `main`; Qt run `36704317386` зелёный на Windows/Linux/macOS, Qt screenshot просмотрен. Ручные тесты в этой среде не запускались.
+- Текущая итерация: **B5c — Canvas на Cocoa**. AppKit RGBA presenter, мышиные события и Auto Layout screenshot-тест опубликованы в `goWidgets/main` (`d4b86e1`); CI нашёл повторное имя `eventRightMouseUp`, исправлено в `6a1cacf`. GitHub run `36706308336` проверяет исправление. B1–B5 уже в `main`; Qt run `36704317386` зелёный на Windows/Linux/macOS, Qt screenshot просмотрен. Ручные тесты в этой среде не запускались.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless и терминальный Canvas в `vtui/main`.
@@ -38,4 +38,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: дождаться run `36705824131`; при успехе закрыть B5c/D6 и начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: дождаться run `36706308336`; при успехе закрыть B5c/D6 и начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).
