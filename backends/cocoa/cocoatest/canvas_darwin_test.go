@@ -72,8 +72,9 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 				view := cocoa.WidgetHandle(core.KindCanvas)
 				_, _, width, height := cocoa.Rect(view)
 				canvasBounds = [4]float64{width, height, 0, 0}
-				local := cocoa.Point(width/2, height/2)
-				location := cocoa.Msg(view, "convertPoint:toView:", local, objc.ID(0))
+				// The Canvas fills the content view, so its center is also the
+				// center in NSWindow coordinates. Msg returns objc.ID, not NSPoint.
+				location := cocoa.Point(width/2, height/2)
 				windowNumber := int64(cocoa.Msg(cocoa.WindowHandle(), "windowNumber"))
 				sendMouse := func(kind uint64) {
 					ev := cocoa.Msg(cocoa.Class("NSEvent"), "mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:",
@@ -107,7 +108,7 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 					t.Errorf("pointer event %d = %v, want %v", i, events[i].kind, kind)
 				}
 			}
-			if events[1].info.Button != goWidgets.MouseLeft || events[1].info.X <= 0 || events[1].info.Y <= 0 {
+			if events[1].info.Button != goWidgets.MouseLeft || !near(events[1].info.X, canvasBounds[0]/2) || !near(events[1].info.Y, canvasBounds[1]/2) {
 				t.Errorf("mouse down info = %+v", events[1].info)
 			}
 		}
