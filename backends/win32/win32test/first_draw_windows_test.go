@@ -25,6 +25,7 @@ var (
 	pFirstDrawGetParent       = firstDrawUser32.NewProc("GetParent")
 	pFirstDrawGetWindowRect   = firstDrawUser32.NewProc("GetWindowRect")
 	pFirstDrawGetClientRect   = firstDrawUser32.NewProc("GetClientRect")
+	pFirstDrawClientToScreen  = firstDrawUser32.NewProc("ClientToScreen")
 	pFirstDrawScreenToClient  = firstDrawUser32.NewProc("ScreenToClient")
 	pFirstDrawSetCursorPos    = firstDrawUser32.NewProc("SetCursorPos")
 	pFirstDrawIsWindowVisible = firstDrawUser32.NewProc("IsWindowVisible")
@@ -98,14 +99,18 @@ func TestFirstDrawAndDelayedCheckboxRelayout(t *testing.T) {
 	checkbox.Toggled.On(app.Scope(), func(on bool) { toggled <- on })
 
 	type result struct {
-		buttonBounds  firstDrawRect
-		buttonClient  firstDrawRect
-		buttonVisible bool
-		buttonImage   string
-		checkBounds   firstDrawRect
-		checkClient   firstDrawRect
-		checkImage    string
-		err           error
+		buttonBounds       firstDrawRect
+		buttonClient       firstDrawRect
+		buttonVisible      bool
+		buttonImage        string
+		checkBounds        firstDrawRect
+		checkClient        firstDrawRect
+		checkAfterClick    string
+		checkAfterDelay    string
+		checkClientOffsetX int
+		checkClientOffsetY int
+		checkImage         string
+		err                error
 	}
 	resultCh := make(chan result, 1)
 	go func() {
@@ -160,10 +165,71 @@ func TestFirstDrawAndDelayedCheckboxRelayout(t *testing.T) {
 			return
 		}
 
+		// The native BM_CLICK has completed but no pointer has crossed the
+		// control. Capture its indicator now, then again after the same delay
+		// as Crescent's periodic refresh to catch deferred/stale themed paints.
+		captureCheckbox := func(name string) result {
+			captured := make(chan result, 1)
+			queued := make(chan struct{})
+			app.QueueUpdate(func() {
+				hwnd := win32.WidgetHandle(core.KindCheckBox)
+				parent, _, _ := pFirstDrawGetParent.Call(hwnd)
+				r := result{}
+				if hwnd == 0 || parent == 0 {
+					r.err = errors.New("checkbox or parent HWND is missing")
+				} else {
+					r.checkBounds, r.checkClient, r.err = firstDrawControlBounds(hwnd, parent)
+					var clientOrigin firstDrawPoint
+					var windowRect firstDrawRect
+					if r.err == nil {
+						if ok, _, _ := pFirstDrawClientToScreen.Call(parent, uintptr(unsafe.Pointer(&clientOrigin))); ok == 0 {
+							r.err = errors.New("ClientToScreen(checkbox parent) failed")
+						} else if ok, _, _ := pFirstDrawGetWindowRect.Call(parent, uintptr(unsafe.Pointer(&windowRect))); ok == 0 {
+							r.err = errors.New("GetWindowRect(checkbox parent) failed")
+						} else {
+							r.checkClientOffsetX = int(clientOrigin.x - windowRect.left)
+							r.checkClientOffsetY = int(clientOrigin.y - windowRect.top)
+						}
+					}
+					dir := os.Getenv("GOWIDGETS_SNAPSHOT_DIR")
+					if dir == "" {
+						dir = os.TempDir()
+					}
+					r.checkImage = filepath.Join(dir, name)
+					if r.err == nil {
+						r.err = saveFirstDrawSnapshot(parent, r.checkImage)
+					}
+				}
+				captured <- r
+				close(queued)
+			})
+			<-queued
+			return <-captured
+		}
+		captured := captureCheckbox("win32-checkbox-after-click.png")
+		initial.checkBounds = captured.checkBounds
+		initial.checkClientOffsetX, initial.checkClientOffsetY = captured.checkClientOffsetX, captured.checkClientOffsetY
+		initial.checkAfterClick, initial.err = captured.checkImage, captured.err
+		if initial.err != nil {
+			resultCh <- initial
+			app.Quit()
+			return
+		}
+
 		// The 700 ms wait matches Crescent's log/status refresh interval. A
-		// changed label dirties intrinsic measurements and runs the layout
-		// pipeline again after the click.
+		// delayed native paint must not change the checkbox indicator when no
+		// pointer movement or subsequent layout has occurred.
 		time.Sleep(750 * time.Millisecond)
+		captured = captureCheckbox("win32-checkbox-after-delay.png")
+		initial.checkAfterDelay, initial.err = captured.checkImage, captured.err
+		if initial.err != nil {
+			resultCh <- initial
+			app.Quit()
+			return
+		}
+
+		// A changed label then dirties intrinsic measurements and runs layout
+		// again after the delayed-paint check.
 		updated := make(chan struct{})
 		app.QueueUpdate(func() {
 			checkbox.Text.Set("✓ Цель закреплена  [blocked]  12345 токенов — ждёт сброса лимита")
@@ -219,6 +285,9 @@ func TestFirstDrawAndDelayedCheckboxRelayout(t *testing.T) {
 	if !checkbox.Checked.Get() {
 		t.Fatal("checkbox lost its checked state after delayed text update")
 	}
+	if err := assertSameCheckboxIndicator(r.checkAfterClick, r.checkAfterDelay, r.checkBounds, r.checkClientOffsetX, r.checkClientOffsetY); err != nil {
+		t.Fatalf("checkbox indicator changed during delayed repaint without pointer movement: %v (snapshots: %s, %s)", err, r.checkAfterClick, r.checkAfterDelay)
+	}
 	if r.checkBounds.left < r.checkClient.left || r.checkBounds.top < r.checkClient.top || r.checkBounds.right > r.checkClient.right || r.checkBounds.bottom > r.checkClient.bottom {
 		t.Fatalf("delayed checkbox bounds %+v escape client area %+v; screenshot: %s", r.checkBounds, r.checkClient, r.checkImage)
 	}
@@ -227,6 +296,42 @@ func TestFirstDrawAndDelayedCheckboxRelayout(t *testing.T) {
 	}
 	t.Logf("first frame button: %+v (screenshot: %s)", r.buttonBounds, r.buttonImage)
 	t.Logf("checked checkbox survived delayed text relayout at %+v (screenshot: %s)", r.checkBounds, r.checkImage)
+}
+
+func assertSameCheckboxIndicator(beforePath, afterPath string, bounds firstDrawRect, clientOffsetX, clientOffsetY int) error {
+	beforeFile, err := os.Open(beforePath)
+	if err != nil {
+		return err
+	}
+	defer beforeFile.Close()
+	before, err := png.Decode(beforeFile)
+	if err != nil {
+		return err
+	}
+	afterFile, err := os.Open(afterPath)
+	if err != nil {
+		return err
+	}
+	defer afterFile.Close()
+	after, err := png.Decode(afterFile)
+	if err != nil {
+		return err
+	}
+	// The indicator occupies the leading ~24 physical pixels of the native
+	// checkbox. Compare only that region so unrelated text/cursor changes do
+	// not obscure repaint artifacts.
+	region := image.Rect(clientOffsetX+int(bounds.left), clientOffsetY+int(bounds.top), clientOffsetX+int(bounds.left)+24, clientOffsetY+int(bounds.bottom))
+	if !region.In(before.Bounds()) || !region.In(after.Bounds()) {
+		return errors.New("checkbox indicator lies outside captured client image")
+	}
+	for y := region.Min.Y; y < region.Max.Y; y++ {
+		for x := region.Min.X; x < region.Max.X; x++ {
+			if before.At(x, y) != after.At(x, y) {
+				return errors.New("indicator pixels differ")
+			}
+		}
+	}
+	return nil
 }
 
 func firstDrawControlBounds(hwnd, parent uintptr) (bounds, client firstDrawRect, err error) {
