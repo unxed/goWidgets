@@ -31,7 +31,7 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 	canvas, err := win.AddCanvas()
 	if err != nil {
 		for _, symbol := range []string{
-			"_ZN7QWidget12setAttributeENS_15WidgetAttributeEb",
+			"_ZN7QWidget12setAttributeEN2Qt15WidgetAttributeEb",
 			"_ZNK7QWidget13mapFromGlobalERK6QPoint",
 			"_ZN7QCursor3posEv",
 			"_ZN15QGuiApplication17keyboardModifiersEv",

@@ -19,7 +19,7 @@ func (r *resolver) bindCanvas() bool {
 		fn     any
 		symbol string
 	}{
-		{&qWidgetAttribute, "_ZN7QWidget12setAttributeENS_15WidgetAttributeEb"},
+		{&qWidgetAttribute, "_ZN7QWidget12setAttributeEN2Qt15WidgetAttributeEb"},
 		{&qWidgetMapFromGlobal, "_ZNK7QWidget13mapFromGlobalERK6QPoint"},
 		{&qCursorPos, "_ZN7QCursor3posEv"},
 		{&qKeyboardMods, "_ZN15QGuiApplication17keyboardModifiersEv"},
