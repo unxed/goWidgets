@@ -11,7 +11,7 @@ import (
 	"github.com/unxed/goWidgets/core"
 )
 
-const canvasEventMask = int32(1<<2 | 1<<8 | 1<<9 | 1<<21) // motion, button, release, scroll
+const canvasEventMask = int32(1<<2 | 1<<8 | 1<<9 | 1<<21 | 1<<23) // motion, button, release, discrete and smooth scroll
 
 var (
 	gtkDrawingAreaNew  func() uintptr

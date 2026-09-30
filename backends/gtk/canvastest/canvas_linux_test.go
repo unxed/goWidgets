@@ -63,6 +63,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	}
 	var (
 		gtkWindowPresent    func(uintptr)
+		gtkWidgetGetEvents  func(uintptr) int32
 		gtkWidgetGetWindow  func(uintptr) uintptr
 		gtkWidgetTranslate  func(uintptr, uintptr, int32, int32, *int32, *int32) int32
 		gtkWidgetDraw       func(uintptr, uintptr)
@@ -76,6 +77,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		cairoWritePNG       func(uintptr, string) int32
 	)
 	purego.RegisterLibFunc(&gtkWindowPresent, gtkLib, "gtk_window_present")
+	purego.RegisterLibFunc(&gtkWidgetGetEvents, gtkLib, "gtk_widget_get_events")
 	purego.RegisterLibFunc(&gtkWidgetGetWindow, gtkLib, "gtk_widget_get_window")
 	purego.RegisterLibFunc(&gtkWidgetTranslate, gtkLib, "gtk_widget_translate_coordinates")
 	gdkLib, err := purego.Dlopen("libgdk-3.so.0", purego.RTLD_NOW|purego.RTLD_GLOBAL)
@@ -104,11 +106,13 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		screenshot = filepath.Join(dir, "gtk-canvas.png")
 	}
 	var inputErr error
+	var eventMask int32
 	go func() {
 		time.Sleep(350 * time.Millisecond)
 		pointerAt := make(chan [2]int, 1)
 		app.QueueUpdate(func() {
 			gtkWindowPresent(windowWidget)
+			eventMask = gtkWidgetGetEvents(canvasWidget)
 			var rootX, rootY, canvasX, canvasY int32
 			if gdkWindowGetOrigin(gtkWidgetGetWindow(windowWidget), &rootX, &rootY) == 0 ||
 				gtkWidgetTranslate(canvasWidget, windowWidget, gtkAllocW(canvasWidget)/2, gtkAllocH(canvasWidget)/2, &canvasX, &canvasY) == 0 {
@@ -153,7 +157,7 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		}
 	}
 	if !down || !wheel {
-		t.Fatalf("GTK pointer events down=%v wheel=%v, xdotool err=%v; expected Canvas-center input", down, wheel, inputErr)
+		t.Fatalf("GTK pointer events down=%v wheel=%v, mask=%#x, xdotool err=%v; expected Canvas-center input", down, wheel, eventMask, inputErr)
 	}
 }
 
