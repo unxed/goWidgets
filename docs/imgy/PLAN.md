@@ -100,9 +100,9 @@ cv.Invalidate() // запросить перерисовку через план
 | Итерация | Суть | Статус | Заметки |
 |---|---|---|---|
 | A1 | получить и прочитать эталон | готово | NSIS 2; извлечён CHM, оглавление и кодировка записаны в `spec/REFERENCE-NOTES.md` |
-| A2 | инвентарь фич из help | в работе | обработаны Overview, Features, System Requirements, Mouse & Keyboard Use, Touch Interface и License Agreement; далее Contact Us |
+| A2 | инвентарь фич из help | готово | проверены все 7 разделов оглавления; 65 функциональных требований в `spec/INVENTORY.md`; License/Contact отмечены как справочные |
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
-| B1 | Canvas: core + headless | не начата | |
+| B1 | Canvas: core + headless | ждёт решения | `Canvas` отсутствует в `vtui/vocabulary.json`; см. BACKLOG Q8 |
 | B2 | Canvas: GTK | не начата | |
 | B3 | Canvas: Win32 | не начата | |
 | B4 | `showcase/imgy` v0.1: открыть и показать | не начата | первый релиз |
