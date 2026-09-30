@@ -40,10 +40,18 @@ var imageFilter = goWidgets.FileFilter{
 }
 
 type imageEntry struct {
-	name string
-	path string
-	size int64
+	name    string
+	path    string
+	size    int64
+	modTime time.Time
 }
+
+const (
+	sortByName = iota
+	sortByType
+	sortBySize
+	sortByDate
+)
 
 func main() {
 	start := "."
@@ -70,6 +78,10 @@ func main() {
 	pathEdit, _ := win.AddEdit(start)
 	openFolder, _ := win.AddButton("Открыть папку")
 	openImage, _ := win.AddButton("Открыть файл…")
+	sortLabel, _ := win.AddLabel("Сортировка:")
+	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
+	sortBox.Select(sortByName)
+	sortDirection, _ := win.AddButton("По возрастанию")
 	files, _ := win.AddListBox(nil)
 	var previewBox goWidgets.Box
 	var canvas *goWidgets.Canvas
@@ -103,8 +115,16 @@ func main() {
 		openFolder.Top().Eq(pathEdit.Top()),
 		pathEdit.Right().Eq(openFolder.Left().Minus(pad)),
 
+		sortLabel.Left().Eq(title.Left()),
+		sortLabel.Top().Eq(pathEdit.Bottom().Plus(pad)),
+		sortBox.Left().Eq(sortLabel.Right().Plus(6)),
+		sortBox.Top().Eq(sortLabel.Top()),
+		sortBox.Width().Is(180),
+		sortDirection.Left().Eq(sortBox.Right().Plus(pad)),
+		sortDirection.Top().Eq(sortBox.Top()),
+
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(pathEdit.Bottom().Plus(pad)),
+		files.Top().Eq(sortLabel.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(status.Top().Minus(pad)),
 
@@ -125,6 +145,10 @@ func main() {
 	info.HugHeight()
 	openFolder.HugWidth()
 	openImage.HugWidth()
+	sortLabel.HugHeight()
+	sortBox.HugHeight()
+	sortDirection.HugWidth()
+	sortDirection.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
 
@@ -132,6 +156,7 @@ func main() {
 	var currentImage image.Image
 	var folder string
 	selectedIndex := -1
+	sortMode, sortDescending := sortByName, false
 	viewState := viewport.New(viewport.Size{}, viewport.Size{})
 	var renderGeneration atomic.Uint64
 	var qualityTimer *time.Timer
@@ -213,10 +238,10 @@ func main() {
 			path := filepath.Join(dir, item.Name())
 			st, err := item.Info()
 			if err == nil {
-				entries = append(entries, imageEntry{name: item.Name(), path: path, size: st.Size()})
+				entries = append(entries, imageEntry{name: item.Name(), path: path, size: st.Size(), modTime: st.ModTime()})
 			}
 		}
-		sort.Slice(entries, func(i, j int) bool { return naturalLess(entries[i].name, entries[j].name) })
+		sortEntries(entries, sortMode, sortDescending)
 		folder = dir
 		labels := make([]string, len(entries))
 		for i := range entries {
@@ -303,8 +328,43 @@ func main() {
 		files.Select(index)
 		selectEntry(index)
 	}
+	applySorting := func() {
+		selectedPath := ""
+		if selectedIndex >= 0 && selectedIndex < len(entries) {
+			selectedPath = entries[selectedIndex].path
+		}
+		sortEntries(entries, sortMode, sortDescending)
+		labels := make([]string, len(entries))
+		selectedIndex = -1
+		for i := range entries {
+			labels[i] = entries[i].name
+			if entries[i].path == selectedPath {
+				selectedIndex = i
+			}
+		}
+		files.SetItems(labels)
+		if selectedIndex >= 0 {
+			files.Select(selectedIndex)
+			selectEntry(selectedIndex)
+		}
+	}
 
 	files.Selected.On(app.Scope(), selectEntry)
+	sortBox.Selected.On(app.Scope(), func(index int) {
+		if index >= sortByName && index <= sortByDate {
+			sortMode = index
+			applySorting()
+		}
+	})
+	sortDirection.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		sortDescending = !sortDescending
+		if sortDescending {
+			sortDirection.Text.Set("По убыванию")
+		} else {
+			sortDirection.Text.Set("По возрастанию")
+		}
+		applySorting()
+	})
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
@@ -578,6 +638,35 @@ func naturalLess(a, b string) bool {
 		return len(x) < len(y)
 	}
 	return a < b
+}
+
+func sortEntries(entries []imageEntry, mode int, descending bool) {
+	less := func(a, b imageEntry) bool {
+		switch mode {
+		case sortByType:
+			aType, bType := strings.ToLower(filepath.Ext(a.name)), strings.ToLower(filepath.Ext(b.name))
+			if aType != bType {
+				return aType < bType
+			}
+		case sortBySize:
+			if a.size != b.size {
+				return a.size < b.size
+			}
+		case sortByDate:
+			if !a.modTime.Equal(b.modTime) {
+				return a.modTime.Before(b.modTime)
+			}
+		default:
+			return naturalLess(a.name, b.name)
+		}
+		return naturalLess(a.name, b.name)
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if descending {
+			return less(entries[j], entries[i])
+		}
+		return less(entries[i], entries[j])
+	})
 }
 
 func overLight(premultiplied, alpha uint8) uint8 {

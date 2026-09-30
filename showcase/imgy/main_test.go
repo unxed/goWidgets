@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
 )
@@ -103,5 +104,37 @@ func TestNaturalLessSortsNumberedImages(t *testing.T) {
 		if names[i] != want[i] {
 			t.Fatalf("natural order = %v, want %v", names, want)
 		}
+	}
+}
+
+func TestSortEntriesByTypeSizeAndDate(t *testing.T) {
+	base := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	entries := []imageEntry{
+		{name: "z.png", size: 10, modTime: base.Add(time.Hour)},
+		{name: "b.jpg", size: 30, modTime: base},
+		{name: "a.jpg", size: 20, modTime: base.Add(2 * time.Hour)},
+	}
+
+	tests := []struct {
+		name       string
+		mode       int
+		descending bool
+		want       []string
+	}{
+		{name: "type ascending", mode: sortByType, want: []string{"a.jpg", "b.jpg", "z.png"}},
+		{name: "size descending", mode: sortBySize, descending: true, want: []string{"b.jpg", "a.jpg", "z.png"}},
+		{name: "date ascending", mode: sortByDate, want: []string{"b.jpg", "z.png", "a.jpg"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := append([]imageEntry(nil), entries...)
+			sortEntries(got, tt.mode, tt.descending)
+			gotNames := []string{got[0].name, got[1].name, got[2].name}
+			for i, want := range tt.want {
+				if gotNames[i] != want {
+					t.Fatalf("sort order = %v, want %v", gotNames, tt.want)
+				}
+			}
+		})
 	}
 }
