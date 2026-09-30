@@ -108,7 +108,7 @@ cv.Invalidate() // запросить перерисовку через план
 | B4 | `showcase/imgy` v0.1: открыть и показать | готово | `main`: Windows/Linux/macOS CI; GTK screenshot приложения проверен |
 | B5 | Canvas на Qt 5/6 | готово | `main`: Xvfb проверяет первый кадр, click/wheel и ABI offsets; CI зелёный, Qt screenshot проверен |
 | B5c | Canvas на Cocoa | готово | `main`: Cocoa pixel, Auto Layout, pointer CI и macOS screenshot artifact; run `36726555566` зелёный на всех платформах |
-| B6 | просмотр: зум, пан, соседние файлы | в работе | `main` f4c9998: чистый viewport package с Fit/Actual/Fill, cursor-anchored zoom и pan/clamp; CI `36727555271` |
+| B6 | просмотр: зум, пан, соседние файлы | в работе | `main` aeea49a: Fit/Actual/Fill, wheel zoom, drag pan, natural sort и file keys; CI `36728447306` |
 | B7 | ревизия плана с пользователем | не начата | без кода |
 
 Порядок: A1 — строго первой (проверка доступности эталона). B1–B4 можно начинать, не дожидаясь A2/A3
