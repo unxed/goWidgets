@@ -85,9 +85,10 @@ jobs:
               sleep 0.2
             done
             test -n "${window_id:-}"
+            xdotool windowraise "$window_id"
+            xdotool windowfocus --sync "$window_id"
             sleep 0.5
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
-            xdotool windowfocus --sync "$window_id"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"
