@@ -3,11 +3,11 @@
 Обновляется в **каждом** ответе с патчем: правкой существующих строк, а не дописыванием журнала.
 Не длиннее ~40 строк. История — в `git log`.
 
-Обновлено: 2026-09-30 (Cocoa test hang устранён, повторная проверка запущена).
+Обновлено: 2026-09-30 (Cocoa Canvas pixel показан; поправлена точка pointer-теста, CI запущен).
 
 ## Где мы
 
-- Текущая итерация: **B5c — Canvas на Cocoa**. AppKit RGBA presenter, мышиные события и Auto Layout screenshot-тест опубликованы в `goWidgets/main` (`d4b86e1`); конфликт имени исправлен в `6a1cacf`. CI показал, что синхронный synthetic mouse-down зависает в AppKit tracking loop; тест переведён на прямой вызов event-конвертера (`3134760`). Run `36726209126` проверяет исправление. B1–B5 уже в `main`; Qt run `36704317386` зелёный, screenshot просмотрен. Ручные тесты в этой среде не запускались.
+- Текущая итерация: **B5c — Canvas на Cocoa**. AppKit RGBA presenter, mouse events и Auto Layout screenshot-тест опубликованы в `goWidgets/main` (`d4b86e1`). Cocoa pixel/screenshot и типы событий прошли в CI, но coordinate assertion выявил неправильный `NSPoint`, переданный тестовым helper-ом; исправление в `f4f1401`, run `36726555566` проверяет координаты. Синхронный native mouse-down в тесте заменён прямым вызовом event-конвертера после зависания в AppKit tracking loop (`3134760`). B1–B5 уже в `main`; Qt run `36704317386` зелёный, screenshot просмотрен. Ручные тесты в этой среде не запускались.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless и терминальный Canvas в `vtui/main`.
@@ -38,4 +38,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: дождаться run `36726209126`; при успехе закрыть B5c/D6 и начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: дождаться run `36726555566`; при успехе закрыть B5c/D6 и начать B6 (viewport modes, cursor-centered zoom, pan, natural-sorted adjacent files). BMP отложен до явного разрешения `golang.org/x/image` (Q4).
