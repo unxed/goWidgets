@@ -9,13 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/unxed/goWidgets"
+	"github.com/unxed/goWidgets/backends/qt"
 	"github.com/unxed/goWidgets/core"
 )
 
@@ -24,13 +24,23 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 	if app == nil {
 		return
 	}
-	defer runtime.UnlockOSThread()
 	win, err := app.NewWindow("Qt Canvas test", 400, 300)
 	if err != nil {
 		t.Fatal(err)
 	}
 	canvas, err := win.AddCanvas()
 	if err != nil {
+		for _, symbol := range []string{
+			"_ZN7QWidget16setMouseTrackingEb",
+			"_ZNK7QWidget13mapFromGlobalERK6QPoint",
+			"_ZN7QCursor3posEv",
+			"_ZN15QGuiApplication11mouseButtonsEv",
+			"_ZN15QGuiApplication17keyboardModifiersEv",
+			"_ZN7QPixmap12loadFromDataEPKhjPKc6QFlagsIN2Qt19ImageConversionFlagEE",
+			"_ZN7QPixmapC1Ev",
+		} {
+			t.Logf("Qt %d symbol %s = %#x", qt.Version(), symbol, qt.Sym(symbol))
+		}
 		t.Fatal(err)
 	}
 	want := color.RGBA{R: 51, G: 102, B: 153, A: 255}
