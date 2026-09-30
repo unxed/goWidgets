@@ -84,8 +84,8 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var gdkWindowGetOrigin func(uintptr, *int32, *int32) int32
-	purego.RegisterLibFunc(&gdkWindowGetOrigin, gdkLib, "gdk_window_get_origin")
+	var gdkX11WindowGetXID func(uintptr) uint64
+	purego.RegisterLibFunc(&gdkX11WindowGetXID, gdkLib, "gdk_x11_window_get_xid")
 	purego.RegisterLibFunc(&gtkWidgetDraw, gtkLib, "gtk_widget_draw")
 	purego.RegisterLibFunc(&gtkAllocW, gtkLib, "gtk_widget_get_allocated_width")
 	purego.RegisterLibFunc(&gtkAllocH, gtkLib, "gtk_widget_get_allocated_height")
@@ -109,24 +109,23 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	var eventMask int32
 	go func() {
 		time.Sleep(350 * time.Millisecond)
-		pointerAt := make(chan [2]int, 1)
+		pointerAt := make(chan [3]int, 1)
 		app.QueueUpdate(func() {
 			gtkWindowPresent(windowWidget)
 			eventMask = gtkWidgetGetEvents(canvasWidget)
-			var rootX, rootY, canvasX, canvasY int32
-			if gdkWindowGetOrigin(gtkWidgetGetWindow(windowWidget), &rootX, &rootY) == 0 ||
-				gtkWidgetTranslate(canvasWidget, windowWidget, gtkAllocW(canvasWidget)/2, gtkAllocH(canvasWidget)/2, &canvasX, &canvasY) == 0 {
-				pointerAt <- [2]int{-1, -1}
+			var canvasX, canvasY int32
+			xid := gdkX11WindowGetXID(gtkWidgetGetWindow(windowWidget))
+			if xid == 0 || gtkWidgetTranslate(canvasWidget, windowWidget, gtkAllocW(canvasWidget)/2, gtkAllocH(canvasWidget)/2, &canvasX, &canvasY) == 0 {
+				pointerAt <- [3]int{-1, -1, -1}
 				return
 			}
-			pointerAt <- [2]int{int(rootX + canvasX), int(rootY + canvasY)}
+			pointerAt <- [3]int{int(xid), int(canvasX), int(canvasY)}
 		})
 		coords := <-pointerAt
-		time.Sleep(150 * time.Millisecond) // let GTK/X raise the toplevel over concurrent test windows
 		if coords[0] < 0 {
 			inputErr = fmt.Errorf("could not resolve GTK Canvas screen coordinates")
 		} else {
-			inputErr = exec.Command("xdotool", "mousemove", fmt.Sprint(coords[0]), fmt.Sprint(coords[1]), "click", "1", "click", "4").Run()
+			inputErr = exec.Command("xdotool", "windowraise", fmt.Sprint(coords[0]), "mousemove", "--window", fmt.Sprint(coords[0]), fmt.Sprint(coords[1]), fmt.Sprint(coords[2]), "click", "1", "click", "4").Run()
 		}
 		time.Sleep(180 * time.Millisecond)
 		app.QueueUpdate(func() {
