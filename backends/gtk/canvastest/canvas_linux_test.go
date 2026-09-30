@@ -137,9 +137,6 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 	if err := app.Run(win); err != nil {
 		t.Fatal(err)
 	}
-	if !down || !wheel {
-		t.Fatalf("GTK pointer events down=%v wheel=%v, xdotool err=%v; expected Canvas-center input", down, wheel, inputErr)
-	}
 	if screenshot != "" {
 		f, err := os.Open(screenshot)
 		if err != nil {
@@ -154,6 +151,9 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		if got != want {
 			t.Fatalf("Canvas screenshot center = %#v, want %#v", got, want)
 		}
+	}
+	if !down || !wheel {
+		t.Fatalf("GTK pointer events down=%v wheel=%v, xdotool err=%v; expected Canvas-center input", down, wheel, inputErr)
 	}
 }
 
