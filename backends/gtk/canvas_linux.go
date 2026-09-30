@@ -169,6 +169,18 @@ func (d *driver) canvasInput(kind core.EventKind, event uintptr, h core.Handle) 
 			m.Button = core.MouseMiddle
 		case 3:
 			m.Button = core.MouseRight
+		case 4, 5:
+			// Some X servers expose wheel ticks as button events rather than
+			// GDK_SCROLL events (notably XTest/xdotool). Normalize both forms.
+			if kind == core.EventMouseUp {
+				return
+			}
+			kind = core.EventMouseWheel
+			if button == 4 {
+				m.Delta = 1
+			} else {
+				m.Delta = -1
+			}
 		}
 	}
 	if kind == core.EventMouseWheel {
