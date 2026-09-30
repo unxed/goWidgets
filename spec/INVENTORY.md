@@ -42,3 +42,26 @@
 | FEA-031 | Features | Работа с конфигурацией из двух мониторов. | in | ? | TBD | help |
 | FEA-032 | Features | Сенсорный ввод: касание, свайп и масштабирование щипком. | in | ? | TBD | help |
 | SYS-001 | System Requirements | Справка заявляет XP–10 (32/64-bit), 256 МБ RAM, 15 МБ диска и рекомендует мышь с колесом; применимость этих старых минимумов к новому приложению не установлена. | ? | ? | platform targets | help |
+| MOU-001 | Mouse & Keyboard Use | Переход в полноэкранный просмотр из миниатюр двойным щелчком или отдельной кнопкой. | in | ? | TBD | help |
+| MOU-002 | Mouse & Keyboard Use | В полноэкранном режиме наведение на нижний край показывает панель управления, на правый — свойства/EXIF, на верхний — миниатюры, на левый — файловые и редакторские команды; нижний правый угол открывает панель задач Windows. | in | ? | Canvas, TBD | help + ControlBar illustration |
+| MOU-003 | Mouse & Keyboard Use | Когда изображение вписано, удержание левой кнопки под курсором-лупой временно увеличивает область; перемещение указателя двигает область лупы. | in | ? | ImageView, pointer input | help + cursor illustration |
+| MOU-004 | Mouse & Keyboard Use | Когда изображение больше области просмотра, удержание левой кнопки под курсором-рукой перемещает его; клавиши-стрелки также панорамируют. | in | ? | ImageView, pointer input | help + cursor illustration |
+| MOU-005 | Mouse & Keyboard Use | В обычном режиме Ctrl+drag выделяет прямоугольник и затем увеличивает его. | in | ? | ImageView, selection input | help |
+| MOU-006 | Mouse & Keyboard Use | В режимах прямоугольного, круглого и свободного выделения Ctrl+drag задаёт область; правая кнопка открывает операции увеличения, копирования, вырезания, кадрирования, удаления и сохранения выделенного фрагмента. | in | ? | selection modes, context menu | help + mode illustrations |
+| MOU-007 | Mouse & Keyboard Use | Колесо листает соседние изображения; Ctrl+колесо меняет масштаб; над полноэкранной панелью колесо тоже масштабирует. | in | ? | ImageView, wheel input | help |
+| MOU-008 | Mouse & Keyboard Use | При удержании Shift левый щелчок увеличивает масштаб, правый — уменьшает. | in | ? | ImageView, pointer input | help |
+| MOU-009 | Mouse & Keyboard Use | Space/Right/PgDn переходят вперёд, Backspace/Left/PgUp — назад; Home и End выбирают первый и последний файлы. | in | ? | image navigation | help |
+| MOU-010 | Mouse & Keyboard Use | Цифры 1–9 задают масштаб 100–900%; A или `/` — реальный размер, B или `*` — вписать. | in | ? | ImageView | help |
+| MOU-011 | Mouse & Keyboard Use | `+` и `-` увеличивают и уменьшают масштаб изображения. | in | ? | ImageView | help |
+| MOU-012 | Mouse & Keyboard Use | C и M вызывают копирование и перемещение текущего файла в другую папку. | in | ? | TBD | help |
+| MOU-013 | Mouse & Keyboard Use | D открывает доску рисования для текста, линий, фигур, подсветок и водяных знаков. | in | ? | TBD | help |
+| MOU-014 | Mouse & Keyboard Use | E открывает изображение в первой настроенной внешней программе. | in | ? | TBD | help |
+| MOU-015 | Mouse & Keyboard Use | I показывает/скрывает окно свойств с EXIF и гистограммой. | in | ? | TBD | help |
+| MOU-016 | Mouse & Keyboard Use | S открывает настройки слайд-шоу. | in | ? | TBD | help |
+| MOU-017 | Mouse & Keyboard Use | T открывает редактор комментария JPEG. | in | ? | TBD | help |
+| MOU-018 | Mouse & Keyboard Use | L/`<` вращают влево, R/`>` — вправо, H — отражает по горизонтали, V — по вертикали. | in | ? | TBD | help |
+| MOU-019 | Mouse & Keyboard Use | W открывает файловый менеджер в текущем каталоге. | in | ? | TBD | help |
+| MOU-020 | Mouse & Keyboard Use | X открывает инструменты кадрирования. | in | ? | TBD | help |
+| MOU-021 | Mouse & Keyboard Use | Ctrl+R открывает изменение размера, Ctrl+H — гистограмму, Ctrl+Z/Y — многоуровневые отмену/повтор. | in | ? | TBD | help |
+| MOU-022 | Mouse & Keyboard Use | Enter/F переключают полноэкранный и оконный/браузерный режимы; нажатие колеса переключает полноэкранный и браузерный режимы; Esc закрывает полный экран или приложение из остальных режимов. | in | ? | window modes, input | help |
+| MOU-023 | Mouse & Keyboard Use | В браузере сортировка по имени, типу, размерам, объёму и дате доступна через заголовки столбцов табличного режима. | in | ? | browser, sorting | help |
