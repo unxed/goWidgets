@@ -100,7 +100,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Итерация | Суть | Статус | Заметки |
 |---|---|---|---|
 | A1 | получить и прочитать эталон | готово | NSIS 2; извлечён CHM, оглавление и кодировка записаны в `spec/REFERENCE-NOTES.md` |
-| A2 | инвентарь фич из help | в работе | обработаны Overview, Features, System Requirements, Mouse & Keyboard Use и Touch Interface; далее License Agreement |
+| A2 | инвентарь фич из help | в работе | обработаны Overview, Features, System Requirements, Mouse & Keyboard Use, Touch Interface и License Agreement; далее Contact Us |
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
 | B1 | Canvas: core + headless | не начата | |
 | B2 | Canvas: GTK | не начата | |
