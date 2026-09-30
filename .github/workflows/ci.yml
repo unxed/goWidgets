@@ -39,7 +39,7 @@ jobs:
       - name: Probe Qt 5 and Qt 6 wheel-event ABI
         run: |
           for qt in Qt6Widgets Qt5Widgets; do
-            c++ -fPIC backends/qt/qttest/canvas_abi_probe.cpp \
+            c++ -fPIC ci/qt/canvas_abi_probe.cpp \
               $(pkg-config --cflags --libs "$qt") -o "$RUNNER_TEMP/qt-abi-probe"
             "$RUNNER_TEMP/qt-abi-probe"
           done
