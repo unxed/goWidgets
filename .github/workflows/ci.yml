@@ -58,7 +58,7 @@ jobs:
       # Xvfb gives a display, stalonetray gives a panel, so the GTK and Qt
       # backends and the tray are exercised for real rather than skipped.
       - name: Tests with a display and a panel
-        run: xvfb-run -a go test -race ./...
+        run: xvfb-run -a go test -race -count=1 ./...
         env:
           GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
 
@@ -68,7 +68,7 @@ jobs:
         with:
           name: gtk-snapshots
           path: ${{ runner.temp }}/snapshots
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Capture imgy window under GTK
         run: |
@@ -100,12 +100,12 @@ jobs:
         with:
           name: imgy-gtk-screenshot
           path: ${{ runner.temp }}/imgy-snapshots
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       # The debug build turns affinity and constraint violations into panics;
       # it has to stay green too, or the diagnostics rot unnoticed.
       - name: Tests, debug build
-        run: xvfb-run -a go test -tags goWidgets_debug ./...
+        run: xvfb-run -a go test -count=1 -tags goWidgets_debug ./...
 
       - name: Cross-compile
         run: |
@@ -137,8 +137,9 @@ jobs:
       # driver covers the layout pipeline everywhere.
       - name: Tests
         # GUI packages share desktop-global foreground and mouse-capture state.
-        # Run them serially so one test process cannot steal another's HWND capture.
-        run: go test -p 1 ./...
+        # Run them serially, and disable Go's test cache so the first-frame and
+        # delayed-checkbox screenshot gate actually runs on every CI invocation.
+        run: go test -p 1 -count=1 ./...
         env:
           GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
 
@@ -147,7 +148,7 @@ jobs:
         with:
           name: win32-snapshots
           path: ${{ runner.temp }}/snapshots
-          if-no-files-found: ignore
+          if-no-files-found: error
 
       - name: Build as a GUI application
         run: go build -ldflags="-H windowsgui" -o crescent.exe ./showcase/crescent
@@ -182,7 +183,7 @@ jobs:
           GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
 
       - name: Tests
-        run: go test ./...
+        run: go test -count=1 ./...
 
       - name: Build the showcase
         run: go build -o /tmp/crescent ./showcase/crescent
@@ -199,4 +200,4 @@ jobs:
         with:
           name: macos-snapshots
           path: ${{ runner.temp }}/snapshots
-          if-no-files-found: ignore
+          if-no-files-found: error
