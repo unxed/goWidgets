@@ -19,8 +19,10 @@ go run ./showcase/imgy [image-file-or-folder]
 Use **Open folder** to browse a directory, select an image in the list, or use
 **Open image…** / **Ctrl+O** to choose a file. The mouse wheel goes to the
 previous or next naturally sorted image; **Ctrl+wheel** zooms around the
-pointer. Drag the image to pan. **F** fits the whole image, **1** shows actual
-size, and **2** fills the preview area. **← / Backspace / Page Up** go to the
+pointer; **Shift+left-click / Shift+right-click** zoom in / out at the pointer.
+Drag the image to pan. **1–9** set 100–900% zoom; **A** or **/** shows actual
+size, **B**, **\***, or **F** fits the whole image, and **+ / -** adjust zoom.
+**← / Backspace / Page Up** go to the
 previous image; **→ / Space / Page Down** go to the next. **Home / End** go to
 the first or last image. **Esc** exits.
 

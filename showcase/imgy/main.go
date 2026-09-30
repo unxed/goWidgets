@@ -391,6 +391,18 @@ func main() {
 			invalidateView()
 		})
 		canvas.MouseDown.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if currentImage != nil {
+				if factor := shiftClickZoomFactor(mouse); factor != 0 {
+					scale := win.Scale().Scale
+					if scale <= 0 {
+						scale = 1
+					}
+					viewState.ZoomAt(viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}, factor)
+					viewState.ClampPan()
+					invalidateView()
+					return
+				}
+			}
 			if mouse.Button == goWidgets.MouseLeft && currentImage != nil {
 				dragging, lastPointer = true, mouse
 			}
@@ -425,14 +437,19 @@ func main() {
 			chooseImage()
 		} else if key.VirtualKeyCode == 0x1B { // Escape
 			app.Quit()
-		} else if key.Char == 'f' || key.Char == 'F' {
-			setViewMode(viewport.Fit)
-		} else if key.Char == '1' {
-			setViewMode(viewport.Actual)
-		} else if key.Char == '2' {
-			setViewMode(viewport.Fill)
 		} else {
-			if step := keyNavigationDelta(key.VirtualKeyCode); step != 0 {
+			if mode, zoom, ok := zoomShortcut(key.Char); ok {
+				setViewMode(mode)
+				if mode == viewport.Actual {
+					viewState.Zoom = zoom
+					viewState.ClampPan()
+					invalidateView()
+				}
+			} else if factor := zoomStepFactor(key.Char); factor != 0 && currentImage != nil {
+				viewState.ZoomAt(viewport.Point{X: viewState.Area.W / 2, Y: viewState.Area.H / 2}, factor)
+				viewState.ClampPan()
+				invalidateView()
+			} else if step := keyNavigationDelta(key.VirtualKeyCode); step != 0 {
 				navigate(selectedIndex + step)
 			} else {
 				switch key.VirtualKeyCode {
@@ -451,6 +468,44 @@ func main() {
 	}
 	if err := app.Run(win); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func zoomShortcut(char rune) (viewport.Mode, float64, bool) {
+	switch {
+	case char >= '1' && char <= '9':
+		return viewport.Actual, float64(char - '0'), true
+	case char == 'a' || char == 'A' || char == '/':
+		return viewport.Actual, 1, true
+	case char == 'b' || char == 'B' || char == '*' || char == 'f' || char == 'F':
+		return viewport.Fit, 1, true
+	default:
+		return 0, 0, false
+	}
+}
+
+func zoomStepFactor(char rune) float64 {
+	switch char {
+	case '+':
+		return 1.2
+	case '-':
+		return 1 / 1.2
+	default:
+		return 0
+	}
+}
+
+func shiftClickZoomFactor(mouse goWidgets.MouseInfo) float64 {
+	if mouse.Mods&goWidgets.ModShift == 0 {
+		return 0
+	}
+	switch mouse.Button {
+	case goWidgets.MouseLeft:
+		return 1.2
+	case goWidgets.MouseRight:
+		return 1 / 1.2
+	default:
+		return 0
 	}
 }
 

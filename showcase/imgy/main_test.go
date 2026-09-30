@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unxed/goWidgets"
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
@@ -168,6 +169,53 @@ func TestKeyboardNavigationMatchesViewerShortcuts(t *testing.T) {
 		if got := keyNavigationDelta(tt.key); got != tt.want {
 			t.Errorf("keyNavigationDelta(%#x) = %d, want %d", tt.key, got, tt.want)
 		}
+	}
+}
+
+func TestZoomShortcutsMatchViewerControls(t *testing.T) {
+	for _, tt := range []struct {
+		key  rune
+		mode viewport.Mode
+		zoom float64
+	}{
+		{key: '1', mode: viewport.Actual, zoom: 1},
+		{key: '9', mode: viewport.Actual, zoom: 9},
+		{key: 'A', mode: viewport.Actual, zoom: 1},
+		{key: '/', mode: viewport.Actual, zoom: 1},
+		{key: 'B', mode: viewport.Fit, zoom: 1},
+		{key: '*', mode: viewport.Fit, zoom: 1},
+		{key: 'F', mode: viewport.Fit, zoom: 1},
+	} {
+		mode, zoom, ok := zoomShortcut(tt.key)
+		if !ok || mode != tt.mode || zoom != tt.zoom {
+			t.Errorf("zoomShortcut(%q) = (%v, %v, %v), want (%v, %v, true)", tt.key, mode, zoom, ok, tt.mode, tt.zoom)
+		}
+	}
+	for _, tt := range []struct {
+		key  rune
+		want float64
+	}{{key: '+', want: 1.2}, {key: '-', want: 1 / 1.2}, {key: 'x', want: 0}} {
+		if got := zoomStepFactor(tt.key); got != tt.want {
+			t.Errorf("zoomStepFactor(%q) = %v, want %v", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestShiftClickZoomUsesMouseButton(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		mouse goWidgets.MouseInfo
+		want  float64
+	}{
+		{name: "shift left zooms in", mouse: goWidgets.MouseInfo{Button: goWidgets.MouseLeft, Mods: goWidgets.ModShift}, want: 1.2},
+		{name: "shift right zooms out", mouse: goWidgets.MouseInfo{Button: goWidgets.MouseRight, Mods: goWidgets.ModShift}, want: 1 / 1.2},
+		{name: "plain left does not zoom", mouse: goWidgets.MouseInfo{Button: goWidgets.MouseLeft}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shiftClickZoomFactor(tt.mouse); got != tt.want {
+				t.Errorf("shiftClickZoomFactor() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
