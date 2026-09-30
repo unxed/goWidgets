@@ -39,6 +39,16 @@ jobs:
       # backends and the tray are exercised for real rather than skipped.
       - name: Tests with a display and a panel
         run: xvfb-run -a go test -race ./...
+        env:
+          GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
+
+      - name: Upload GTK screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gtk-snapshots
+          path: ${{ runner.temp }}/snapshots
+          if-no-files-found: ignore
 
       # The debug build turns affinity and constraint violations into panics;
       # it has to stay green too, or the diagnostics rot unnoticed.
