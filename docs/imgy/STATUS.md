@@ -7,7 +7,7 @@
 
 ## Где мы
 
-- Текущая итерация: **B6 — зум/пан/навигация**. Canvas parity закрыт, run `36726555566` зелёный; Cocoa screenshot просмотрен. Viewport math (Fit/Actual/Fill, cursor-anchored zoom, pan/clamp) и интеграция в imgy (`F`/`1`/`2`, wheel, drag, previous/next/Home/End, natural sort) опубликованы (`f4c9998`, `aeea49a`). Geometry CI `36727555271` зелёный; полный CI интерактивного app `36728447306` ожидает запуска. Ручные тесты в этой среде не запускались.
+- Текущая итерация: **B6 — зум/пан/навигация**. Canvas parity закрыт; интерактивный viewport Fit/Actual/Fill, wheel zoom, drag pan и natural-sorted navigation опубликованы (`f4c9998`, `aeea49a`), полный CI `36728447306` зелёный. Предыдущий GTK screenshot был пустым: CI запускал приложение без картинки. В `cddb224` workflow получил generated PNG fixture и теперь открывает его; run `36729277383` проверяет screenshot/build. Ручные тесты в этой среде не запускались.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless и терминальный Canvas в `vtui/main`.
@@ -38,4 +38,4 @@
 
 ## Следующий шаг
 
-- Следующий шаг: подтвердить новый imgy screenshot/build в CI; затем улучшить качество масштабирования после остановки ввода и тестировать интерактивные команды. BMP отложен до явного разрешения `golang.org/x/image` (Q4).
+- Следующий шаг: проверить GTK screenshot с открытым PNG; затем добавить качественное масштабирование после остановки ввода с отменой устаревших фоновых кадров. BMP отложен до явного разрешения `golang.org/x/image` (Q4).
