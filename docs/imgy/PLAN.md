@@ -107,8 +107,8 @@ cv.Invalidate() // запросить перерисовку через план
 | B3 | Canvas: Win32 | готово | `main`: Windows local + serialized Windows CI; PNG-артефакт проверен |
 | B4 | `showcase/imgy` v0.1: открыть и показать | готово | `main`: Windows/Linux/macOS CI; GTK screenshot приложения проверен |
 | B5 | Canvas на Qt 5/6 | готово | `main`: Xvfb проверяет первый кадр, click/wheel и ABI offsets; CI зелёный, Qt screenshot проверен |
-| B5c | Canvas на Cocoa | в работе | `main` f4f1401: тест использует корректную NSWindow-точку; CI `36726555566` проверяет Cocoa/Win32/Linux |
-| B6 | просмотр: зум, пан, соседние файлы | не начата | после Canvas parity всех драйверов |
+| B5c | Canvas на Cocoa | готово | `main`: Cocoa pixel, Auto Layout, pointer CI и macOS screenshot artifact; run `36726555566` зелёный на всех платформах |
+| B6 | просмотр: зум, пан, соседние файлы | в работе | Canvas parity закрыт; начать с чистой viewport-математики |
 | B7 | ревизия плана с пользователем | не начата | без кода |
 
 Порядок: A1 — строго первой (проверка доступности эталона). B1–B4 можно начинать, не дожидаясь A2/A3
@@ -203,7 +203,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5/B5c | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | ✓ (Qt 5, Xvfb) | ✓ (Qt 6, Xvfb) | ◐ (реализация в main, CI `36726555566`) |
+| Canvas | B1–B3/B5/B5c | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | ✓ (Qt 5, Xvfb) | ✓ (Qt 6, Xvfb) | ✓ (GitHub macOS CI, screenshot artifact) |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |
