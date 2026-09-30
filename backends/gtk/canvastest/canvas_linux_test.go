@@ -125,7 +125,12 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 		if coords[0] < 0 {
 			inputErr = fmt.Errorf("could not resolve GTK Canvas screen coordinates")
 		} else {
-			inputErr = exec.Command("xdotool", "windowraise", fmt.Sprint(coords[0]), "mousemove", "--window", fmt.Sprint(coords[0]), fmt.Sprint(coords[1]), fmt.Sprint(coords[2]), "click", "1", "click", "4").Run()
+			windowID := fmt.Sprint(coords[0])
+			inputErr = exec.Command("xdotool", "windowraise", windowID, "mousemove", "--window", windowID, fmt.Sprint(coords[1]), fmt.Sprint(coords[2]), "click", "1").Run()
+			if inputErr == nil {
+				time.Sleep(100 * time.Millisecond)
+				inputErr = exec.Command("xdotool", "click", "4").Run()
+			}
 		}
 		time.Sleep(180 * time.Millisecond)
 		app.QueueUpdate(func() {
