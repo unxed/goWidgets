@@ -77,6 +77,7 @@ var (
 	pGetKeyState        = user32.NewProc("GetKeyState")
 	pSetWindowPos       = user32.NewProc("SetWindowPos")
 	pGetClientRect      = user32.NewProc("GetClientRect")
+	pRedrawWindow       = user32.NewProc("RedrawWindow")
 	pAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
 	pEnableWindow       = user32.NewProc("EnableWindow")
 	pLoadCursorW        = user32.NewProc("LoadCursorW")
@@ -111,6 +112,9 @@ const (
 	wsChild            = 0x40000000
 	wsVisible          = 0x10000000
 	wsTabStop          = 0x00010000
+	rdwInvalidate      = 0x0001
+	rdwAllChildren     = 0x0080
+	rdwUpdateNow       = 0x0100
 	ssLeftNoWordWrap   = 0x0000000C
 	ssBitmap           = 0x0000000E
 	ssCenterImage      = 0x00000200
@@ -637,7 +641,14 @@ func (w *window) SetTitle(s string) {
 	}
 }
 
-func (w *window) Show()                            { pShowWindow.Call(w.hwnd, swShow) }
+func (w *window) Show() {
+	pShowWindow.Call(w.hwnd, swShow)
+	// Child controls can keep their pre-layout pixels even after the hidden
+	// window has been laid out. A hover or the next text-driven layout then
+	// paints them and makes the window appear to fix itself. Force the whole
+	// child tree through WM_PAINT before returning from the first Show.
+	pRedrawWindow.Call(w.hwnd, 0, 0, rdwInvalidate|rdwAllChildren|rdwUpdateNow)
+}
 func (w *window) Close()                           { pShowWindow.Call(w.hwnd, swHide) }
 func (w *window) RootHandle() core.Handle          { return w.root }
 func (w *window) Events() <-chan core.BackendEvent { return w.events }

@@ -79,9 +79,12 @@ func (a *App) Post(d time.Duration, f func()) Cancel {
 // application quits.
 func (a *App) Run(main *Window) error {
 	// Windows are created hidden so that the first frame is measured and laid
-	// out before anything appears on screen; Run is what puts the main window
-	// up. The condition reads "still hidden", not "already visible".
+	// out before anything appears on screen. Prepare that frame before Show:
+	// otherwise native child controls are briefly visible at their creation
+	// size (10×10 on Win32), and a later invalidation is what makes them snap
+	// into place. The condition reads "still hidden", not "already visible".
 	if main != nil && main.hidden {
+		a.eng.PumpOnce()
 		main.Show()
 	}
 	return a.eng.Run()
