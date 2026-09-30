@@ -34,19 +34,19 @@ func (w *window) PresentCanvas(h core.Handle, frame *core.CanvasFrame) {
 }
 
 const (
-	eventLeftMouseDown     = 1
-	eventLeftMouseUp       = 2
-	eventRightMouseDown    = 3
-	eventRightMouseUp      = 4
-	eventMouseMoved        = 5
-	eventLeftMouseDragged  = 6
-	eventRightMouseDragged = 7
-	eventScrollWheel       = 22
-	eventOtherMouseDown    = 25
-	eventOtherMouseUp      = 26
-	eventOtherMouseDragged = 27
-	modifierShift          = 1 << 17
-	modifierOption         = 1 << 19
+	eventLeftMouseDown      = 1
+	eventLeftMouseUp        = 2
+	eventRightMouseDown     = 3
+	eventCanvasRightMouseUp = 4
+	eventMouseMoved         = 5
+	eventLeftMouseDragged   = 6
+	eventRightMouseDragged  = 7
+	eventScrollWheel        = 22
+	eventOtherMouseDown     = 25
+	eventOtherMouseUp       = 26
+	eventOtherMouseDragged  = 27
+	modifierShift           = 1 << 17
+	modifierOption          = 1 << 19
 )
 
 func handleCanvasEvent(w *window, ev objc.ID, typ uint64) bool {
@@ -56,7 +56,7 @@ func handleCanvasEvent(w *window, ev objc.ID, typ uint64) bool {
 	move := typ == eventMouseMoved || typ == eventLeftMouseDragged || typ == eventRightMouseDragged || typ == eventOtherMouseDragged
 	scroll := typ == eventScrollWheel
 	down := typ == eventLeftMouseDown || typ == eventRightMouseDown || typ == eventOtherMouseDown
-	up := typ == eventLeftMouseUp || typ == eventRightMouseUp || typ == eventOtherMouseUp
+	up := typ == eventLeftMouseUp || typ == eventCanvasRightMouseUp || typ == eventOtherMouseUp
 	if !move && !scroll && !down && !up {
 		return false
 	}
