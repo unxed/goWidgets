@@ -82,7 +82,9 @@ jobs:
       # Tab) and skips if the runner has no desktop session; the headless
       # driver covers the layout pipeline everywhere.
       - name: Tests
-        run: go test ./...
+        # GUI packages share desktop-global foreground and mouse-capture state.
+        # Run them serially so one test process cannot steal another's HWND capture.
+        run: go test -p 1 ./...
         env:
           GOWIDGETS_SNAPSHOT_DIR: ${{ runner.temp }}/snapshots
 
