@@ -41,7 +41,13 @@ jobs:
           for qt in Qt6Widgets Qt5Widgets; do
             c++ -fPIC ci/qt/canvas_abi_probe.cpp \
               $(pkg-config --cflags --libs "$qt") -o "$RUNNER_TEMP/qt-abi-probe"
-            "$RUNNER_TEMP/qt-abi-probe"
+            probe_output=$("$RUNNER_TEMP/qt-abi-probe")
+            echo "$probe_output"
+            case "$qt:$probe_output" in
+              Qt6Widgets:*"Qt 6 QWheelEvent angleDelta offset: 88; value: 120"*) ;;
+              Qt5Widgets:*"Qt 5 QWheelEvent angleDelta offset: 72; value: 120"*) ;;
+              *) echo "Unexpected Qt wheel-event ABI: $probe_output" >&2; exit 1 ;;
+            esac
           done
 
       # Xvfb gives a display, stalonetray gives a panel, so the GTK and Qt

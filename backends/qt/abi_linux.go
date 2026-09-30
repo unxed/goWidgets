@@ -57,9 +57,9 @@ type qPoint struct{ X, Y int32 }
 
 var (
 	qt5Layout = layout{evType: 16, evAccept: 18, evAcceptBit: 0x04, keyMods: 20, keyText: 32,
-		keyKey: 40, resizeSize: 20, translations: 11, plugins: 6}
+		keyKey: 40, resizeSize: 20, wheelDelta: 72, translations: 11, plugins: 6}
 	qt6Layout = layout{evType: 8, evAccept: 12, evAcceptBit: 0x01, keyMods: 32, keyText: 40,
-		keyKey: 64, resizeSize: 16, translations: 10, plugins: 6}
+		keyKey: 64, resizeSize: 16, wheelDelta: 88, translations: 10, plugins: 6}
 	lay layout
 )
 
