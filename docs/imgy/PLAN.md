@@ -102,12 +102,13 @@ cv.Invalidate() // запросить перерисовку через план
 | A1 | получить и прочитать эталон | готово | NSIS 2; извлечён CHM, оглавление и кодировка записаны в `spec/REFERENCE-NOTES.md` |
 | A2 | инвентарь фич из help | готово | проверены все 7 разделов оглавления; 65 функциональных требований в `spec/INVENTORY.md`; License/Contact отмечены как справочные |
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
-| B1 | Canvas: core + headless | готово | goWidgets PR #4 и vtui PR #183: CI зелёный на всех заявленных платформах |
-| B2 | Canvas: GTK | готово | goWidgets PR #5: Linux/Xvfb, настоящие click/wheel, пиксельный screenshot; Windows/macOS CI зелёный |
-| B3 | Canvas: Win32 | готово | goWidgets PR #6: Windows local + serialized Windows CI; Linux/macOS CI; PNG-артефакт проверен |
-| B4 | `showcase/imgy` v0.1: открыть и показать | готово | PR #7: Windows/Linux/macOS CI зелёный; GTK screenshot приложения проверен |
-| B5 | спайк: Canvas на Qt | в работе | прототип QLabel/QPixmap; CI измеряет ABI QWheelEvent отдельно для Qt 5/6 |
-| B6 | просмотр: зум, пан, соседние файлы | не начата | |
+| B1 | Canvas: core + headless | готово | goWidgets и vtui изменения находятся в `main`; core/headless проверки в CI |
+| B2 | Canvas: GTK | готово | `main`: Linux/Xvfb, настоящие click/wheel и пиксельный screenshot; Windows/macOS CI |
+| B3 | Canvas: Win32 | готово | `main`: Windows local + serialized Windows CI; PNG-артефакт проверен |
+| B4 | `showcase/imgy` v0.1: открыть и показать | готово | `main`: Windows/Linux/macOS CI; GTK screenshot приложения проверен |
+| B5 | Canvas на Qt 5/6 | готово | `main`: Xvfb проверяет первый кадр, click/wheel и ABI offsets; CI зелёный, Qt screenshot проверен |
+| B5c | Canvas на Cocoa | в работе | по порядку D6 — последняя незакрытая реализация Canvas |
+| B6 | просмотр: зум, пан, соседние файлы | не начата | после Canvas parity всех драйверов |
 | B7 | ревизия плана с пользователем | не начата | без кода |
 
 Порядок: A1 — строго первой (проверка доступности эталона). B1–B4 можно начинать, не дожидаясь A2/A3
@@ -161,11 +162,19 @@ cv.Invalidate() // запросить перерисовку через план
 - **Не делаем:** зум, пан, соседние файлы, меню (B6 и далее).
 - **Показать пользователям:** бинарь на настоящем Windows и на Linux. Вернувшуюся обратную связь занеси в BACKLOG.
 
-### B5 — спайк: Canvas на Qt (ограничен по времени)
+### B5 — Canvas на Qt 5/6
 
 - **Вопрос:** можно ли на Qt 6 и Qt 5 без CGO показать RGBA-буфер и получить события мыши/колеса?
 - **Кандидаты по порядку:** (a) тот же механизм перехвата событий, который бэкенд уже использует для других виджетов (ADR-0013), на потомке `QWidget`; (b) показ буфера через `QLabel` + `QPixmap::fromImage(QImage(...))`.
-- **Результат:** ADR «Canvas на Qt: да / нет / как» и минимальный работающий пример под Xvfb. Если спайк успешен — интегрировать Canvas и проверки отдельно для Qt 5 и Qt 6, включая видимую область и ввод. Сам спайк не закрывает паритет Canvas (D6). **D1 самостоятельно не пересматривать.**
+- **Результат:** [ADR-0017](../adr/0017-qt-canvas.md); Qt 5 и Qt 6 используют QLabel/QPixmap без cgo. GitHub Xvfb проверяет видимую RGBA-область, click/wheel и ABI offsets; CI green на Windows/Linux/macOS. Эта итерация не закрывает общий паритет Canvas (D6). **D1 самостоятельно не пересматривать.**
+
+### B5c — Canvas на Cocoa
+
+- **Делаем:** представить тот же RGBA Canvas в AppKit и передавать координаты/кнопки/модификаторы/колесо через существующий оконный event path; все размеры — из Auto Layout.
+- **Проверки:** Cocoa-тесты на настоящей macOS в GitHub CI: первый кадр до ввода, заполнение Auto Layout bounds, клик/движение/колесо и PNG screenshot artifact.
+- **Не делаем:** зум, пан, соседние файлы и меню (B6 и далее).
+- **Готово, когда:** Canvas работает и тестируется на Cocoa, таблица паритета D6 закрыта без backend-specific drawing API.
+- **Показать пользователям:** CI screenshot приложения с заполненным Canvas.
 
 ### B6 — просмотр: зум, пан, соседние файлы
 
@@ -194,7 +203,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5 | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | — | — | — |
+| Canvas | B1–B3/B5/B5c | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | ✓ (Qt 5, Xvfb) | ✓ (Qt 6, Xvfb) | — |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |
