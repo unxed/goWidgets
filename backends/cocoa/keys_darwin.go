@@ -15,6 +15,9 @@ const eventFlagsChanged = 12
 // It reports keys and returns true only for an event it consumed.
 func onWindowEvent(window, ev objc.ID) bool {
 	kind := uint64(msg(ev, "type"))
+	if handleCanvasEvent(current.win, ev, kind) {
+		return true
+	}
 	if kind != eventKeyDown && kind != eventKeyUp && kind != eventFlagsChanged {
 		return false
 	}

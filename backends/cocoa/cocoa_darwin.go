@@ -98,6 +98,7 @@ func (d *driver) Capabilities() core.Caps {
 		Clipboard:       true,
 		FileDialog:      true,
 		Menus:           true,
+		Canvas:          true,
 		SmoothAnimation: true,
 		TrayIcon:        true, // NSStatusItem; see tray_darwin.go
 		MaxCallbacks:    2000,
@@ -303,21 +304,23 @@ func (d *driver) Shutdown() {
 // ------------------------------------------------------------------ window
 
 type node struct {
-	view  objc.ID // what the layout places: the control, or its scroll view
-	inner objc.ID // the table or text view inside a scroll view
-	kind  core.WidgetKind
-	items []string // list box rows, combo box items
+	view          objc.ID // what the layout places: the control, or its scroll view
+	inner         objc.ID // the table or text view inside a scroll view
+	kind          core.WidgetKind
+	items         []string // list box rows, combo box items
+	canvasButtons uint8
 }
 
 type window struct {
-	drv     *driver
-	handle  objc.ID // our NSWindow subclass
-	content objc.ID // the flipped content view
-	root    core.Handle
-	nextH   core.Handle
-	nodes   map[core.Handle]*node
-	byView  map[objc.ID]core.Handle
-	events  chan core.BackendEvent
+	drv           *driver
+	handle        objc.ID // our NSWindow subclass
+	content       objc.ID // the flipped content view
+	root          core.Handle
+	nextH         core.Handle
+	nodes         map[core.Handle]*node
+	byView        map[objc.ID]core.Handle
+	events        chan core.BackendEvent
+	canvasCapture core.Handle
 }
 
 func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) {
@@ -335,6 +338,7 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 	// Tab follows the layout, top to bottom and left to right — what
 	// ADR-0008 asks of every backend, and what AppKit does on its own.
 	msg(h, "setAutorecalculatesKeyViewLoop:", true)
+	msg(h, "setAcceptsMouseMovedEvents:", true)
 	msg(h, "center")
 
 	w := &window{
@@ -413,6 +417,11 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		n.view = msg(msg(cls("NSImageView"), "alloc"), "initWithFrame:", nsRect{})
 		msg(n.view, "autorelease")
 		msg(n.view, "setImageScaling:", uint64(3)) // NSImageScaleProportionallyUpOrDown
+	case core.KindCanvas:
+		n.view = msg(msg(cls("NSImageView"), "alloc"), "initWithFrame:", nsRect{})
+		msg(n.view, "autorelease")
+		msg(n.view, "setImageScaling:", uint64(0))   // NSImageScaleAxesIndependently; frame is already DPI-scaled
+		msg(n.view, "setImageAlignment:", uint64(0)) // NSImageAlignCenter
 	default:
 		return 0, fmt.Errorf("cocoa: unsupported widget kind %v", kind)
 	}
