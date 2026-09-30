@@ -78,11 +78,9 @@ func TestCanvasPaintAndPointer(t *testing.T) {
 				sendMouse := func(kind uint64) {
 					ev := cocoa.Msg(cocoa.Class("NSEvent"), "mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:",
 						kind, location, uint64(0), float64(0), windowNumber, objc.ID(0), int64(1), int64(1), float32(1))
-					// Queue events for normal AppKit dispatch. Calling sendEvent:
-					// synchronously for a synthetic down can enter its tracking loop
-					// before the matching release gets a chance to run.
-					application := cocoa.Msg(cocoa.Class("NSApplication"), "sharedApplication")
-					cocoa.Msg(application, "postEvent:atStart:", ev, false)
+					// Exercise the window's native-event conversion without entering
+					// NSWindow's synchronous mouse-down tracking loop.
+					cocoa.DispatchCanvasEvent(ev)
 				}
 				sendMouse(5) // moved
 				sendMouse(1) // left down

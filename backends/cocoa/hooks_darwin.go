@@ -23,6 +23,14 @@ func MsgBool(id objc.ID, name string, args ...any) bool { return msgT[bool](id, 
 // Class returns a class as a receiver.
 func Class(name string) objc.ID { return cls(name) }
 
+// DispatchCanvasEvent exercises the native-to-Canvas event conversion without
+// entering AppKit's synchronous mouse-down tracking loop.
+func DispatchCanvasEvent(ev objc.ID) {
+	if current != nil && current.win != nil && ev != 0 {
+		handleCanvasEvent(current.win, ev, uint64(msg(ev, "type")))
+	}
+}
+
 // NSString and GoString convert strings.
 func NSString(s string) objc.ID  { return nsString(s) }
 func GoString(ns objc.ID) string { return goString(ns) }
