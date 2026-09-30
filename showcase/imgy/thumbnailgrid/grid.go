@@ -19,6 +19,7 @@ type Grid struct {
 	Scroll     float64
 	Selected   map[int]bool
 	anchor     int
+	hasAnchor  bool
 }
 
 // VisibleRange returns the half-open item range that intersects the viewport.
@@ -72,7 +73,7 @@ func (g *Grid) SetCount(count int) {
 		}
 	}
 	if g.anchor >= count {
-		g.anchor = -1
+		g.hasAnchor = false
 	}
 	g.ClampScroll()
 }
@@ -100,8 +101,9 @@ func (g *Grid) Select(index int, ctrl, shift bool) {
 	}
 	switch {
 	case shift:
-		if g.anchor < 0 || g.anchor >= g.Count {
+		if !g.hasAnchor || g.anchor < 0 || g.anchor >= g.Count {
 			g.anchor = index
+			g.hasAnchor = true
 		}
 		if !ctrl {
 			clear(g.Selected)
@@ -120,10 +122,12 @@ func (g *Grid) Select(index int, ctrl, shift bool) {
 			g.Selected[index] = true
 		}
 		g.anchor = index
+		g.hasAnchor = true
 	default:
 		clear(g.Selected)
 		g.Selected[index] = true
 		g.anchor = index
+		g.hasAnchor = true
 	}
 }
 

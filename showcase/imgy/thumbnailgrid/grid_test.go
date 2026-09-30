@@ -39,6 +39,13 @@ func TestHitTestAccountsForScrollAndGaps(t *testing.T) {
 }
 
 func TestSingleControlAndRangeSelection(t *testing.T) {
+	initial := Grid{}
+	initial.SetCount(12)
+	initial.Select(4, false, true)
+	if got, want := initial.SelectedIndices(), []int{4}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("shift click without anchor = %v, want %v", got, want)
+	}
+
 	g := Grid{}
 	g.SetCount(12)
 	g.Select(2, false, false)
