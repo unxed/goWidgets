@@ -24,6 +24,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgtk-3-0 libglib2.0-0 xvfb stalonetray xdotool \
+            scrot \
             libqt6widgets6t64 libqt5widgets5t64 \
             qt6-translations-l10n qttranslations5-l10n
 
@@ -50,6 +51,34 @@ jobs:
           path: ${{ runner.temp }}/snapshots
           if-no-files-found: ignore
 
+      - name: Capture imgy window under GTK
+        run: |
+          mkdir -p "$RUNNER_TEMP/imgy-snapshots"
+          go build -o "$RUNNER_TEMP/imgy" ./showcase/imgy
+          xvfb-run -a bash -euo pipefail -c '
+            "$RUNNER_TEMP/imgy" "$RUNNER_TEMP" &
+            app_pid=$!
+            trap "kill $app_pid 2>/dev/null || true" EXIT
+            for _ in $(seq 1 50); do
+              window_id=$(xdotool search --onlyvisible --name "imgy" 2>/dev/null | head -n1 || true)
+              if [ -n "$window_id" ]; then break; fi
+              sleep 0.2
+            done
+            test -n "${window_id:-}"
+            sleep 0.5
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
+            xdotool key --window "$window_id" Escape
+            wait "$app_pid"
+          '
+
+      - name: Upload imgy screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: imgy-gtk-screenshot
+          path: ${{ runner.temp }}/imgy-snapshots
+          if-no-files-found: ignore
+
       # The debug build turns affinity and constraint violations into panics;
       # it has to stay green too, or the diagnostics rot unnoticed.
       - name: Tests, debug build
@@ -64,6 +93,8 @@ jobs:
             [ "$os" = windows ] && flags="$flags -H windowsgui"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -trimpath -ldflags="$flags" -o /tmp/out ./showcase/crescent
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath -ldflags="$flags" -o /tmp/imgy ./showcase/imgy
             echo "  $target ok"
           done
 
@@ -100,6 +131,11 @@ jobs:
         env:
           CGO_ENABLED: 0
 
+      - name: Build imgy as a GUI application
+        run: go build -ldflags="-H windowsgui" -o imgy.exe ./showcase/imgy
+        env:
+          CGO_ENABLED: 0
+
   macos:
     runs-on: macos-latest
     steps:
@@ -127,6 +163,11 @@ jobs:
 
       - name: Build the showcase
         run: go build -o /tmp/crescent ./showcase/crescent
+        env:
+          CGO_ENABLED: 0
+
+      - name: Build imgy
+        run: go build -o /tmp/imgy ./showcase/imgy
         env:
           CGO_ENABLED: 0
 

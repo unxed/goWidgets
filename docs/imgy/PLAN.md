@@ -58,7 +58,7 @@ cv.Invalidate() // запросить перерисовку через план
 во время перетаскивания мышь захвачена (Win32 `SetCapture`, у остальных — штатный grab); перестановка
 каналов RGBA→BGRA/ARGB — один общий хелпер в `core`, не по копии на бэкенд; трогать Canvas можно только из UI-потока.
 
-**D2. Изображения — в чистом Go.** stdlib `image/*` + `golang.org/x/image` (`draw`, `bmp`, `tiff`, `webp`).
+**D2. Изображения — в чистом Go.** stdlib `image/*` + `golang.org/x/image` (`draw`, `bmp`, `tiff`, `webp`) — только после разрешения зависимости по Q4.
 Масштабирование: пока пользователь двигает/крутит — быстрое (NearestNeighbor/ApproxBiLinear); в покое —
 качественное (CatmullRom) в фоновой горутине, результат через `app.QueueUpdate`, устаревшие задачи
 отменяются (счётчик поколений или `context`). Математика вьюпорта (зум/пан/вписывание) — отдельный
@@ -104,8 +104,8 @@ cv.Invalidate() // запросить перерисовку через план
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
 | B1 | Canvas: core + headless | готово | goWidgets PR #4 и vtui PR #183: CI зелёный на всех заявленных платформах |
 | B2 | Canvas: GTK | готово | goWidgets PR #5: Linux/Xvfb, настоящие click/wheel, пиксельный screenshot; Windows/macOS CI зелёный |
-| B3 | Canvas: Win32 | в работе | Win32 DIB presenter и UI-тест с pixels/input проходят локально; GitHub CI ожидается |
-| B4 | `showcase/imgy` v0.1: открыть и показать | не начата | первый релиз |
+| B3 | Canvas: Win32 | готово | goWidgets PR #6: Windows local + serialized Windows CI; Linux/macOS CI; PNG-артефакт проверен |
+| B4 | `showcase/imgy` v0.1: открыть и показать | в работе | UI и unit-тесты готовы; CI сборки/screenshot ожидают проверки |
 | B5 | спайк: Canvas на Qt | не начата | ответ да/нет/как |
 | B6 | просмотр: зум, пан, соседние файлы | не начата | |
 | B7 | ревизия плана с пользователем | не начата | без кода |
@@ -157,7 +157,7 @@ cv.Invalidate() // запросить перерисовку через план
 
 ### B4 — `showcase/imgy` v0.1
 
-- **Делаем:** окно + Canvas; открыть файл (`win.OpenFile` с фильтрами); декодировать jpeg/png/gif/bmp (stdlib и `x/image`); показать «вписать в окно»; Ctrl+O, Esc; CI собирает бинарники windows/linux по образцу `showcase/crescent` (если для него есть job — повтори); раздел «как запустить» в README приложения.
+- **Делаем:** окно + Canvas; открыть файл (`win.OpenFile` с фильтрами); декодировать jpeg/png/gif средствами stdlib; показать «вписать в окно»; Ctrl+O, Esc; CI собирает бинарники windows/linux по образцу `showcase/crescent` (если для него есть job — повтори); раздел «как запустить» в README приложения. BMP добавить только после разрешения зависимости `golang.org/x/image` по Q4.
 - **Не делаем:** зум, пан, соседние файлы, меню (B6 и далее).
 - **Показать пользователям:** бинарь на настоящем Windows и на Linux. Вернувшуюся обратную связь занеси в BACKLOG.
 
@@ -194,7 +194,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5 | ✓ | ✓ | ✓ (GitHub Xvfb) | ◐ (Windows local) | — | — | — |
+| Canvas | B1–B3/B5 | ✓ | ✓ | ✓ (GitHub Xvfb) | ✓ (Windows local + CI) | — | — | — |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |

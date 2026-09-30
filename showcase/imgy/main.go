@@ -1,11 +1,7 @@
-// Command imgy is the first working increment of the goWidgets image viewer.
+// Command imgy is the first interactive increment of the goWidgets image viewer.
 //
-// The first increment implements the core browse loop: choose a folder, browse
-// its images, select one, and keep the selected image and metadata visible.
-//
-// Every relationship is declared through goWidgets constraints. The showcase
-// contains no pixel coordinates, so the same shell can become a real image
-// viewer as ImageView grows on each backend.
+// The browser shell stays constraint-based; Canvas pixels are only used for
+// image content, never for application controls or layout.
 package main
 
 import (
@@ -29,10 +25,14 @@ import (
 )
 
 var imageExtensions = map[string]bool{
-	".bmp": true, ".cur": true, ".gif": true, ".heic": true, ".ico": true,
-	".jpeg": true, ".jpg": true, ".jxl": true, ".pdf": true, ".png": true,
-	".psd": true, ".svg": true, ".tga": true, ".tif": true, ".tiff": true,
-	".webp": true,
+	".gif": true, ".jpeg": true, ".jpg": true, ".png": true,
+}
+
+var imageFilter = goWidgets.FileFilter{
+	Name: "Изображения",
+	Patterns: []string{
+		"*.gif", "*.jpeg", "*.jpg", "*.png",
+	},
 }
 
 type imageEntry struct {
@@ -42,11 +42,16 @@ type imageEntry struct {
 }
 
 func main() {
-	root := "."
+	start := "."
 	if len(os.Args) > 1 && os.Args[1] != "" {
-		root = os.Args[1]
+		start = os.Args[1]
 	}
-	root, _ = filepath.Abs(root)
+	start, _ = filepath.Abs(start)
+	initialFile := ""
+	if info, err := os.Stat(start); err == nil && !info.IsDir() {
+		initialFile = start
+		start = filepath.Dir(start)
+	}
 
 	app, err := goWidgets.NewApp()
 	if err != nil {
@@ -57,13 +62,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	title, _ := win.AddLabel("imgy — image browser")
-	pathEdit, _ := win.AddEdit(root)
-	open, _ := win.AddButton("Открыть папку")
+	title, _ := win.AddLabel("imgy — просмотр изображений")
+	pathEdit, _ := win.AddEdit(start)
+	openFolder, _ := win.AddButton("Открыть папку")
+	openImage, _ := win.AddButton("Открыть файл…")
 	files, _ := win.AddListBox(nil)
-	preview, _ := win.AddImageView()
+	var previewBox goWidgets.Box
+	var canvas *goWidgets.Canvas
+	var imageView *goWidgets.ImageView
+	canvas, err = win.AddCanvas()
+	if err == nil {
+		previewBox = canvas
+	} else {
+		// Backends not yet at Canvas parity keep the established native preview
+		// until their Canvas stage is implemented.
+		imageView, err = win.AddImageView()
+		if err != nil {
+			log.Fatal(err)
+		}
+		previewBox = imageView
+	}
 	info, _ := win.AddLabel("Файлов: 0")
-	fullscreen, _ := win.AddButton("Полный экран")
 	status, _ := win.AddLabel("Выберите изображение")
 
 	const pad = 12
@@ -74,24 +93,24 @@ func main() {
 
 		pathEdit.Left().Eq(title.Left()),
 		pathEdit.Top().Eq(title.Bottom().Plus(pad)),
-		open.Right().Eq(title.Right()),
-		open.Top().Eq(pathEdit.Top()),
-		pathEdit.Right().Eq(open.Left().Minus(pad)),
+		openImage.Right().Eq(title.Right()),
+		openImage.Top().Eq(pathEdit.Top()),
+		openFolder.Right().Eq(openImage.Left().Minus(pad)),
+		openFolder.Top().Eq(pathEdit.Top()),
+		pathEdit.Right().Eq(openFolder.Left().Minus(pad)),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(pathEdit.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(status.Top().Minus(pad)),
 
-		preview.Left().Eq(files.Right().Plus(pad)),
-		preview.Top().Eq(files.Top()),
-		preview.Right().Eq(title.Right()),
-		preview.Bottom().Eq(status.Top().Minus(pad)),
+		previewBox.Left().Eq(files.Right().Plus(pad)),
+		previewBox.Top().Eq(files.Top()),
+		previewBox.Right().Eq(title.Right()),
+		previewBox.Bottom().Eq(status.Top().Minus(pad)),
 
-		info.Left().Eq(preview.Left()),
-		info.Bottom().Eq(preview.Bottom().Minus(pad)),
-		fullscreen.Right().Eq(preview.Right()),
-		fullscreen.Bottom().Eq(preview.Bottom().Minus(pad)),
+		info.Left().Eq(previewBox.Left()),
+		info.Bottom().Eq(previewBox.Bottom().Minus(pad)),
 
 		status.Left().Eq(title.Left()),
 		status.Right().Eq(title.Right()),
@@ -100,23 +119,25 @@ func main() {
 		log.Fatal(err)
 	}
 	info.HugHeight()
-	fullscreen.HugWidth()
-	open.HugWidth()
-	// The title and the status line are one-line rows: the vertical slack
-	// belongs to the list and the preview between them. Without these the
-	// solver gave it to the status line, which is one label and so cheaper
-	// to stretch than the list and the preview together.
+	openFolder.HugWidth()
+	openImage.HugWidth()
 	title.HugHeight()
 	status.HugHeight()
 
 	var entries []imageEntry
+	var currentImage image.Image
 	var folder string
-	load := func(dir string) {
+	if canvas != nil {
+		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
+			fitImage(frame.Image, currentImage)
+		})
+	}
+	loadFolder := func(dir string) bool {
 		dir, _ = filepath.Abs(dir)
 		read, err := os.ReadDir(dir)
 		if err != nil {
 			status.Text.Set("Не удалось открыть папку: " + err.Error())
-			return
+			return false
 		}
 		entries = entries[:0]
 		for _, item := range read {
@@ -139,32 +160,145 @@ func main() {
 		files.Select(-1)
 		pathEdit.Text.Set(folder)
 		info.Text.Set(fmt.Sprintf("Файлов: %d", len(entries)))
-		preview.SetPath("")
+		currentImage = nil
+		if canvas != nil {
+			canvas.Invalidate()
+		} else {
+			imageView.SetPath("")
+		}
 		status.Text.Set("Папка открыта: " + folder)
+		return true
 	}
 	selectEntry := func(i int) {
 		if i < 0 || i >= len(entries) {
 			return
 		}
 		e := entries[i]
-		preview.SetPath(e.path)
-		dimensions := imageDimensions(e.path)
-		info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
+		if canvas != nil {
+			img, dimensions, err := decodeImage(e.path)
+			if err != nil {
+				currentImage = nil
+				canvas.Invalidate()
+				status.Text.Set("Не удалось декодировать изображение: " + err.Error())
+				return
+			}
+			currentImage = img
+			canvas.Invalidate()
+			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
+		} else {
+			imageView.SetPath(e.path)
+			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), imageDimensions(e.path)))
+		}
 		status.Text.Set("Выбрано: " + e.path)
+	}
+	selectPath := func(path string) {
+		if !loadFolder(filepath.Dir(path)) {
+			return
+		}
+		name := strings.ToLower(filepath.Base(path))
+		for i, entry := range entries {
+			if strings.ToLower(entry.name) == name {
+				files.Select(i)
+				selectEntry(i)
+				return
+			}
+		}
+		status.Text.Set("Файл не найден в папке: " + path)
+	}
+	chooseImage := func() {
+		path, ok := win.OpenFile("Открыть изображение", imageFilter)
+		if ok {
+			selectPath(path)
+		}
 	}
 
 	files.Selected.On(app.Scope(), selectEntry)
-	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { load(pathEdit.Text.Get()) })
-	pathEdit.Activated.On(app.Scope(), func(string) { load(pathEdit.Text.Get()) })
-	fullscreen.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
-		fullscreen.Text.Set("Полный экран (следующий этап)")
-		status.Text.Set("Просмотр и метаданные работают; полноэкранное управление — следующий этап")
+	openFolder.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { loadFolder(pathEdit.Text.Get()) })
+	openImage.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { chooseImage() })
+	pathEdit.Activated.On(app.Scope(), func(string) { loadFolder(pathEdit.Text.Get()) })
+	win.KeyPressed().On(app.Scope(), func(key goWidgets.Key) {
+		if !key.KeyDown {
+			return
+		}
+		if key.Ctrl() && key.VirtualKeyCode == 0x4F { // Ctrl+O
+			chooseImage()
+		} else if key.VirtualKeyCode == 0x1B { // Escape
+			app.Quit()
+		}
 	})
-	load(root)
 
+	loadFolder(start)
+	if initialFile != "" {
+		selectPath(initialFile)
+	}
 	if err := app.Run(win); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func decodeImage(path string) (image.Image, string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, "", err
+	}
+	b := img.Bounds()
+	return img, fmt.Sprintf("%d × %d", b.Dx(), b.Dy()), nil
+}
+
+// fitImage paints a centered, aspect-preserving nearest-neighbor preview into
+// the Canvas frame. The opaque neutral background also composites transparent
+// source pixels consistently across native presentation APIs.
+func fitImage(dst *image.RGBA, src image.Image) {
+	if dst == nil {
+		return
+	}
+	clear(dst.Pix)
+	for i := 0; i < len(dst.Pix); i += 4 {
+		dst.Pix[i], dst.Pix[i+1], dst.Pix[i+2], dst.Pix[i+3] = 248, 248, 248, 255
+	}
+	if src == nil || src.Bounds().Empty() || dst.Bounds().Empty() {
+		return
+	}
+	sb, db := src.Bounds(), dst.Bounds()
+	scaleX, scaleY := float64(db.Dx())/float64(sb.Dx()), float64(db.Dy())/float64(sb.Dy())
+	scale := scaleX
+	if scaleY < scale {
+		scale = scaleY
+	}
+	w, h := int(float64(sb.Dx())*scale), int(float64(sb.Dy())*scale)
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	left, top := db.Min.X+(db.Dx()-w)/2, db.Min.Y+(db.Dy()-h)/2
+	for y := 0; y < h; y++ {
+		sy := sb.Min.Y + y*sb.Dy()/h
+		for x := 0; x < w; x++ {
+			sx := sb.Min.X + x*sb.Dx()/w
+			r, g, b, a := src.At(sx, sy).RGBA()
+			alpha := uint8(a >> 8)
+			di := dst.PixOffset(left+x, top+y)
+			dst.Pix[di+0] = overLight(uint8(r>>8), alpha)
+			dst.Pix[di+1] = overLight(uint8(g>>8), alpha)
+			dst.Pix[di+2] = overLight(uint8(b>>8), alpha)
+			dst.Pix[di+3] = 255
+		}
+	}
+}
+
+func overLight(premultiplied, alpha uint8) uint8 {
+	value := uint16(premultiplied) + 248*(255-uint16(alpha))/255
+	if value > 255 {
+		value = 255
+	}
+	return uint8(value)
 }
 
 func imageDimensions(path string) string {
