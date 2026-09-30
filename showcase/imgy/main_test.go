@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/unxed/goWidgets/showcase/imgy/viewport"
 )
 
 func TestFitImageCentersAndPreservesAspect(t *testing.T) {
@@ -37,6 +39,35 @@ func TestFitImageCompositesTransparency(t *testing.T) {
 	fitImage(dst, src)
 	if got, want := dst.RGBAAt(0, 0), (color.RGBA{R: 251, G: 123, B: 123, A: 255}); got != want {
 		t.Fatalf("transparent pixel composited as %#v, want %#v", got, want)
+	}
+}
+
+func TestQualityPreviewPreservesSolidPixelsAndLetterbox(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	src.SetRGBA(0, 0, color.RGBA{R: 220, G: 40, B: 30, A: 255})
+	src.SetRGBA(1, 0, color.RGBA{R: 220, G: 40, B: 30, A: 255})
+	dst := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	view := viewport.New(viewport.Size{W: 2, H: 1}, viewport.Size{W: 4, H: 4})
+	paintViewportQuality(dst, src, view, nil)
+	if got, want := dst.RGBAAt(0, 0), (color.RGBA{R: 248, G: 248, B: 248, A: 255}); got != want {
+		t.Fatalf("quality letterbox = %#v, want %#v", got, want)
+	}
+	if got, want := dst.RGBAAt(1, 1), (color.RGBA{R: 220, G: 40, B: 30, A: 255}); got != want {
+		t.Fatalf("quality preview = %#v, want %#v", got, want)
+	}
+}
+
+func TestQualityPreviewStopsWhenSuperseded(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	dst := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	view := viewport.New(viewport.Size{W: 10, H: 10}, viewport.Size{W: 20, H: 20})
+	calls := 0
+	paintViewportQuality(dst, src, view, func() bool {
+		calls++
+		return false
+	})
+	if calls != 1 {
+		t.Fatalf("cancellation checks = %d, want 1", calls)
 	}
 }
 

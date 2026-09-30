@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/unxed/goWidgets"
 	_ "github.com/unxed/goWidgets/backends/cocoa"
@@ -131,10 +133,68 @@ func main() {
 	var folder string
 	selectedIndex := -1
 	viewState := viewport.New(viewport.Size{}, viewport.Size{})
+	var renderGeneration atomic.Uint64
+	var qualityTimer *time.Timer
+	var qualityFrame *image.RGBA
+	var qualityFrameGeneration uint64
+	var scheduleQuality func(*image.RGBA)
+	var invalidateView func()
+	invalidateView = func() {
+		renderGeneration.Add(1)
+		qualityFrame = nil
+		qualityFrameGeneration = 0
+		if qualityTimer != nil {
+			qualityTimer.Stop()
+			qualityTimer = nil
+		}
+		if canvas != nil {
+			canvas.Invalidate()
+		}
+	}
 	if canvas != nil {
 		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
-			viewState.Area = viewport.Size{W: float64(frame.Image.Bounds().Dx()), H: float64(frame.Image.Bounds().Dy())}
+			area := viewport.Size{W: float64(frame.Image.Bounds().Dx()), H: float64(frame.Image.Bounds().Dy())}
+			if area != viewState.Area {
+				renderGeneration.Add(1)
+				qualityFrame = nil
+				qualityFrameGeneration = 0
+				if qualityTimer != nil {
+					qualityTimer.Stop()
+					qualityTimer = nil
+				}
+				viewState.Area = area
+			}
+			generation := renderGeneration.Load()
+			if qualityFrame != nil && qualityFrameGeneration == generation && qualityFrame.Bounds().Size() == frame.Image.Bounds().Size() {
+				copy(frame.Image.Pix, qualityFrame.Pix)
+				return
+			}
 			paintViewport(frame.Image, currentImage, viewState)
+			if scheduleQuality != nil {
+				scheduleQuality(frame.Image)
+			}
+		})
+	}
+	scheduleQuality = func(frame *image.RGBA) {
+		if currentImage == nil || qualityFrame != nil || qualityTimer != nil {
+			return
+		}
+		generation := renderGeneration.Load()
+		src, view, bounds := currentImage, viewState, frame.Bounds()
+		qualityTimer = time.AfterFunc(180*time.Millisecond, func() {
+			quality := image.NewRGBA(bounds)
+			paintViewportQuality(quality, src, view, func() bool { return generation == renderGeneration.Load() })
+			if generation != renderGeneration.Load() {
+				return
+			}
+			app.QueueUpdate(func() {
+				if generation != renderGeneration.Load() {
+					return
+				}
+				qualityTimer = nil
+				qualityFrame, qualityFrameGeneration = quality, generation
+				canvas.Invalidate()
+			})
 		})
 	}
 	loadFolder := func(dir string) bool {
@@ -171,7 +231,7 @@ func main() {
 		viewState.Pan = viewport.Point{}
 		viewState.Zoom = 1
 		if canvas != nil {
-			canvas.Invalidate()
+			invalidateView()
 		} else {
 			imageView.SetPath("")
 		}
@@ -188,7 +248,7 @@ func main() {
 			img, dimensions, err := decodeImage(e.path)
 			if err != nil {
 				currentImage = nil
-				canvas.Invalidate()
+				invalidateView()
 				status.Text.Set("Не удалось декодировать изображение: " + err.Error())
 				return
 			}
@@ -196,7 +256,7 @@ func main() {
 			mode := viewState.Mode
 			viewState = viewport.New(viewport.Size{W: float64(img.Bounds().Dx()), H: float64(img.Bounds().Dy())}, viewState.Area)
 			viewState.Mode = mode
-			canvas.Invalidate()
+			invalidateView()
 			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
 		} else {
 			imageView.SetPath(e.path)
@@ -227,7 +287,7 @@ func main() {
 	setViewMode := func(mode viewport.Mode) {
 		viewState.SetMode(mode)
 		if canvas != nil {
-			canvas.Invalidate()
+			invalidateView()
 		}
 	}
 	navigate := func(index int) {
@@ -258,7 +318,7 @@ func main() {
 			}
 			viewState.ZoomAt(viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}, math.Pow(1.2, mouse.Delta))
 			viewState.ClampPan()
-			canvas.Invalidate()
+			invalidateView()
 		})
 		canvas.MouseDown.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
 			if mouse.Button == goWidgets.MouseLeft && currentImage != nil {
@@ -276,7 +336,7 @@ func main() {
 			viewState.PanBy(viewport.Point{X: (mouse.X - lastPointer.X) * scale, Y: (mouse.Y - lastPointer.Y) * scale})
 			viewState.ClampPan()
 			lastPointer = mouse
-			canvas.Invalidate()
+			invalidateView()
 		})
 		canvas.MouseUp.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
 			if mouse.Button == goWidgets.MouseLeft {
@@ -367,6 +427,14 @@ func srcSizeY(src image.Image) int {
 }
 
 func paintViewport(dst *image.RGBA, src image.Image, view viewport.Viewport) {
+	paintViewportFiltered(dst, src, view, false, nil)
+}
+
+func paintViewportQuality(dst *image.RGBA, src image.Image, view viewport.Viewport, current func() bool) {
+	paintViewportFiltered(dst, src, view, true, current)
+}
+
+func paintViewportFiltered(dst *image.RGBA, src image.Image, view viewport.Viewport, quality bool, current func() bool) {
 	if dst == nil {
 		return
 	}
@@ -385,16 +453,26 @@ func paintViewport(dst *image.RGBA, src image.Image, view viewport.Viewport) {
 		return
 	}
 	for y := db.Min.Y; y < db.Max.Y; y++ {
-		sy := sb.Min.Y + int(math.Floor((float64(y-db.Min.Y)+0.5-transform.Offset.Y)/transform.Scale))
-		if sy < sb.Min.Y || sy >= sb.Max.Y {
+		if current != nil && y%16 == 0 && !current() {
+			return
+		}
+		sourceY := (float64(y-db.Min.Y) + 0.5 - transform.Offset.Y) / transform.Scale
+		if sourceY < 0 || sourceY >= float64(sb.Dy()) {
 			continue
 		}
+		sy := sb.Min.Y + int(math.Floor(sourceY))
 		for x := db.Min.X; x < db.Max.X; x++ {
-			sx := sb.Min.X + int(math.Floor((float64(x-db.Min.X)+0.5-transform.Offset.X)/transform.Scale))
-			if sx < sb.Min.X || sx >= sb.Max.X {
+			sourceX := (float64(x-db.Min.X) + 0.5 - transform.Offset.X) / transform.Scale
+			if sourceX < 0 || sourceX >= float64(sb.Dx()) {
 				continue
 			}
-			r, g, b, a := src.At(sx, sy).RGBA()
+			sx := sb.Min.X + int(math.Floor(sourceX))
+			var r, g, b, a uint32
+			if quality {
+				r, g, b, a = sampleCatmullRom(src, sb, float64(sb.Min.X)+sourceX-0.5, float64(sb.Min.Y)+sourceY-0.5)
+			} else {
+				r, g, b, a = src.At(sx, sy).RGBA()
+			}
 			alpha := uint8(a >> 8)
 			di := dst.PixOffset(x, y)
 			dst.Pix[di+0] = overLight(uint8(r>>8), alpha)
@@ -403,6 +481,60 @@ func paintViewport(dst *image.RGBA, src image.Image, view viewport.Viewport) {
 			dst.Pix[di+3] = 255
 		}
 	}
+}
+
+func sampleCatmullRom(src image.Image, bounds image.Rectangle, x, y float64) (r, g, b, a uint32) {
+	x0, y0 := int(math.Floor(x)), int(math.Floor(y))
+	var total, red, green, blue, alpha float64
+	for iy := y0 - 1; iy <= y0+2; iy++ {
+		wy := catmullRomWeight(y - float64(iy))
+		py := iy
+		if py < bounds.Min.Y {
+			py = bounds.Min.Y
+		} else if py >= bounds.Max.Y {
+			py = bounds.Max.Y - 1
+		}
+		for ix := x0 - 1; ix <= x0+2; ix++ {
+			weight := wy * catmullRomWeight(x-float64(ix))
+			px := ix
+			if px < bounds.Min.X {
+				px = bounds.Min.X
+			} else if px >= bounds.Max.X {
+				px = bounds.Max.X - 1
+			}
+			pr, pg, pb, pa := src.At(px, py).RGBA()
+			red += float64(pr) * weight
+			green += float64(pg) * weight
+			blue += float64(pb) * weight
+			alpha += float64(pa) * weight
+			total += weight
+		}
+	}
+	if total == 0 {
+		return
+	}
+	return clamp16(red / total), clamp16(green / total), clamp16(blue / total), clamp16(alpha / total)
+}
+
+func catmullRomWeight(x float64) float64 {
+	x = math.Abs(x)
+	if x < 1 {
+		return 1.5*x*x*x - 2.5*x*x + 1
+	}
+	if x < 2 {
+		return -0.5*x*x*x + 2.5*x*x - 4*x + 2
+	}
+	return 0
+}
+
+func clamp16(value float64) uint32 {
+	if value < 0 {
+		return 0
+	}
+	if value > 65535 {
+		return 65535
+	}
+	return uint32(value + 0.5)
 }
 
 func naturalLess(a, b string) bool {
