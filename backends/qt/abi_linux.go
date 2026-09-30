@@ -48,9 +48,12 @@ type layout struct {
 	keyText      uintptr // QKeyEvent::txt (QString)
 	keyKey       uintptr // QKeyEvent::k
 	resizeSize   uintptr // QResizeEvent::s (QSize)
+	wheelDelta   uintptr // QWheelEvent::angleD/m_angleDelta QPoint
 	translations int32   // QLibraryInfo::TranslationsPath
 	plugins      int32   // QLibraryInfo::PluginsPath
 }
+
+type qPoint struct{ X, Y int32 }
 
 var (
 	qt5Layout = layout{evType: 16, evAccept: 18, evAcceptBit: 0x04, keyMods: 20, keyText: 32,
@@ -62,12 +65,17 @@ var (
 
 // QEvent::Type values used here; identical in Qt 5 and 6.
 const (
-	evKeyPress   = 6
-	evKeyRelease = 7
-	evResize     = 14
-	evClose      = 19
-	evUser       = 1000 // QEvent::User: our wake-up
-	evUserQuit   = 1001 // leave the main loop
+	evMouseButtonPress   = 2
+	evMouseButtonRelease = 3
+	evMouseDoubleClick   = 4
+	evMouseMove          = 5
+	evKeyPress           = 6
+	evKeyRelease         = 7
+	evResize             = 14
+	evClose              = 19
+	evWheel              = 31
+	evUser               = 1000 // QEvent::User: our wake-up
+	evUserQuit           = 1001 // leave the main loop
 )
 
 // cptr turns an address that came from C (dlsym, a vtable slot) into an
@@ -243,6 +251,15 @@ func (r *resolver) fn(fptr any, names ...string) {
 	if a := r.sym(names...); a != 0 {
 		purego.RegisterFunc(fptr, a)
 	}
+}
+
+func (r *resolver) optionalFn(fptr any, name string) bool {
+	a, err := purego.Dlsym(libs.widgets, name)
+	if err != nil || a == 0 {
+		return false
+	}
+	purego.RegisterFunc(fptr, a)
+	return true
 }
 
 // v picks the Qt 5 or the Qt 6 spelling of a name.

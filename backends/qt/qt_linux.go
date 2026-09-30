@@ -91,63 +91,70 @@ var (
 	qLibraryPath     func(which int32) qstring
 	qFocusWidget     func() uintptr
 
-	qWidgetCtor    func(this unsafe.Pointer, parent uintptr, flags int32)
-	qWidgetTitle   func(w uintptr, title *qstring)
-	qWidgetResize  func(w uintptr, size *qSize)
-	qWidgetGeom    func(w uintptr, r *qRect)
-	qWidgetShow    func(w uintptr)
-	qWidgetHide    func(w uintptr)
-	qWidgetEnable  func(w uintptr, on bool)
-	qWidgetFocus   func(w uintptr, reason int32)
-	qWidgetWindow  func(w uintptr) uintptr
-	qSetTabOrder   func(first, second uintptr)
-	qWindowHandle  func(w uintptr) uintptr
-	qWindowDPR     func(win uintptr) float64
-	qContentsRect  func(w uintptr) qRect
-	qLabelCtor     func(this unsafe.Pointer, parent uintptr, flags int32)
-	qLabelText     func(l uintptr, text *qstring)
-	qLabelPixmap   func(l uintptr, pix unsafe.Pointer)
-	qLabelScaled   func(l uintptr, on bool)
-	qPixmapCtor    func(this unsafe.Pointer, path *qstring, format *byte, flags int32)
-	qPixmapDtor    func(this unsafe.Pointer)
-	qPushButtonNew func(this unsafe.Pointer, parent uintptr)
-	qButtonText    func(b uintptr, text *qstring)
-	qCheckBoxNew   func(this unsafe.Pointer, parent uintptr)
-	qSetChecked    func(b uintptr, on bool)
-	qLineEditNew   func(this unsafe.Pointer, parent uintptr)
-	qLineEditSet   func(e uintptr, text *qstring)
-	qLineEditText  func(e uintptr) qstring
-	qPlainTextNew  func(this unsafe.Pointer, parent uintptr)
-	qPlainReadOnly func(e uintptr, on bool)
-	qPlainWrap     func(e uintptr, mode int32)
-	qPlainSet      func(e uintptr, text *qstring)
-	qSystemFont    func(which int32) qvalue
-	qFontDtor      func(f *qvalue)
-	qWidgetFont    func(w uintptr, f *qvalue)
-	qComboNew      func(this unsafe.Pointer, parent uintptr)
-	qComboEditable func(c uintptr, on bool)
-	qComboInsertP  func(c uintptr, policy int32)
-	qComboAdjustP  func(c uintptr, policy int32)
-	qComboComplete func(c uintptr, completer uintptr)
-	qComboLineEdit func(c uintptr) uintptr
-	qComboClear    func(c uintptr)
-	qComboInsert   func(c uintptr, index int32, icon *qvalue, text *qstring, data *qvalue)
-	qComboSetIndex func(c uintptr, index int32)
-	qComboText     func(c uintptr) qstring
-	qComboSetText  func(c uintptr, text *qstring)
-	qIconCtor      func(i *qvalue)
-	qIconDtor      func(i *qvalue)
-	qVariantInt    func(v *qvalue, i int32)
-	qVariantDtor   func(v *qvalue)
-	qListNew       func(this unsafe.Pointer, parent uintptr)
-	qListInsert    func(l uintptr, row int32, text *qstring)
-	qListClear     func(l uintptr)
-	qListSetRow    func(l uintptr, row int32)
-	qListRowOf     func(l uintptr, item uintptr) int32
-	qListCount     func(l uintptr) int32
-	qFrameWidth    func(f uintptr) int32
-	qVScrollBar    func(a uintptr) uintptr
-	qScrollHint    func(s uintptr) qSize
+	qWidgetCtor          func(this unsafe.Pointer, parent uintptr, flags int32)
+	qWidgetTitle         func(w uintptr, title *qstring)
+	qWidgetResize        func(w uintptr, size *qSize)
+	qWidgetGeom          func(w uintptr, r *qRect)
+	qWidgetShow          func(w uintptr)
+	qWidgetHide          func(w uintptr)
+	qWidgetEnable        func(w uintptr, on bool)
+	qWidgetFocus         func(w uintptr, reason int32)
+	qWidgetWindow        func(w uintptr) uintptr
+	qSetTabOrder         func(first, second uintptr)
+	qWindowHandle        func(w uintptr) uintptr
+	qWindowDPR           func(win uintptr) float64
+	qContentsRect        func(w uintptr) qRect
+	qLabelCtor           func(this unsafe.Pointer, parent uintptr, flags int32)
+	qLabelText           func(l uintptr, text *qstring)
+	qLabelPixmap         func(l uintptr, pix unsafe.Pointer)
+	qLabelScaled         func(l uintptr, on bool)
+	qPixmapCtor          func(this unsafe.Pointer, path *qstring, format *byte, flags int32)
+	qPixmapDefault       func(this unsafe.Pointer)
+	qPixmapDtor          func(this unsafe.Pointer)
+	qPushButtonNew       func(this unsafe.Pointer, parent uintptr)
+	qButtonText          func(b uintptr, text *qstring)
+	qCheckBoxNew         func(this unsafe.Pointer, parent uintptr)
+	qSetChecked          func(b uintptr, on bool)
+	qLineEditNew         func(this unsafe.Pointer, parent uintptr)
+	qLineEditSet         func(e uintptr, text *qstring)
+	qLineEditText        func(e uintptr) qstring
+	qPlainTextNew        func(this unsafe.Pointer, parent uintptr)
+	qPlainReadOnly       func(e uintptr, on bool)
+	qPlainWrap           func(e uintptr, mode int32)
+	qPlainSet            func(e uintptr, text *qstring)
+	qSystemFont          func(which int32) qvalue
+	qFontDtor            func(f *qvalue)
+	qWidgetFont          func(w uintptr, f *qvalue)
+	qWidgetMouse         func(w uintptr, on bool)
+	qWidgetMapFromGlobal func(w uintptr, p *qPoint) uint64
+	qCursorPos           func() uint64
+	qMouseButtons        func() int32
+	qKeyboardMods        func() int32
+	qPixmapLoadData      func(pix uintptr, data *byte, size uint32, format *byte, flags int32) bool
+	qComboNew            func(this unsafe.Pointer, parent uintptr)
+	qComboEditable       func(c uintptr, on bool)
+	qComboInsertP        func(c uintptr, policy int32)
+	qComboAdjustP        func(c uintptr, policy int32)
+	qComboComplete       func(c uintptr, completer uintptr)
+	qComboLineEdit       func(c uintptr) uintptr
+	qComboClear          func(c uintptr)
+	qComboInsert         func(c uintptr, index int32, icon *qvalue, text *qstring, data *qvalue)
+	qComboSetIndex       func(c uintptr, index int32)
+	qComboText           func(c uintptr) qstring
+	qComboSetText        func(c uintptr, text *qstring)
+	qIconCtor            func(i *qvalue)
+	qIconDtor            func(i *qvalue)
+	qVariantInt          func(v *qvalue, i int32)
+	qVariantDtor         func(v *qvalue)
+	qListNew             func(this unsafe.Pointer, parent uintptr)
+	qListInsert          func(l uintptr, row int32, text *qstring)
+	qListClear           func(l uintptr)
+	qListSetRow          func(l uintptr, row int32)
+	qListRowOf           func(l uintptr, item uintptr) int32
+	qListCount           func(l uintptr) int32
+	qFrameWidth          func(f uintptr) int32
+	qVScrollBar          func(a uintptr) uintptr
+	qScrollHint          func(s uintptr) qSize
 
 	sigClicked signal
 	sigToggled signal
@@ -219,6 +226,7 @@ func (r *resolver) bindAll() {
 
 	r.bindDialogs()
 	r.bindTray()
+	canvasAvailable = r.bindCanvas()
 
 	sigClicked = r.signal("15QAbstractButton", "_ZN15QAbstractButton7clickedEb")
 	sigToggled = r.signal("15QAbstractButton", "_ZN15QAbstractButton7toggledEb")
@@ -304,6 +312,7 @@ func (d *driver) Capabilities() core.Caps {
 		Menus:           true,
 		SmoothAnimation: true,
 		TrayIcon:        true, // QSystemTrayIcon; see tray_linux.go
+		Canvas:          canvasAvailable,
 		MaxCallbacks:    2000, // purego's callback pool
 	}
 }
@@ -455,6 +464,8 @@ func (d *driver) filter(watched uintptr, ev unsafe.Pointer) bool {
 		return false
 	}
 	switch evType(ev) {
+	case evMouseButtonPress, evMouseButtonRelease, evMouseDoubleClick, evMouseMove, evWheel:
+		d.canvasEvent(watched, ev)
 	case evClose:
 		if watched == w.handle {
 			// Never close on our own: core decides and calls Close. The
@@ -550,12 +561,13 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 }
 
 type node struct {
-	handle uintptr // the QWidget placed in the layout
-	kind   core.WidgetKind
-	rect   qRect // last geometry applied, for the tab order
-	placed bool
-	items  []string // list box rows, for event text
-	path   string   // image view file
+	handle        uintptr // the QWidget placed in the layout
+	kind          core.WidgetKind
+	rect          qRect // last geometry applied, for the tab order
+	placed        bool
+	items         []string // list box rows, for event text
+	path          string   // image view file
+	canvasButtons int32
 }
 
 type window struct {
@@ -599,6 +611,10 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindImageView:
 		qLabelCtor(obj, w.handle, 0)
 		qLabelScaled(uintptr(obj), true)
+	case core.KindCanvas:
+		qLabelCtor(obj, w.handle, 0)
+		qLabelScaled(uintptr(obj), true)
+		qWidgetMouse(uintptr(obj), true)
 	case core.KindButton:
 		qPushButtonNew(obj, w.handle)
 	case core.KindCheckBox:

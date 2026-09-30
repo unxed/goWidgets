@@ -106,7 +106,7 @@ cv.Invalidate() // запросить перерисовку через план
 | B2 | Canvas: GTK | готово | goWidgets PR #5: Linux/Xvfb, настоящие click/wheel, пиксельный screenshot; Windows/macOS CI зелёный |
 | B3 | Canvas: Win32 | готово | goWidgets PR #6: Windows local + serialized Windows CI; Linux/macOS CI; PNG-артефакт проверен |
 | B4 | `showcase/imgy` v0.1: открыть и показать | готово | PR #7: Windows/Linux/macOS CI зелёный; GTK screenshot приложения проверен |
-| B5 | спайк: Canvas на Qt | не начата | ответ да/нет/как |
+| B5 | спайк: Canvas на Qt | в работе | прототип QLabel/QPixmap; CI измеряет ABI QWheelEvent отдельно для Qt 5/6 |
 | B6 | просмотр: зум, пан, соседние файлы | не начата | |
 | B7 | ревизия плана с пользователем | не начата | без кода |
 

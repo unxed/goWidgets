@@ -7,7 +7,7 @@
 
 ## Где мы
 
-- Текущая итерация: **B5 — спайк Canvas на Qt 5/6**. B4 реализован: Canvas с ImageView fallback, GIF/JPEG/PNG, выбор файла/папки, вписывание, Ctrl+O/Esc и Auto Layout. Локальные Windows `go test ./...`/`go vet ./...`; PR #7 CI Windows/Linux/macOS зелёный. Screenshot реального окна GTK проверен: элементы целиком видны при первом показе.
+- Текущая итерация: **B5 — спайк Canvas на Qt 5/6**. B4 реализован и PR #7 CI зелёный на Windows/Linux/macOS; screenshot окна GTK проверен. Начат Qt Canvas presenter на QLabel/QPixmap с purego event filter; добавлен C++ probe, чтобы определить Qt 5/6 QWheelEvent offset перед включением ввода. Отладочная Windows-сборка Qt не запускается локально.
 - A1 завершена: установщик — NSIS 2, извлечён 7-Zip 26.03; обнаружена англоязычная справка CHM, оглавление `Table of Contents.hhc`, кодировка страниц заявлена ISO-8859-1. Точные URL/hash/временные пути — `spec/REFERENCE-NOTES.md`.
 - A2 завершена: просмотрены все 7 разделов оглавления; 65 функциональных пунктов в `spec/INVENTORY.md`. `License Agreement` и `Contact Us` не добавили UI-возможностей; handling notes — в `spec/REFERENCE-NOTES.md`.
 - B1: Canvas API/core/headless прошёл `go test ./...` локально и Linux/Windows/macOS CI в goWidgets PR #4. vtui PR #183 добавляет `Canvas` в vocabulary и реализует терминальный Canvas через `ImageSurface`/`GraphicsLayer`; полный CI PR #183 зелёный.
