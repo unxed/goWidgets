@@ -297,9 +297,9 @@ func saveFirstDrawSnapshot(hwnd uintptr, path string) error {
 		size: uint32(unsafe.Sizeof(firstDrawBitmapInfoHeader{})), width: int32(width), height: -int32(height),
 		planes: 1, bitCount: 32,
 	}}
-	var pixels uintptr
+	var pixels unsafe.Pointer
 	bmp, _, _ := pFirstDrawCreateDIB.Call(hdc, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&pixels)), 0, 0)
-	if bmp == 0 || pixels == 0 {
+	if bmp == 0 || pixels == nil {
 		return errors.New("CreateDIBSection failed")
 	}
 	defer pFirstDrawDeleteObject.Call(bmp)
@@ -313,7 +313,7 @@ func saveFirstDrawSnapshot(hwnd uintptr, path string) error {
 		return errors.New("BitBlt(desktop) failed before first-draw snapshot")
 	}
 
-	bgra := unsafe.Slice((*byte)(unsafe.Pointer(pixels)), width*height*4)
+	bgra := unsafe.Slice((*byte)(pixels), width*height*4)
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for i := 0; i < width*height; i++ {
 		img.Pix[i*4+0] = bgra[i*4+2]
