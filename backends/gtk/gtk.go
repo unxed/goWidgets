@@ -176,6 +176,9 @@ type driver struct {
 	cbMenuItem     uintptr
 	cbDelete       uintptr
 	cbAlloc        uintptr
+	cbCanvasDraw   uintptr
+	cbCanvasInput  [4]uintptr
+	cbCanvasScale  uintptr
 	cbWake         uintptr
 	cbQuit         uintptr
 	pump           func()
@@ -192,6 +195,7 @@ func (d *driver) Capabilities() core.Caps {
 		FileDialog:      true,
 		Menus:           true,
 		SmoothAnimation: true,
+		Canvas:          true,
 		TrayIcon:        true, // GtkStatusIcon; see the note in tray_linux.go
 		MaxCallbacks:    2000, // purego's callback pool
 	}
@@ -309,6 +313,9 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkAllocH, lib, "gtk_widget_get_allocated_height")
 	purego.RegisterLibFunc(&gSignalConnect, gobj, "g_signal_connect_data")
 	purego.RegisterLibFunc(&gIdleAdd, glib, "g_idle_add")
+	if err := d.initCanvas(lib); err != nil {
+		return err
+	}
 	d.registerTray(lib, gobj)
 
 	if gtkInitCheck(0, 0) == 0 {
@@ -525,6 +532,7 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 	gSignalConnect(h, "delete-event", d.cbDelete, 0, 0, 0)
 	gSignalConnect(h, "key-press-event", d.cbKeyPress, 0, 0, 0)
 	gSignalConnect(h, "key-release-event", d.cbKeyRelease, 0, 0, 0)
+	gSignalConnect(h, "notify::scale-factor", d.cbCanvasScale, 0, 0, 0)
 	gSignalConnect(fixed, "size-allocate", d.cbAlloc, 0, 0, 0)
 
 	gtkWidgetShow(fixed)
@@ -533,11 +541,15 @@ func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) 
 }
 
 type node struct {
-	handle uintptr // the widget placed in the layout (scrolled window for a text view)
-	inner  uintptr // the text view itself, when different from handle
-	kind   core.WidgetKind
-	items  []string // list box rows, for event text
-	path   string   // image view file
+	handle        uintptr // the widget placed in the layout (scrolled window for a text view)
+	inner         uintptr // the text view itself, when different from handle
+	kind          core.WidgetKind
+	items         []string // list box rows, for event text
+	path          string   // image view file
+	canvasFrame   *core.CanvasFrame
+	canvasSurface uintptr
+	canvasWidth   int32
+	canvasHeight  int32
 }
 
 // itemText is a list node's i-th item, or "".
@@ -593,6 +605,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		gtkLabelXAlign(g, 0) // left-aligned, like every other toolkit's label
 	case core.KindImageView:
 		g = gtkImageNew()
+	case core.KindCanvas:
+		g = gtkDrawingAreaNew()
 	case core.KindEdit:
 		g = gtkEntryNew()
 	case core.KindComboBox:
@@ -656,6 +670,13 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		gSignalConnect(g, "activate", w.drv.cbEntryEnter, uintptr(h), 0, 0)
 	case core.KindComboBox:
 		gSignalConnect(g, "changed", w.drv.cbComboChanged, uintptr(h), 0, 0)
+	case core.KindCanvas:
+		gtkWidgetAddEvents(g, canvasEventMask)
+		gSignalConnect(g, "draw", w.drv.cbCanvasDraw, uintptr(h), 0, 0)
+		gSignalConnect(g, "button-press-event", w.drv.cbCanvasInput[0], uintptr(h), 0, 0)
+		gSignalConnect(g, "button-release-event", w.drv.cbCanvasInput[1], uintptr(h), 0, 0)
+		gSignalConnect(g, "motion-notify-event", w.drv.cbCanvasInput[2], uintptr(h), 0, 0)
+		gSignalConnect(g, "scroll-event", w.drv.cbCanvasInput[3], uintptr(h), 0, 0)
 	}
 	gtkFixedPut(w.fixed, g, 0, 0)
 	gtkWidgetShow(g)
@@ -664,6 +685,9 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 
 func (w *window) DestroyWidget(h core.Handle) {
 	if n := w.nodes[h]; n != nil {
+		if n.canvasSurface != 0 {
+			cairoSurfaceDestroy(n.canvasSurface)
+		}
 		gtkWidgetDestr(n.handle)
 		delete(w.nodes, h)
 	}
@@ -987,6 +1011,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	}
 	var mn, nat requisition
 	gtkPreferred(n.handle, unsafe.Pointer(&mn), unsafe.Pointer(&nat))
+	if n.kind == core.KindCanvas {
+		return core.Size{W: 1, H: 1}, core.Size{W: 320, H: 200}
+	}
 	if n.kind == core.KindListBox {
 		// A scrolled window's natural size is barely more than its minimum;
 		// the list inside knows the rows. Natural is up to listRows of

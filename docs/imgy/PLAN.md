@@ -103,7 +103,7 @@ cv.Invalidate() // запросить перерисовку через план
 | A2 | инвентарь фич из help | готово | проверены все 7 разделов оглавления; 65 функциональных требований в `spec/INVENTORY.md`; License/Contact отмечены как справочные |
 | A3 | CI: запуск эталона в Wine + скриншоты | не начата | |
 | B1 | Canvas: core + headless | в работе | публичный API и headless-путь готовы; запись vtui выполняется отдельным PR |
-| B2 | Canvas: GTK | не начата | |
+| B2 | Canvas: GTK | в работе | Cairo-owned image surface, pointer events, Xvfb screenshot test |
 | B3 | Canvas: Win32 | не начата | |
 | B4 | `showcase/imgy` v0.1: открыть и показать | не начата | первый релиз |
 | B5 | спайк: Canvas на Qt | не начата | ответ да/нет/как |
@@ -194,7 +194,7 @@ cv.Invalidate() // запросить перерисовку через план
 | Виджет (рабочее имя) | Нужен с | core | headless | gtk | win32 | Qt 5 | Qt 6 | cocoa |
 |---|---|---|---|---|---|---|---|---|
 | ImageView (уже добавлен) | до A1 | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Canvas | B1–B3/B5 | ✓ | ✓ | — | — | — | — | — |
+| Canvas | B1–B3/B5 | ✓ | ✓ | ◐ | — | — | — | — |
 | MenuBar + PopupMenu (на базе `MenuItem`) | C1 | — | — | — | — | — | — | — |
 | StatusBar | C1 | — | — | — | — | — | — | — |
 | ToolBar | C1 | — | — | — | — | — | — | — |
