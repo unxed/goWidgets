@@ -104,6 +104,7 @@ var (
 	qWindowHandle        func(w uintptr) uintptr
 	qWindowDPR           func(win uintptr) float64
 	qContentsRect        func(w uintptr) qRect
+	qWidgetAttribute     func(w uintptr, attribute int32, on bool)
 	qLabelCtor           func(this unsafe.Pointer, parent uintptr, flags int32)
 	qLabelText           func(l uintptr, text *qstring)
 	qLabelPixmap         func(l uintptr, pix unsafe.Pointer)
@@ -125,10 +126,8 @@ var (
 	qSystemFont          func(which int32) qvalue
 	qFontDtor            func(f *qvalue)
 	qWidgetFont          func(w uintptr, f *qvalue)
-	qWidgetMouse         func(w uintptr, on bool)
 	qWidgetMapFromGlobal func(w uintptr, p *qPoint) uint64
 	qCursorPos           func() uint64
-	qMouseButtons        func() int32
 	qKeyboardMods        func() int32
 	qPixmapLoadData      func(pix uintptr, data *byte, size uint32, format *byte, flags int32) bool
 	qComboNew            func(this unsafe.Pointer, parent uintptr)
@@ -614,7 +613,8 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 	case core.KindCanvas:
 		qLabelCtor(obj, w.handle, 0)
 		qLabelScaled(uintptr(obj), true)
-		qWidgetMouse(uintptr(obj), true)
+		const waMouseTracking = 2
+		qWidgetAttribute(uintptr(obj), waMouseTracking, true)
 	case core.KindButton:
 		qPushButtonNew(obj, w.handle)
 	case core.KindCheckBox:

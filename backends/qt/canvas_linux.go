@@ -19,19 +19,16 @@ func (r *resolver) bindCanvas() bool {
 		fn     any
 		symbol string
 	}{
-		{&qWidgetMouse, "_ZN7QWidget16setMouseTrackingEb"},
+		{&qWidgetAttribute, "_ZN7QWidget12setAttributeENS_15WidgetAttributeEb"},
 		{&qWidgetMapFromGlobal, "_ZNK7QWidget13mapFromGlobalERK6QPoint"},
 		{&qCursorPos, "_ZN7QCursor3posEv"},
-		{&qMouseButtons, "_ZN15QGuiApplication11mouseButtonsEv"},
 		{&qKeyboardMods, "_ZN15QGuiApplication17keyboardModifiersEv"},
 		{&qPixmapLoadData, "_ZN7QPixmap12loadFromDataEPKhjPKc6QFlagsIN2Qt19ImageConversionFlagEE"},
 		{&qPixmapDefault, "_ZN7QPixmapC1Ev"},
 	} {
 		available = r.optionalFn(binding.fn, binding.symbol) && available
 	}
-	// Do not advertise the widget until the Qt-major-specific wheel offset is
-	// measured and recorded in abi_linux.go.
-	return available && lay.wheelDelta != 0
+	return available && lay.wheelDelta != 0 && lay.mouseButtons != 0
 }
 
 // PresentCanvas encodes the reusable frame to PNG and lets Qt's QPixmap
@@ -96,25 +93,17 @@ func (d *driver) canvasEvent(watched uintptr, ev unsafe.Pointer) {
 	switch kind {
 	case evMouseButtonPress, evMouseDoubleClick:
 		event = core.EventMouseDown
-		buttons := qMouseButtons()
-		changed := buttons &^ n.canvasButtons
-		if changed == 0 {
-			changed = buttons
-		}
+		changed := (*qMouseState)(unsafe.Add(ev, lay.mouseButtons)).Button
 		m.Button = qtMouseButton(changed)
-		n.canvasButtons = buttons
+		n.canvasButtons |= changed
 	case evMouseButtonRelease:
 		event = core.EventMouseUp
-		buttons := qMouseButtons()
-		changed := n.canvasButtons &^ buttons
-		if changed == 0 {
-			changed = n.canvasButtons
-		}
+		changed := (*qMouseState)(unsafe.Add(ev, lay.mouseButtons)).Button
 		m.Button = qtMouseButton(changed)
-		n.canvasButtons = buttons
+		n.canvasButtons &^= changed
 	case evMouseMove:
 		event = core.EventMouseMove
-		n.canvasButtons = qMouseButtons()
+		n.canvasButtons = (*qMouseState)(unsafe.Add(ev, lay.mouseButtons)).Buttons
 	case evWheel:
 		event = core.EventMouseWheel
 		delta := (*qPoint)(unsafe.Add(ev, lay.wheelDelta)).Y
@@ -122,6 +111,8 @@ func (d *driver) canvasEvent(watched uintptr, ev unsafe.Pointer) {
 	}
 	emit(core.BackendEvent{Kind: event, H: h, Mouse: m})
 }
+
+type qMouseState struct{ Button, Buttons int32 }
 
 func qtMouseButton(buttons int32) core.MouseButton {
 	switch {

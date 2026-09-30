@@ -48,6 +48,11 @@ jobs:
               Qt5Widgets:*"Qt 5 QWheelEvent angleDelta offset: 72; value: 120"*) ;;
               *) echo "Unexpected Qt wheel-event ABI: $probe_output" >&2; exit 1 ;;
             esac
+            case "$qt:$probe_output" in
+              Qt6Widgets:*"Qt 6 QMouseEvent button/buttons offset: 64"*) ;;
+              Qt5Widgets:*"Qt 5 QMouseEvent button/buttons offset: 80"*) ;;
+              *) echo "Unexpected Qt mouse-event ABI: $probe_output" >&2; exit 1 ;;
+            esac
           done
 
       # Xvfb gives a display, stalonetray gives a panel, so the GTK and Qt
