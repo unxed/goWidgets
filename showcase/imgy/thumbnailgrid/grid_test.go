@@ -38,6 +38,17 @@ func TestHitTestAccountsForScrollAndGaps(t *testing.T) {
 	}
 }
 
+func TestCellRectUsesViewportCoordinates(t *testing.T) {
+	g := Grid{Count: 20, Width: 260, Height: 180, CellWidth: 120, CellHeight: 80, Gap: 10, Scroll: 90}
+	x, y, w, h, ok := g.CellRect(2)
+	if !ok || x != 0 || y != 10 || w != 120 || h != 80 {
+		t.Fatalf("CellRect(2) = %v,%v %vx%v %v; want 0,10 120x80 true", x, y, w, h, ok)
+	}
+	if _, _, _, _, ok := g.CellRect(20); ok {
+		t.Fatal("CellRect should reject an index past Count")
+	}
+}
+
 func TestSingleControlAndRangeSelection(t *testing.T) {
 	initial := Grid{}
 	initial.SetCount(12)

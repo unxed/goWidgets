@@ -58,6 +58,19 @@ func (g *Grid) HitTest(x, y float64) (int, bool) {
 	return index, index < g.Count
 }
 
+// CellRect returns the viewport-local DIP rectangle for an item. Items beyond
+// Count and invalid grid metrics have no rectangle.
+func (g *Grid) CellRect(index int) (x, y, width, height float64, ok bool) {
+	cols, rowHeight := g.metrics()
+	if index < 0 || index >= g.Count || cols <= 0 || rowHeight <= 0 {
+		return 0, 0, 0, 0, false
+	}
+	col, row := index%cols, index/cols
+	x = float64(col) * (g.CellWidth + g.Gap)
+	y = float64(row)*rowHeight - math.Max(0, g.Scroll)
+	return x, y, g.CellWidth, g.CellHeight, true
+}
+
 // SetCount updates the item count, removing selections that no longer exist.
 func (g *Grid) SetCount(count int) {
 	if count < 0 {
