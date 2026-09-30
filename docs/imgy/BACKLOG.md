@@ -23,6 +23,7 @@
 - Нет других находок.
 
 - 2026-09-30 — B1 implementation: headless advertises and presents Canvas; other backends remain unsupported until B2/B3/B5 parity work.
+- 2026-09-30 — GitHub Linux CI, GTK `TestModalDialogAgainstGTK`: push-run один раз не выбрал файл в OpenFile-диалоге под Xvfb, тогда как PR-run прошёл; считать flaky и оставить в очереди.
 
 ## 3. Известные риски
 

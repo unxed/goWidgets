@@ -77,6 +77,7 @@ var (
 	pGetKeyState        = user32.NewProc("GetKeyState")
 	pSetWindowPos       = user32.NewProc("SetWindowPos")
 	pGetClientRect      = user32.NewProc("GetClientRect")
+	pRedrawWindow       = user32.NewProc("RedrawWindow")
 	pAdjustWindowRectEx = user32.NewProc("AdjustWindowRectEx")
 	pEnableWindow       = user32.NewProc("EnableWindow")
 	pLoadCursorW        = user32.NewProc("LoadCursorW")
@@ -111,6 +112,10 @@ const (
 	wsChild            = 0x40000000
 	wsVisible          = 0x10000000
 	wsTabStop          = 0x00010000
+	rdwInvalidate      = 0x0001
+	rdwErase           = 0x0004
+	rdwAllChildren     = 0x0080
+	rdwUpdateNow       = 0x0100
 	ssLeftNoWordWrap   = 0x0000000C
 	ssBitmap           = 0x0000000E
 	ssCenterImage      = 0x00000200
@@ -644,7 +649,14 @@ func (w *window) SetTitle(s string) {
 	}
 }
 
-func (w *window) Show()                            { pShowWindow.Call(w.hwnd, swShow) }
+func (w *window) Show() {
+	pShowWindow.Call(w.hwnd, swShow)
+	// Child controls can keep their pre-layout pixels even after the hidden
+	// window has been laid out. A hover or the next text-driven layout then
+	// paints them and makes the window appear to fix itself. Force the whole
+	// child tree through WM_PAINT before returning from the first Show.
+	pRedrawWindow.Call(w.hwnd, 0, 0, rdwInvalidate|rdwAllChildren|rdwUpdateNow)
+}
 func (w *window) Close()                           { pShowWindow.Call(w.hwnd, swHide) }
 func (w *window) RootHandle() core.Handle          { return w.root }
 func (w *window) Events() <-chan core.BackendEvent { return w.events }
@@ -1212,16 +1224,16 @@ func (w *window) ApplyLayout(changes []core.BoundsChange) {
 		pSetWindowPos.Call(n.hwnd, 0,
 			uintptr(int32(math.Round(c.R.X*s))), uintptr(int32(math.Round(c.R.Y*s))),
 			uintptr(int32(math.Round(c.R.W*s))), uintptr(int32(math.Round(h*s))), flags)
-		// A hidden child can receive its final bounds before the parent is
-		// shown. Some themed BUTTON implementations retain the first, tiny
-		// paint until another invalidation, which made the controls look
-		// vertically clipped until the pointer crossed them. Repaint after the
-		// final geometry is installed so the first visible frame is complete.
-		pInvalidateRect.Call(n.hwnd, 0, 1)
 		n.rect, n.visible = c.R, c.Visible
 	}
 	if len(changes) > 0 {
 		w.sortTabOrder()
+		// Geometry changes can arrive after native controls have handled input
+		// (for example, a checkbox callback updates the rest of the window).
+		// InvalidateRect alone queues painting and can leave themed BUTTONs
+		// showing stale/clipped pixels until a later mouse move. Paint the whole
+		// child tree now, after every control has its final geometry.
+		pRedrawWindow.Call(w.hwnd, 0, 0, rdwInvalidate|rdwErase|rdwAllChildren|rdwUpdateNow)
 	}
 }
 
@@ -1365,6 +1377,11 @@ func wndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				} else if n.kind == core.KindCheckBox {
 					// BS_AUTOCHECKBOX has already flipped itself by now.
 					st, _, _ := pSendMessageW.Call(n.hwnd, bmGetCheck, 0, 0)
+					// The state change can be followed by a delayed app refresh or
+					// layout pass. Complete the native indicator paint before handing
+					// the toggle to the app so stale themed pixels cannot linger until
+					// the pointer happens to cross the control.
+					pRedrawWindow.Call(n.hwnd, 0, 0, rdwInvalidate|rdwErase|rdwUpdateNow)
 					d.win.emit(core.BackendEvent{
 						Kind: core.EventToggled, H: h, Bool: st == 1,
 					})
