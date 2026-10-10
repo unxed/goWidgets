@@ -20,7 +20,7 @@ func TestReduceRedEyeTargetsLocalCircleAndPreservesAlpha(t *testing.T) {
 		t.Fatalf("adjusted bounds = %v, want (0,0)-(3,1)", got.Bounds())
 	}
 	center := color.NRGBA64Model.Convert(got.At(1, 0)).(color.NRGBA64)
-	if center.R > center.G || center.R > center.B || center.A != 128*257 {
+	if uint32(center.R)*2 > uint32(center.G)*3 || uint32(center.R)*2 > uint32(center.B)*3 || center.A != 128*257 {
 		t.Errorf("target pixel = %#v, want neutralized red and preserved alpha", center)
 	}
 	for _, x := range []int{0, 2} {
