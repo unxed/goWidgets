@@ -167,6 +167,10 @@ jobs:
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-red-eye-redo.png"
             xdotool mousemove --window "$window_id" 900 263 click 1
+            xdotool mousemove --window "$window_id" 654 103 click 1
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-histogram.png"
+            xdotool mousemove --window "$window_id" 654 103 click 1
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"

@@ -28,6 +28,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
+	imagehistogram "github.com/unxed/goWidgets/showcase/imgy/histogram"
 	"github.com/unxed/goWidgets/showcase/imgy/thumbnailgrid"
 	"github.com/unxed/goWidgets/showcase/imgy/transform"
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
@@ -105,6 +106,7 @@ func main() {
 	openFolder, _ := win.AddButton("Открыть папку")
 	openImage, _ := win.AddButton("Открыть файл…")
 	thumbToggle, _ := win.AddButton("Миниатюры")
+	histogramButton, _ := win.AddButton("Гистограмма")
 	rotateButton, _ := win.AddButton("Повернуть 90°")
 	undoButton, _ := win.AddButton("Отменить")
 	redoButton, _ := win.AddButton("Повторить")
@@ -138,6 +140,7 @@ func main() {
 	files, _ := win.AddListBox(nil)
 	if canvas == nil {
 		thumbToggle.Visible.Set(false)
+		histogramButton.Visible.Set(false)
 		rotateButton.Visible.Set(false)
 		undoButton.Visible.Set(false)
 		redoButton.Visible.Set(false)
@@ -199,6 +202,10 @@ func main() {
 		sortDirection.Height().Is(32),
 		thumbToggle.Width().Is(116),
 		thumbToggle.Height().Is(32),
+		histogramButton.Left().Eq(thumbToggle.Right().Plus(pad)),
+		histogramButton.Top().Eq(thumbToggle.Top()),
+		histogramButton.Width().Is(130),
+		histogramButton.Height().Is(32),
 		rotateButton.Left().Eq(title.Left()),
 		rotateButton.Top().Eq(sortBox.Bottom().Plus(6)),
 		rotateButton.Width().Is(142),
@@ -326,6 +333,8 @@ func main() {
 
 	var entries []imageEntry
 	var currentImage image.Image
+	var histogramMode bool
+	var currentHistogram *imagehistogram.Distribution
 	resizeWidthEdited := true
 	syncingResizeFields := false
 	var undoStack, redoStack []image.Image
@@ -425,6 +434,12 @@ func main() {
 		resizeHeight.Text.Set(strconv.Itoa(bounds.Dy()))
 		syncingResizeFields = false
 		info.Text.Set(fmt.Sprintf("%s  •  %s  •  %d × %d", entry.name, formatBytes(entry.size), bounds.Dx(), bounds.Dy()))
+		if histogramMode {
+			currentHistogram = imagehistogram.Count(currentImage)
+			if currentHistogram != nil {
+				info.Text.Set(fmt.Sprintf("Гистограмма RGB · %d видимых пикселей", currentHistogram.Pixels))
+			}
+		}
 		if modified {
 			status.Text.Set("Изменено в памяти: " + entry.path)
 		} else {
@@ -492,6 +507,10 @@ func main() {
 	}
 	if canvas != nil {
 		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
+			if histogramMode {
+				imagehistogram.Paint(frame.Image, currentHistogram)
+				return
+			}
 			if thumbMode {
 				scale := frame.Scale
 				if scale <= 0 {
@@ -573,8 +592,10 @@ func main() {
 		undoStack, redoStack = nil, nil
 		cropMode, cropSelecting, cropValid = false, false, false
 		redEyeMode = false
+		histogramMode, currentHistogram = false, nil
 		cropButton.Text.Set("Кадрировать")
 		redEyeButton.Text.Set("Красные глаза")
+		histogramButton.Text.Set("Гистограмма")
 		updateHistoryButtons()
 		for _, item := range read {
 			if item.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(item.Name()))] {
@@ -617,8 +638,10 @@ func main() {
 		if canvas != nil {
 			cropMode, cropSelecting, cropValid = false, false, false
 			redEyeMode = false
+			histogramMode, currentHistogram = false, nil
 			cropButton.Text.Set("Кадрировать")
 			redEyeButton.Text.Set("Красные глаза")
+			histogramButton.Text.Set("Гистограмма")
 			undoStack, redoStack = nil, nil
 			updateHistoryButtons()
 			img, _, err := decodeImage(e.path)
@@ -737,10 +760,37 @@ func main() {
 		}
 		thumbMode = !thumbMode
 		if thumbMode {
+			histogramMode, currentHistogram = false, nil
+			histogramButton.Text.Set("Гистограмма")
 			thumbToggle.Text.Set("Просмотр")
 		} else {
 			thumbToggle.Text.Set("Миниатюры")
 		}
+		canvas.Invalidate()
+	})
+	histogramButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		if histogramMode {
+			histogramMode, currentHistogram = false, nil
+			histogramButton.Text.Set("Гистограмма")
+			refreshCurrentImage(len(undoStack) > 0)
+			return
+		}
+		if thumbMode {
+			thumbMode = false
+			thumbToggle.Text.Set("Миниатюры")
+		}
+		currentHistogram = imagehistogram.Count(currentImage)
+		if currentHistogram == nil {
+			status.Text.Set("Не удалось построить гистограмму")
+			return
+		}
+		histogramMode = true
+		histogramButton.Text.Set("Изображение")
+		info.Text.Set(fmt.Sprintf("Гистограмма RGB · %d видимых пикселей", currentHistogram.Pixels))
+		status.Text.Set(currentHistogram.Summary())
 		canvas.Invalidate()
 	})
 	rotateButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
@@ -931,6 +981,9 @@ func main() {
 				canvas.Invalidate()
 				return
 			}
+			if histogramMode {
+				return
+			}
 			if mouse.Mods&goWidgets.ModControl == 0 {
 				if step := wheelNavigationDelta(mouse.Delta); step != 0 {
 					navigate(selectedIndex + step)
@@ -964,6 +1017,9 @@ func main() {
 				files.Select(index)
 				selectEntry(index)
 				canvas.Invalidate()
+				return
+			}
+			if histogramMode {
 				return
 			}
 			if redEyeMode && mouse.Button == goWidgets.MouseLeft && currentImage != nil {
@@ -1086,6 +1142,10 @@ func main() {
 				redEyeButton.Text.Set("Красные глаза")
 				status.Text.Set("Выбор области красного глаза завершён")
 				canvas.Invalidate()
+			} else if histogramMode {
+				histogramMode, currentHistogram = false, nil
+				histogramButton.Text.Set("Гистограмма")
+				refreshCurrentImage(len(undoStack) > 0)
 			} else {
 				app.Quit()
 			}
