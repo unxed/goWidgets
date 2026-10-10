@@ -88,16 +88,16 @@ jobs:
             xdotool windowraise "$window_id"
             xdotool windowfocus --sync "$window_id"
             sleep 0.5
-            xdotool mousemove --window "$window_id" 376 210 click 1
+            xdotool mousemove --window "$window_id" 376 230 click 1
             xdotool keydown ctrl
-            xdotool mousemove --window "$window_id" 530 170 click 1
+            xdotool mousemove --window "$window_id" 530 230 click 1
             xdotool keyup ctrl
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
             # Switch back to the viewer, rotate the selected image, then
             # exercise undo/redo before capturing the final edited preview.
             xdotool mousemove --window "$window_id" 510 102 click 1
-            xdotool mousemove --window "$window_id" 660 102 click 1
+            xdotool mousemove --window "$window_id" 83 144 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
