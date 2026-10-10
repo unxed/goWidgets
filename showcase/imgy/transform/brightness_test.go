@@ -28,11 +28,11 @@ func TestAdjustBrightnessPreservesAlphaAndUsesNonZeroBounds(t *testing.T) {
 
 func TestAdjustBrightnessExtremesAndInvalidInput(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(0, 0, 1, 1))
-	src.SetNRGBA(0, 0, color.NRGBA{R: 64, G: 128, B: 192, A: 100})
-	if got := color.NRGBAModel.Convert(AdjustBrightness(src, -100).At(0, 0)).(color.NRGBA); got != (color.NRGBA{A: 100}) {
+	src.SetNRGBA(0, 0, color.NRGBA{R: 64, G: 128, B: 192, A: 255})
+	if got := AdjustBrightness(src, -100).RGBAAt(0, 0); got != (color.RGBA{A: 255}) {
 		t.Errorf("full negative adjustment = %#v, want black with source alpha", got)
 	}
-	if got := color.NRGBAModel.Convert(AdjustBrightness(src, 100).At(0, 0)).(color.NRGBA); got != (color.NRGBA{R: 255, G: 255, B: 255, A: 100}) {
+	if got := AdjustBrightness(src, 100).RGBAAt(0, 0); got != (color.RGBA{R: 255, G: 255, B: 255, A: 255}) {
 		t.Errorf("full positive adjustment = %#v, want white with source alpha", got)
 	}
 	for _, percent := range []int{-101, 101} {
