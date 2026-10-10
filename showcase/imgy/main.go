@@ -452,6 +452,10 @@ func main() {
 			index = len(entries) - 1
 		}
 		files.Select(index)
+		thumbGrid.Select(index, false, false)
+		if thumbCanvas != nil {
+			thumbCanvas.Invalidate()
+		}
 		selectEntry(index)
 	}
 	applySorting := func() {
@@ -472,7 +476,11 @@ func main() {
 		files.SetItems(labels)
 		if selectedIndex >= 0 {
 			files.Select(selectedIndex)
+			thumbGrid.Select(selectedIndex, false, false)
 			selectEntry(selectedIndex)
+			if thumbCanvas != nil {
+				thumbCanvas.Invalidate()
+			}
 		}
 	}
 
