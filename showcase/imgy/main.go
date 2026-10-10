@@ -123,6 +123,13 @@ func main() {
 	grayscaleButton, _ := win.AddButton("Оттенки серого")
 	sepiaButton, _ := win.AddButton("Сепия")
 	invertButton, _ := win.AddButton("Инверсия")
+	redChannelLabel, _ := win.AddLabel("R, %:")
+	redChannelEdit, _ := win.AddEdit("0")
+	greenChannelLabel, _ := win.AddLabel("G, %:")
+	greenChannelEdit, _ := win.AddEdit("0")
+	blueChannelLabel, _ := win.AddLabel("B, %:")
+	blueChannelEdit, _ := win.AddEdit("0")
+	channelsButton, _ := win.AddButton("Применить RGB")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -148,6 +155,13 @@ func main() {
 		grayscaleButton.Visible.Set(false)
 		sepiaButton.Visible.Set(false)
 		invertButton.Visible.Set(false)
+		redChannelLabel.Visible.Set(false)
+		redChannelEdit.Visible.Set(false)
+		greenChannelLabel.Visible.Set(false)
+		greenChannelEdit.Visible.Set(false)
+		blueChannelLabel.Visible.Set(false)
+		blueChannelEdit.Visible.Set(false)
+		channelsButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -249,9 +263,31 @@ func main() {
 		invertButton.Top().Eq(sepiaButton.Top()),
 		invertButton.Width().Is(110),
 		invertButton.Height().Is(32),
+		redChannelLabel.Left().Eq(title.Left()),
+		redChannelLabel.Top().Eq(invertButton.Bottom().Plus(6)),
+		redChannelEdit.Left().Eq(redChannelLabel.Right().Plus(6)),
+		redChannelEdit.Top().Eq(redChannelLabel.Top()),
+		redChannelEdit.Width().Is(68),
+		redChannelEdit.Height().Is(32),
+		greenChannelLabel.Left().Eq(redChannelEdit.Right().Plus(pad)),
+		greenChannelLabel.Top().Eq(redChannelLabel.Top()),
+		greenChannelEdit.Left().Eq(greenChannelLabel.Right().Plus(6)),
+		greenChannelEdit.Top().Eq(greenChannelLabel.Top()),
+		greenChannelEdit.Width().Is(68),
+		greenChannelEdit.Height().Is(32),
+		blueChannelLabel.Left().Eq(greenChannelEdit.Right().Plus(pad)),
+		blueChannelLabel.Top().Eq(redChannelLabel.Top()),
+		blueChannelEdit.Left().Eq(blueChannelLabel.Right().Plus(6)),
+		blueChannelEdit.Top().Eq(blueChannelLabel.Top()),
+		blueChannelEdit.Width().Is(68),
+		blueChannelEdit.Height().Is(32),
+		channelsButton.Left().Eq(blueChannelEdit.Right().Plus(pad)),
+		channelsButton.Top().Eq(blueChannelEdit.Top()),
+		channelsButton.Width().Is(145),
+		channelsButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(brightnessButton.Bottom().Plus(pad)),
+		files.Top().Eq(channelsButton.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
@@ -275,6 +311,9 @@ func main() {
 	resizeLabel.HugHeight()
 	resizeTimes.HugHeight()
 	brightnessLabel.HugHeight()
+	redChannelLabel.HugHeight()
+	greenChannelLabel.HugHeight()
+	blueChannelLabel.HugHeight()
 	sortBox.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
@@ -822,6 +861,35 @@ func main() {
 		applyEdit(transform.Invert(currentImage))
 		status.Text.Set("Цвета инвертированы в памяти: " + entries[selectedIndex].path)
 	})
+	applyChannels := func() {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		values := [3]int{}
+		for i, edit := range []*goWidgets.Edit{redChannelEdit, greenChannelEdit, blueChannelEdit} {
+			value, err := strconv.Atoi(strings.TrimSpace(edit.Text.Get()))
+			if err != nil || value < -100 || value > 100 {
+				status.Text.Set("Введите коррекцию каждого RGB-канала от −100 до 100 процентов")
+				return
+			}
+			values[i] = value
+		}
+		if values == [3]int{} {
+			status.Text.Set("RGB-каналы не изменены")
+			return
+		}
+		adjusted := transform.AdjustChannels(currentImage, values[0], values[1], values[2])
+		if adjusted == nil {
+			status.Text.Set("Не удалось скорректировать RGB-каналы")
+			return
+		}
+		applyEdit(adjusted)
+		status.Text.Set(fmt.Sprintf("Коррекция RGB %+d%% / %+d%% / %+d%% применена в памяти: %s", values[0], values[1], values[2], entries[selectedIndex].path))
+	}
+	channelsButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyChannels() })
+	redChannelEdit.Activated.On(app.Scope(), func(string) { applyChannels() })
+	greenChannelEdit.Activated.On(app.Scope(), func(string) { applyChannels() })
+	blueChannelEdit.Activated.On(app.Scope(), func(string) { applyChannels() })
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
