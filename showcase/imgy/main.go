@@ -143,12 +143,22 @@ func main() {
 		sortDirection.Top().Eq(sortBox.Top()),
 		thumbToggle.Left().Eq(sortDirection.Right().Plus(pad)),
 		thumbToggle.Top().Eq(sortBox.Top()),
+		sortDirection.Width().Is(150),
+		sortDirection.Height().Is(32),
+		thumbToggle.Width().Is(116),
+		thumbToggle.Height().Is(32),
 		rotateButton.Left().Eq(thumbToggle.Right().Plus(pad)),
 		rotateButton.Top().Eq(sortBox.Top()),
+		rotateButton.Width().Is(142),
+		rotateButton.Height().Is(32),
 		undoButton.Left().Eq(rotateButton.Right().Plus(6)),
 		undoButton.Top().Eq(sortBox.Top()),
+		undoButton.Width().Is(100),
+		undoButton.Height().Is(32),
 		redoButton.Left().Eq(undoButton.Right().Plus(6)),
 		redoButton.Top().Eq(sortBox.Top()),
+		redoButton.Width().Is(105),
+		redoButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(sortLabel.Bottom().Plus(pad)),
@@ -173,16 +183,6 @@ func main() {
 	openImage.HugWidth()
 	sortLabel.HugHeight()
 	sortBox.HugHeight()
-	sortDirection.HugWidth()
-	sortDirection.HugHeight()
-	thumbToggle.HugWidth()
-	thumbToggle.HugHeight()
-	rotateButton.HugWidth()
-	rotateButton.HugHeight()
-	undoButton.HugWidth()
-	undoButton.HugHeight()
-	redoButton.HugWidth()
-	redoButton.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
 
