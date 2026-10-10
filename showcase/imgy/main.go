@@ -92,15 +92,10 @@ func main() {
 	files, _ := win.AddListBox(nil)
 	var previewBox goWidgets.Box
 	var canvas *goWidgets.Canvas
-	var thumbCanvas *goWidgets.Canvas
 	var imageView *goWidgets.ImageView
 	canvas, err = win.AddCanvas()
 	if err == nil {
 		previewBox = canvas
-		thumbCanvas, err = win.AddCanvas()
-		if err != nil {
-			log.Fatal(err)
-		}
 	} else {
 		// Backends not yet at Canvas parity keep the established native preview
 		// until their Canvas stage is implemented.
@@ -110,6 +105,10 @@ func main() {
 		}
 		previewBox = imageView
 		thumbToggle.Visible.Set(false)
+	}
+	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
+	if thumbMode {
+		thumbToggle.Text.Set("Просмотр")
 	}
 	info, _ := win.AddLabel("Файлов: 0")
 	status, _ := win.AddLabel("Выберите изображение")
@@ -156,16 +155,6 @@ func main() {
 	); err != nil {
 		log.Fatal(err)
 	}
-	if thumbCanvas != nil {
-		if err := win.Constrain(
-			thumbCanvas.Left().Eq(previewBox.Left()),
-			thumbCanvas.Top().Eq(previewBox.Top()),
-			thumbCanvas.Right().Eq(previewBox.Right()),
-			thumbCanvas.Bottom().Eq(previewBox.Bottom()),
-		); err != nil {
-			log.Fatal(err)
-		}
-	}
 	info.HugHeight()
 	openFolder.HugWidth()
 	openImage.HugWidth()
@@ -182,11 +171,6 @@ func main() {
 	var currentImage image.Image
 	var folder string
 	selectedIndex := -1
-	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && thumbCanvas != nil
-	if thumbCanvas != nil {
-		canvas.Visible.Set(!thumbMode)
-		thumbCanvas.Visible.Set(thumbMode)
-	}
 	thumbGrid := thumbnailgrid.Grid{CellWidth: 144, CellHeight: 112, Gap: 10}
 	var thumbGeneration atomic.Uint64
 	var thumbMu sync.Mutex
@@ -203,8 +187,8 @@ func main() {
 		thumbGrid.SetCount(len(entries))
 		thumbGrid.Scroll = 0
 		clear(thumbGrid.Selected)
-		if thumbCanvas != nil {
-			thumbCanvas.Invalidate()
+		if canvas != nil {
+			canvas.Invalidate()
 		}
 	}
 	requestThumbnails = func(first, end int) {
@@ -230,8 +214,8 @@ func main() {
 						thumbs[index] = thumb
 					}
 					thumbMu.Unlock()
-					if generation == thumbGeneration.Load() && thumbCanvas != nil {
-						thumbCanvas.Invalidate()
+					if generation == thumbGeneration.Load() && canvas != nil {
+						canvas.Invalidate()
 					}
 				})
 			}(i, path)
@@ -259,6 +243,27 @@ func main() {
 	}
 	if canvas != nil {
 		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
+			if thumbMode {
+				scale := frame.Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				thumbGrid.Width = float64(frame.Image.Bounds().Dx()) / scale
+				thumbGrid.Height = float64(frame.Image.Bounds().Dy()) / scale
+				thumbGrid.ClampScroll()
+				first, end := thumbGrid.VisibleRange()
+				thumbMu.Lock()
+				visible := make(map[int]*image.RGBA, end-first)
+				for i := first; i < end; i++ {
+					if thumbs[i] != nil {
+						visible[i] = thumbs[i]
+					}
+				}
+				thumbMu.Unlock()
+				thumbnailgrid.Paint(frame.Image, &thumbGrid, visible, scale)
+				requestThumbnails(first, end)
+				return
+			}
 			area := viewport.Size{W: float64(frame.Image.Bounds().Dx()), H: float64(frame.Image.Bounds().Dy())}
 			if area != viewState.Area {
 				renderGeneration.Add(1)
@@ -279,46 +284,6 @@ func main() {
 			if scheduleQuality != nil {
 				scheduleQuality(frame.Image)
 			}
-		})
-	}
-	if thumbCanvas != nil {
-		thumbCanvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
-			scale := frame.Scale
-			if scale <= 0 {
-				scale = 1
-			}
-			thumbGrid.Width = float64(frame.Image.Bounds().Dx()) / scale
-			thumbGrid.Height = float64(frame.Image.Bounds().Dy()) / scale
-			thumbGrid.ClampScroll()
-			first, end := thumbGrid.VisibleRange()
-			thumbMu.Lock()
-			visible := make(map[int]*image.RGBA, end-first)
-			for i := first; i < end; i++ {
-				if thumbs[i] != nil {
-					visible[i] = thumbs[i]
-				}
-			}
-			thumbMu.Unlock()
-			thumbnailgrid.Paint(frame.Image, &thumbGrid, visible, scale)
-			requestThumbnails(first, end)
-		})
-		thumbCanvas.MouseWheel.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
-			thumbGrid.Scroll -= mouse.Delta * (thumbGrid.CellHeight + thumbGrid.Gap) * 3
-			thumbGrid.ClampScroll()
-			thumbCanvas.Invalidate()
-		})
-		thumbCanvas.MouseDown.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
-			if mouse.Button != goWidgets.MouseLeft {
-				return
-			}
-			index, ok := thumbGrid.HitTest(mouse.X, mouse.Y)
-			if !ok {
-				return
-			}
-			thumbGrid.Select(index, mouse.Mods&goWidgets.ModControl != 0, mouse.Mods&goWidgets.ModShift != 0)
-			files.Select(index)
-			selectEntry(index)
-			thumbCanvas.Invalidate()
 		})
 	}
 	scheduleQuality = func(frame *image.RGBA) {
@@ -421,8 +386,8 @@ func main() {
 				thumbGrid.Select(i, false, false)
 				files.Select(i)
 				selectEntry(i)
-				if thumbCanvas != nil {
-					thumbCanvas.Invalidate()
+				if canvas != nil {
+					canvas.Invalidate()
 				}
 				return
 			}
@@ -453,8 +418,8 @@ func main() {
 		}
 		files.Select(index)
 		thumbGrid.Select(index, false, false)
-		if thumbCanvas != nil {
-			thumbCanvas.Invalidate()
+		if canvas != nil {
+			canvas.Invalidate()
 		}
 		selectEntry(index)
 	}
@@ -478,16 +443,16 @@ func main() {
 			files.Select(selectedIndex)
 			thumbGrid.Select(selectedIndex, false, false)
 			selectEntry(selectedIndex)
-			if thumbCanvas != nil {
-				thumbCanvas.Invalidate()
+			if canvas != nil {
+				canvas.Invalidate()
 			}
 		}
 	}
 
 	files.Selected.On(app.Scope(), func(index int) {
 		thumbGrid.Select(index, false, false)
-		if thumbCanvas != nil {
-			thumbCanvas.Invalidate()
+		if canvas != nil {
+			canvas.Invalidate()
 		}
 		selectEntry(index)
 	})
@@ -507,20 +472,27 @@ func main() {
 		applySorting()
 	})
 	thumbToggle.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
-		if thumbCanvas == nil {
+		if canvas == nil {
 			return
 		}
 		thumbMode = !thumbMode
-		thumbCanvas.Visible.Set(thumbMode)
-		canvas.Visible.Set(!thumbMode)
 		if thumbMode {
-			thumbCanvas.Invalidate()
+			thumbToggle.Text.Set("Просмотр")
+		} else {
+			thumbToggle.Text.Set("Миниатюры")
 		}
+		canvas.Invalidate()
 	})
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
 		canvas.MouseWheel.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if thumbMode {
+				thumbGrid.Scroll -= mouse.Delta * (thumbGrid.CellHeight + thumbGrid.Gap) * 3
+				thumbGrid.ClampScroll()
+				canvas.Invalidate()
+				return
+			}
 			if mouse.Mods&goWidgets.ModControl == 0 {
 				if step := wheelNavigationDelta(mouse.Delta); step != 0 {
 					navigate(selectedIndex + step)
@@ -539,6 +511,20 @@ func main() {
 			invalidateView()
 		})
 		canvas.MouseDown.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if thumbMode {
+				if mouse.Button != goWidgets.MouseLeft {
+					return
+				}
+				index, ok := thumbGrid.HitTest(mouse.X, mouse.Y)
+				if !ok {
+					return
+				}
+				thumbGrid.Select(index, mouse.Mods&goWidgets.ModControl != 0, mouse.Mods&goWidgets.ModShift != 0)
+				files.Select(index)
+				selectEntry(index)
+				canvas.Invalidate()
+				return
+			}
 			if currentImage != nil {
 				if factor := shiftClickZoomFactor(mouse); factor != 0 {
 					scale := win.Scale().Scale
