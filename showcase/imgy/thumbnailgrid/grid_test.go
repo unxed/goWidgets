@@ -124,3 +124,11 @@ func TestCountChangeClampsSelectionAndScroll(t *testing.T) {
 		t.Fatalf("Scroll after shrinking content = %v, want 0", g.Scroll)
 	}
 }
+
+func TestClampScrollBeforeFirstLayout(t *testing.T) {
+	g := Grid{Count: 100, CellWidth: 120, CellHeight: 90, Gap: 10, Scroll: 40}
+	g.ClampScroll()
+	if g.Scroll != 0 {
+		t.Fatalf("scroll before first layout = %v, want 0", g.Scroll)
+	}
+}

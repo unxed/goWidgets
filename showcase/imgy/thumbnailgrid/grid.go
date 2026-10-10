@@ -204,10 +204,9 @@ func (g *Grid) SetCount(count int) {
 
 // ClampScroll keeps the viewport within the content's vertical extent.
 func (g *Grid) ClampScroll() {
-	_, rowHeight := g.metrics()
+	cols, rowHeight := g.metrics()
 	rows := 0
-	if g.Count > 0 && rowHeight > 0 {
-		cols, _ := g.metrics()
+	if g.Count > 0 && rowHeight > 0 && cols > 0 {
 		rows = (g.Count + cols - 1) / cols
 	}
 	maxScroll := math.Max(0, float64(rows)*rowHeight-g.Height)
