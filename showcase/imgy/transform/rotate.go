@@ -32,3 +32,18 @@ func MirrorHorizontal(src image.Image) *image.RGBA {
 	}
 	return dst
 }
+
+// MirrorVertical returns a copy reflected across the horizontal axis.
+func MirrorVertical(src image.Image) *image.RGBA {
+	if src == nil || src.Bounds().Empty() {
+		return image.NewRGBA(image.Rectangle{})
+	}
+	sb := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, sb.Dx(), sb.Dy()))
+	for y := 0; y < sb.Dy(); y++ {
+		for x := 0; x < sb.Dx(); x++ {
+			dst.Set(x, sb.Dy()-1-y, src.At(sb.Min.X+x, sb.Min.Y+y))
+		}
+	}
+	return dst
+}

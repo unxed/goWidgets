@@ -106,7 +106,8 @@ func main() {
 	rotateButton, _ := win.AddButton("Повернуть 90°")
 	undoButton, _ := win.AddButton("Отменить")
 	redoButton, _ := win.AddButton("Повторить")
-	flipButton, _ := win.AddButton("Отразить")
+	flipButton, _ := win.AddButton("Горизонтально")
+	flipVerticalButton, _ := win.AddButton("Вертикально")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -118,6 +119,7 @@ func main() {
 		undoButton.Visible.Set(false)
 		redoButton.Visible.Set(false)
 		flipButton.Visible.Set(false)
+		flipVerticalButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -167,8 +169,12 @@ func main() {
 		redoButton.Height().Is(32),
 		flipButton.Left().Eq(redoButton.Right().Plus(6)),
 		flipButton.Top().Eq(rotateButton.Top()),
-		flipButton.Width().Is(100),
+		flipButton.Width().Is(150),
 		flipButton.Height().Is(32),
+		flipVerticalButton.Left().Eq(flipButton.Right().Plus(6)),
+		flipVerticalButton.Top().Eq(rotateButton.Top()),
+		flipVerticalButton.Width().Is(140),
+		flipVerticalButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(rotateButton.Bottom().Plus(pad)),
@@ -577,6 +583,12 @@ func main() {
 		if canvas != nil && currentImage != nil {
 			applyEdit(transform.MirrorHorizontal(currentImage))
 			status.Text.Set("Отражено по горизонтали в памяти: " + entries[selectedIndex].path)
+		}
+	})
+	flipVerticalButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas != nil && currentImage != nil {
+			applyEdit(transform.MirrorVertical(currentImage))
+			status.Text.Set("Отражено по вертикали в памяти: " + entries[selectedIndex].path)
 		}
 	})
 	if canvas != nil {

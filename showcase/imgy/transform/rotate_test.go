@@ -55,3 +55,23 @@ func TestMirrorHorizontal(t *testing.T) {
 		}
 	}
 }
+
+func TestMirrorVertical(t *testing.T) {
+	src := image.NewRGBA(image.Rect(4, 7, 6, 10))
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			src.SetRGBA(4+x, 7+y, color.RGBA{G: uint8(30 + x + y*2), A: 255})
+		}
+	}
+	got := MirrorVertical(src)
+	if got.Bounds() != image.Rect(0, 0, 2, 3) {
+		t.Fatalf("mirrored bounds = %v, want (0,0)-(2,3)", got.Bounds())
+	}
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			if pixel, want := got.RGBAAt(x, 2-y), src.RGBAAt(4+x, 7+y); pixel != want {
+				t.Errorf("pixel at (%d,%d) = %#v, want %#v", x, 2-y, pixel, want)
+			}
+		}
+	}
+}
