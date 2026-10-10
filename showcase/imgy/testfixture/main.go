@@ -1,12 +1,15 @@
-// Command testfixture creates a deterministic image for CI screenshots.
+// Command testfixture creates a deterministic image and seven colored siblings
+// for CI screenshots of folder browsing and the thumbnail grid.
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func main() {
@@ -42,5 +45,28 @@ func main() {
 	}
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
+	}
+	ext := filepath.Ext(os.Args[1])
+	stem := os.Args[1][:len(os.Args[1])-len(ext)]
+	for n := 2; n <= 8; n++ {
+		variant := image.NewRGBA(img.Bounds())
+		copy(variant.Pix, img.Pix)
+		tint := uint8(n * 19)
+		for i := 0; i < len(variant.Pix); i += 4 {
+			variant.Pix[i] = variant.Pix[i] + tint
+			variant.Pix[i+2] = variant.Pix[i+2] - tint
+		}
+		path := fmt.Sprintf("%s-%02d%s", stem, n, ext)
+		out, err := os.Create(path)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := png.Encode(out, variant); err != nil {
+			out.Close()
+			log.Fatal(err)
+		}
+		if err := out.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
