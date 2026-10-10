@@ -110,7 +110,7 @@ func TestResizeBilinearAndNonZeroBounds(t *testing.T) {
 	if got.Bounds() != image.Rect(0, 0, 3, 3) {
 		t.Fatalf("resized bounds = %v, want (0,0)-(3,3)", got.Bounds())
 	}
-	if center := got.RGBAAt(1, 1); center.R < 32_000 || center.R > 33_000 || center.G < 32_000 || center.G > 33_000 || center.B < 32_000 || center.B > 33_000 || center.A != 65_535 {
+	if center := got.RGBA64At(1, 1); center.R < 32_000 || center.R > 33_000 || center.G < 32_000 || center.G > 33_000 || center.B < 32_000 || center.B > 33_000 || center.A != 65_535 {
 		t.Errorf("center pixel = %#v, want opaque gray", center)
 	}
 	if corner := got.RGBAAt(0, 0); corner != src.RGBAAt(4, 7) {
