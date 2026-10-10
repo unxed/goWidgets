@@ -122,6 +122,14 @@ jobs:
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-crop-redo.png"
+            # Resize the cropped image to a specific width, keep the aspect
+            # ratio, and verify that undo/redo restores the resized result.
+            xdotool mousemove --window "$window_id" 140 195 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 200
+            xdotool mousemove --window "$window_id" 565 195 click 1
+            xdotool key --clearmodifiers ctrl+z
+            xdotool key --clearmodifiers ctrl+y
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-resize-redo.png"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"

@@ -95,3 +95,34 @@ func TestCropIntersectsSourceBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestResizeBilinearAndNonZeroBounds(t *testing.T) {
+	src := image.NewRGBA(image.Rect(4, 7, 6, 9))
+	src.SetRGBA(4, 7, color.RGBA{R: 255, A: 255})
+	src.SetRGBA(5, 7, color.RGBA{G: 255, A: 255})
+	src.SetRGBA(4, 8, color.RGBA{B: 255, A: 255})
+	src.SetRGBA(5, 8, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+
+	got := Resize(src, 3, 3)
+	if got == nil {
+		t.Fatal("resize returned nil")
+	}
+	if got.Bounds() != image.Rect(0, 0, 3, 3) {
+		t.Fatalf("resized bounds = %v, want (0,0)-(3,3)", got.Bounds())
+	}
+	if center := got.RGBAAt(1, 1); center.R < 32_000 || center.R > 33_000 || center.G < 32_000 || center.G > 33_000 || center.B < 32_000 || center.B > 33_000 || center.A != 65_535 {
+		t.Errorf("center pixel = %#v, want opaque gray", center)
+	}
+	if corner := got.RGBAAt(0, 0); corner != src.RGBAAt(4, 7) {
+		t.Errorf("top-left pixel = %#v, want %#v", corner, src.RGBAAt(4, 7))
+	}
+}
+
+func TestResizeRejectsInvalidOrExcessiveDimensions(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	for _, size := range [][2]int{{0, 1}, {1, 0}, {-1, 1}, {10_001, 10_000}} {
+		if got := Resize(src, size[0], size[1]); got != nil {
+			t.Errorf("Resize(%d, %d) = non-nil, want nil", size[0], size[1])
+		}
+	}
+}

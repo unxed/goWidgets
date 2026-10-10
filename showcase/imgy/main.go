@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,6 +111,12 @@ func main() {
 	flipButton, _ := win.AddButton("Горизонтально")
 	flipVerticalButton, _ := win.AddButton("Вертикально")
 	cropButton, _ := win.AddButton("Кадрировать")
+	resizeLabel, _ := win.AddLabel("Размер, px:")
+	resizeWidth, _ := win.AddEdit("1")
+	resizeTimes, _ := win.AddLabel("×")
+	resizeHeight, _ := win.AddEdit("1")
+	resizeKeepRatio, _ := win.AddCheckBox("Сохранять пропорции", true)
+	resizeButton, _ := win.AddButton("Изменить размер")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -123,6 +130,12 @@ func main() {
 		flipButton.Visible.Set(false)
 		flipVerticalButton.Visible.Set(false)
 		cropButton.Visible.Set(false)
+		resizeLabel.Visible.Set(false)
+		resizeWidth.Visible.Set(false)
+		resizeTimes.Visible.Set(false)
+		resizeHeight.Visible.Set(false)
+		resizeKeepRatio.Visible.Set(false)
+		resizeButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -182,9 +195,29 @@ func main() {
 		cropButton.Top().Eq(rotateButton.Top()),
 		cropButton.Width().Is(235),
 		cropButton.Height().Is(32),
+		resizeLabel.Left().Eq(title.Left()),
+		resizeLabel.Top().Eq(cropButton.Bottom().Plus(6)),
+		resizeWidth.Left().Eq(resizeLabel.Right().Plus(6)),
+		resizeWidth.Top().Eq(resizeLabel.Top()),
+		resizeWidth.Width().Is(82),
+		resizeWidth.Height().Is(32),
+		resizeTimes.Left().Eq(resizeWidth.Right().Plus(6)),
+		resizeTimes.Top().Eq(resizeWidth.Top()),
+		resizeHeight.Left().Eq(resizeTimes.Right().Plus(6)),
+		resizeHeight.Top().Eq(resizeWidth.Top()),
+		resizeHeight.Width().Is(82),
+		resizeHeight.Height().Is(32),
+		resizeKeepRatio.Left().Eq(resizeHeight.Right().Plus(pad)),
+		resizeKeepRatio.Top().Eq(resizeWidth.Top()),
+		resizeKeepRatio.Width().Is(190),
+		resizeKeepRatio.Height().Is(32),
+		resizeButton.Left().Eq(resizeKeepRatio.Right().Plus(pad)),
+		resizeButton.Top().Eq(resizeWidth.Top()),
+		resizeButton.Width().Is(155),
+		resizeButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(cropButton.Bottom().Plus(pad)),
+		files.Top().Eq(resizeButton.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
@@ -205,12 +238,16 @@ func main() {
 	openFolder.HugWidth()
 	openImage.HugWidth()
 	sortLabel.HugHeight()
+	resizeLabel.HugHeight()
+	resizeTimes.HugHeight()
 	sortBox.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
 
 	var entries []imageEntry
 	var currentImage image.Image
+	resizeWidthEdited := true
+	syncingResizeFields := false
 	var undoStack, redoStack []image.Image
 	var cropMode, cropSelecting, cropValid bool
 	var cropStart, cropEnd viewport.Point
@@ -302,6 +339,10 @@ func main() {
 		invalidateView()
 		entry := entries[selectedIndex]
 		bounds := currentImage.Bounds()
+		syncingResizeFields = true
+		resizeWidth.Text.Set(strconv.Itoa(bounds.Dx()))
+		resizeHeight.Text.Set(strconv.Itoa(bounds.Dy()))
+		syncingResizeFields = false
 		info.Text.Set(fmt.Sprintf("%s  •  %s  •  %d × %d", entry.name, formatBytes(entry.size), bounds.Dx(), bounds.Dy()))
 		if modified {
 			status.Text.Set("Изменено в памяти: " + entry.path)
@@ -649,6 +690,59 @@ func main() {
 		status.Text.Set("Выделите область мышью, затем нажмите «Применить кадрирование» или Enter")
 		canvas.Invalidate()
 	})
+	resizeWidth.Changed.On(app.Scope(), func(string) {
+		if !syncingResizeFields {
+			resizeWidthEdited = true
+		}
+	})
+	resizeHeight.Changed.On(app.Scope(), func(string) {
+		if !syncingResizeFields {
+			resizeWidthEdited = false
+		}
+	})
+	applyResize := func() {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		width, widthErr := strconv.Atoi(strings.TrimSpace(resizeWidth.Text.Get()))
+		height, heightErr := strconv.Atoi(strings.TrimSpace(resizeHeight.Text.Get()))
+		if widthErr != nil || heightErr != nil || width <= 0 || height <= 0 {
+			status.Text.Set("Введите положительные размеры изображения")
+			return
+		}
+		if width > 100_000_000 || height > 100_000_000 {
+			status.Text.Set("Размер слишком велик (максимум 100 млн пикселей)")
+			return
+		}
+		if resizeKeepRatio.Checked.Get() {
+			bounds := currentImage.Bounds()
+			if resizeWidthEdited {
+				scaled := math.Round(float64(width) * float64(bounds.Dy()) / float64(bounds.Dx()))
+				if scaled > 100_000_000 {
+					status.Text.Set("Размер слишком велик (максимум 100 млн пикселей)")
+					return
+				}
+				height = max(1, int(scaled))
+			} else {
+				scaled := math.Round(float64(height) * float64(bounds.Dx()) / float64(bounds.Dy()))
+				if scaled > 100_000_000 {
+					status.Text.Set("Размер слишком велик (максимум 100 млн пикселей)")
+					return
+				}
+				width = max(1, int(scaled))
+			}
+		}
+		resized := transform.Resize(currentImage, width, height)
+		if resized == nil {
+			status.Text.Set("Размер слишком велик (максимум 100 млн пикселей)")
+			return
+		}
+		applyEdit(resized)
+		status.Text.Set(fmt.Sprintf("Изменено в памяти: %d × %d — %s", width, height, entries[selectedIndex].path))
+	}
+	resizeButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyResize() })
+	resizeWidth.Activated.On(app.Scope(), func(string) { applyResize() })
+	resizeHeight.Activated.On(app.Scope(), func(string) { applyResize() })
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
