@@ -113,7 +113,7 @@ jobs:
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-mirror-vertical-redo.png"
             xdotool mousemove --window "$window_id" 800 141 click 1
-            xdotool mousemove --window "$window_id" 580 250 mousedown 1
+            xdotool mousemove --window "$window_id" 580 285 mousedown 1
             xdotool mousemove --sync --window "$window_id" 750 480
             sleep 0.2
             xdotool mouseup 1
@@ -130,6 +130,13 @@ jobs:
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-resize-redo.png"
+            # Apply a reversible brightness adjustment after resizing.
+            xdotool mousemove --window "$window_id" 140 225 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
+            xdotool mousemove --window "$window_id" 280 225 click 1
+            xdotool key --clearmodifiers ctrl+z
+            xdotool key --clearmodifiers ctrl+y
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-brightness-redo.png"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"

@@ -117,6 +117,9 @@ func main() {
 	resizeHeight, _ := win.AddEdit("1")
 	resizeKeepRatio, _ := win.AddCheckBox("Сохранять пропорции", true)
 	resizeButton, _ := win.AddButton("Изменить размер")
+	brightnessLabel, _ := win.AddLabel("Яркость, %:")
+	brightnessEdit, _ := win.AddEdit("0")
+	brightnessButton, _ := win.AddButton("Применить яркость")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -136,6 +139,9 @@ func main() {
 		resizeHeight.Visible.Set(false)
 		resizeKeepRatio.Visible.Set(false)
 		resizeButton.Visible.Set(false)
+		brightnessLabel.Visible.Set(false)
+		brightnessEdit.Visible.Set(false)
+		brightnessButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -215,9 +221,19 @@ func main() {
 		resizeButton.Top().Eq(resizeWidth.Top()),
 		resizeButton.Width().Is(155),
 		resizeButton.Height().Is(32),
+		brightnessLabel.Left().Eq(title.Left()),
+		brightnessLabel.Top().Eq(resizeButton.Bottom().Plus(6)),
+		brightnessEdit.Left().Eq(brightnessLabel.Right().Plus(6)),
+		brightnessEdit.Top().Eq(brightnessLabel.Top()),
+		brightnessEdit.Width().Is(82),
+		brightnessEdit.Height().Is(32),
+		brightnessButton.Left().Eq(brightnessEdit.Right().Plus(pad)),
+		brightnessButton.Top().Eq(brightnessEdit.Top()),
+		brightnessButton.Width().Is(175),
+		brightnessButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(resizeButton.Bottom().Plus(pad)),
+		files.Top().Eq(brightnessButton.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
@@ -240,6 +256,7 @@ func main() {
 	sortLabel.HugHeight()
 	resizeLabel.HugHeight()
 	resizeTimes.HugHeight()
+	brightnessLabel.HugHeight()
 	sortBox.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
@@ -743,6 +760,29 @@ func main() {
 	resizeButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyResize() })
 	resizeWidth.Activated.On(app.Scope(), func(string) { applyResize() })
 	resizeHeight.Activated.On(app.Scope(), func(string) { applyResize() })
+	applyBrightness := func() {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		percent, err := strconv.Atoi(strings.TrimSpace(brightnessEdit.Text.Get()))
+		if err != nil || percent < -100 || percent > 100 {
+			status.Text.Set("Введите яркость от −100 до 100 процентов")
+			return
+		}
+		if percent == 0 {
+			status.Text.Set("Яркость не изменена")
+			return
+		}
+		adjusted := transform.AdjustBrightness(currentImage, percent)
+		if adjusted == nil {
+			status.Text.Set("Не удалось скорректировать яркость")
+			return
+		}
+		applyEdit(adjusted)
+		status.Text.Set(fmt.Sprintf("Яркость %+d%% применена в памяти: %s", percent, entries[selectedIndex].path))
+	}
+	brightnessButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyBrightness() })
+	brightnessEdit.Activated.On(app.Scope(), func(string) { applyBrightness() })
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
