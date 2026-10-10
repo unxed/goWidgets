@@ -27,6 +27,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
 	"github.com/unxed/goWidgets/showcase/imgy/thumbnailgrid"
+	"github.com/unxed/goWidgets/showcase/imgy/transform"
 	"github.com/unxed/goWidgets/showcase/imgy/viewport"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
@@ -85,6 +86,9 @@ func main() {
 	openFolder, _ := win.AddButton("Открыть папку")
 	openImage, _ := win.AddButton("Открыть файл…")
 	thumbToggle, _ := win.AddButton("Миниатюры")
+	rotateButton, _ := win.AddButton("Повернуть 90°")
+	undoButton, _ := win.AddButton("Отменить")
+	redoButton, _ := win.AddButton("Повторить")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -105,6 +109,9 @@ func main() {
 		}
 		previewBox = imageView
 		thumbToggle.Visible.Set(false)
+		rotateButton.Visible.Set(false)
+		undoButton.Visible.Set(false)
+		redoButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -136,6 +143,12 @@ func main() {
 		sortDirection.Top().Eq(sortBox.Top()),
 		thumbToggle.Left().Eq(sortDirection.Right().Plus(pad)),
 		thumbToggle.Top().Eq(sortBox.Top()),
+		rotateButton.Left().Eq(thumbToggle.Right().Plus(pad)),
+		rotateButton.Top().Eq(sortBox.Top()),
+		undoButton.Left().Eq(rotateButton.Right().Plus(6)),
+		undoButton.Top().Eq(sortBox.Top()),
+		redoButton.Left().Eq(undoButton.Right().Plus(6)),
+		redoButton.Top().Eq(sortBox.Top()),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(sortLabel.Bottom().Plus(pad)),
@@ -164,11 +177,18 @@ func main() {
 	sortDirection.HugHeight()
 	thumbToggle.HugWidth()
 	thumbToggle.HugHeight()
+	rotateButton.HugWidth()
+	rotateButton.HugHeight()
+	undoButton.HugWidth()
+	undoButton.HugHeight()
+	redoButton.HugWidth()
+	redoButton.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
 
 	var entries []imageEntry
 	var currentImage image.Image
+	var undoStack, redoStack []image.Image
 	var folder string
 	selectedIndex := -1
 	thumbGrid := thumbnailgrid.Grid{CellWidth: 144, CellHeight: 112, Gap: 10}
@@ -240,6 +260,59 @@ func main() {
 		if canvas != nil {
 			canvas.Invalidate()
 		}
+	}
+	updateHistoryButtons := func() {
+		undoButton.Enabled.Set(len(undoStack) > 0)
+		redoButton.Enabled.Set(len(redoStack) > 0)
+	}
+	undoButton.Enabled.Set(false)
+	redoButton.Enabled.Set(false)
+	refreshCurrentImage := func(modified bool) {
+		if currentImage == nil || selectedIndex < 0 || selectedIndex >= len(entries) {
+			return
+		}
+		mode := viewState.Mode
+		viewState = viewport.New(viewport.Size{W: float64(currentImage.Bounds().Dx()), H: float64(currentImage.Bounds().Dy())}, viewState.Area)
+		viewState.Mode = mode
+		invalidateView()
+		entry := entries[selectedIndex]
+		bounds := currentImage.Bounds()
+		info.Text.Set(fmt.Sprintf("%s  •  %s  •  %d × %d", entry.name, formatBytes(entry.size), bounds.Dx(), bounds.Dy()))
+		if modified {
+			status.Text.Set("Изменено в памяти: " + entry.path)
+		} else {
+			status.Text.Set("Выбрано: " + entry.path)
+		}
+	}
+	applyEdit := func(next image.Image) {
+		if currentImage == nil || next == nil {
+			return
+		}
+		undoStack = append(undoStack, currentImage)
+		currentImage = next
+		redoStack = nil
+		refreshCurrentImage(true)
+		updateHistoryButtons()
+	}
+	doUndo := func() {
+		if len(undoStack) == 0 {
+			return
+		}
+		redoStack = append(redoStack, currentImage)
+		currentImage = undoStack[len(undoStack)-1]
+		undoStack = undoStack[:len(undoStack)-1]
+		refreshCurrentImage(len(undoStack) > 0)
+		updateHistoryButtons()
+	}
+	doRedo := func() {
+		if len(redoStack) == 0 {
+			return
+		}
+		undoStack = append(undoStack, currentImage)
+		currentImage = redoStack[len(redoStack)-1]
+		redoStack = redoStack[:len(redoStack)-1]
+		refreshCurrentImage(true)
+		updateHistoryButtons()
 	}
 	if canvas != nil {
 		canvas.Paint.On(app.Scope(), func(frame *goWidgets.CanvasFrame) {
@@ -317,6 +390,9 @@ func main() {
 		}
 		entries = entries[:0]
 		selectedIndex = -1
+		currentImage = nil
+		undoStack, redoStack = nil, nil
+		updateHistoryButtons()
 		for _, item := range read {
 			if item.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(item.Name()))] {
 				continue
@@ -338,7 +414,6 @@ func main() {
 		files.Select(-1)
 		pathEdit.Text.Set(folder)
 		info.Text.Set(fmt.Sprintf("Файлов: %d", len(entries)))
-		currentImage = nil
 		viewState.Image = viewport.Size{}
 		viewState.Pan = viewport.Point{}
 		viewState.Zoom = 1
@@ -357,7 +432,9 @@ func main() {
 		selectedIndex = i
 		e := entries[i]
 		if canvas != nil {
-			img, dimensions, err := decodeImage(e.path)
+			undoStack, redoStack = nil, nil
+			updateHistoryButtons()
+			img, _, err := decodeImage(e.path)
 			if err != nil {
 				currentImage = nil
 				invalidateView()
@@ -365,11 +442,7 @@ func main() {
 				return
 			}
 			currentImage = img
-			mode := viewState.Mode
-			viewState = viewport.New(viewport.Size{W: float64(img.Bounds().Dx()), H: float64(img.Bounds().Dy())}, viewState.Area)
-			viewState.Mode = mode
-			invalidateView()
-			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), dimensions))
+			refreshCurrentImage(false)
 		} else {
 			imageView.SetPath(e.path)
 			info.Text.Set(fmt.Sprintf("%s  •  %s  •  %s", e.name, formatBytes(e.size), imageDimensions(e.path)))
@@ -483,6 +556,13 @@ func main() {
 		}
 		canvas.Invalidate()
 	})
+	rotateButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas != nil && currentImage != nil {
+			applyEdit(transform.RotateClockwise(currentImage))
+		}
+	})
+	undoButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { doUndo() })
+	redoButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { doRedo() })
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
@@ -573,6 +653,10 @@ func main() {
 		}
 		if key.Ctrl() && key.VirtualKeyCode == 0x4F { // Ctrl+O
 			chooseImage()
+		} else if key.Ctrl() && key.VirtualKeyCode == 0x5A { // Ctrl+Z
+			doUndo()
+		} else if key.Ctrl() && key.VirtualKeyCode == 0x59 { // Ctrl+Y
+			doRedo()
 		} else if key.VirtualKeyCode == 0x1B { // Escape
 			app.Quit()
 		} else {
