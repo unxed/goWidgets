@@ -121,6 +121,7 @@ func main() {
 	brightnessEdit, _ := win.AddEdit("0")
 	brightnessButton, _ := win.AddButton("Применить яркость")
 	grayscaleButton, _ := win.AddButton("Оттенки серого")
+	sepiaButton, _ := win.AddButton("Сепия")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -144,6 +145,7 @@ func main() {
 		brightnessEdit.Visible.Set(false)
 		brightnessButton.Visible.Set(false)
 		grayscaleButton.Visible.Set(false)
+		sepiaButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -237,6 +239,10 @@ func main() {
 		grayscaleButton.Top().Eq(brightnessButton.Top()),
 		grayscaleButton.Width().Is(150),
 		grayscaleButton.Height().Is(32),
+		sepiaButton.Left().Eq(grayscaleButton.Right().Plus(pad)),
+		sepiaButton.Top().Eq(grayscaleButton.Top()),
+		sepiaButton.Width().Is(105),
+		sepiaButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(brightnessButton.Bottom().Plus(pad)),
@@ -795,6 +801,13 @@ func main() {
 		}
 		applyEdit(transform.Grayscale(currentImage))
 		status.Text.Set("Переведено в оттенки серого в памяти: " + entries[selectedIndex].path)
+	})
+	sepiaButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		applyEdit(transform.Sepia(currentImage))
+		status.Text.Set("Применена сепия в памяти: " + entries[selectedIndex].path)
 	})
 	if canvas != nil {
 		var dragging bool
