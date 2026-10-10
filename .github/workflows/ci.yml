@@ -76,7 +76,7 @@ jobs:
           go build -o "$RUNNER_TEMP/imgy" ./showcase/imgy
           go run ./showcase/imgy/testfixture "$RUNNER_TEMP/imgy-sample.png"
           xvfb-run -a bash -euo pipefail -c '
-            "$RUNNER_TEMP/imgy" "$RUNNER_TEMP/imgy-sample.png" &
+            IMGY_SHOW_THUMBNAILS=1 "$RUNNER_TEMP/imgy" "$RUNNER_TEMP/imgy-sample.png" &
             app_pid=$!
             trap "kill $app_pid 2>/dev/null || true" EXIT
             for _ in $(seq 1 50); do
@@ -88,6 +88,8 @@ jobs:
             xdotool windowraise "$window_id"
             xdotool windowfocus --sync "$window_id"
             sleep 0.5
+            xdotool mousemove --window "$window_id" 376 210 click 1
+            sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
