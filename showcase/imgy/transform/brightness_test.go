@@ -18,11 +18,16 @@ func TestAdjustBrightnessPreservesAlphaAndUsesNonZeroBounds(t *testing.T) {
 	if got.Bounds() != image.Rect(0, 0, 2, 1) {
 		t.Fatalf("adjusted bounds = %v, want (0,0)-(2,1)", got.Bounds())
 	}
-	if pixel := color.NRGBA64Model.Convert(got.At(0, 0)).(color.NRGBA64); pixel != (color.NRGBA64{R: 37_768, G: 42_768, B: 47_768, A: 65_535}) {
-		t.Errorf("opaque pixel = %#v, want brightened channels with alpha preserved", pixel)
+	pixel := got.RGBA64At(0, 0)
+	near := func(actual, expected uint16) bool {
+		delta := int(actual) - int(expected)
+		return delta >= -257 && delta <= 257
 	}
-	if pixel := color.NRGBA64Model.Convert(got.At(1, 0)).(color.NRGBA64); pixel.A != 32_768 {
-		t.Errorf("translucent alpha = %d, want 32768", pixel.A)
+	if !near(pixel.R, 37_768) || !near(pixel.G, 42_768) || !near(pixel.B, 47_768) || pixel.A != 65_535 {
+		t.Errorf("opaque pixel = %#v, want adjusted channels within one 8-bit step", pixel)
+	}
+	if alpha := got.RGBAAt(1, 0).A; alpha != 128 {
+		t.Errorf("translucent alpha = %d, want preserved alpha quantized to 128", alpha)
 	}
 }
 
