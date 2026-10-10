@@ -200,6 +200,22 @@ jobs:
         env:
           CGO_ENABLED: 0
 
+      - name: Capture imgy window under Cocoa
+        run: |
+          mkdir -p "$RUNNER_TEMP/imgy-snapshots"
+          go run ./showcase/imgy/testfixture "$RUNNER_TEMP/imgy-sample.png"
+          IMGY_SHOW_THUMBNAILS=1 /tmp/imgy "$RUNNER_TEMP/imgy-sample.png" &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          swift tools/ci/capture-imgy-macos.swift "$app_pid" "$RUNNER_TEMP/imgy-snapshots/imgy-cocoa.png"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: imgy-cocoa-screenshot
+          path: ${{ runner.temp }}/imgy-snapshots
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
