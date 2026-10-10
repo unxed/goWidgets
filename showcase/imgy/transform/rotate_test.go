@@ -75,3 +75,23 @@ func TestMirrorVertical(t *testing.T) {
 		}
 	}
 }
+
+func TestCropIntersectsSourceBounds(t *testing.T) {
+	src := image.NewRGBA(image.Rect(4, 7, 7, 11))
+	for y := 7; y < 11; y++ {
+		for x := 4; x < 7; x++ {
+			src.SetRGBA(x, y, color.RGBA{R: uint8(x * 10), G: uint8(y * 10), A: 255})
+		}
+	}
+	got := Crop(src, image.Rect(5, 8, 9, 10))
+	if got.Bounds() != image.Rect(0, 0, 2, 2) {
+		t.Fatalf("cropped bounds = %v, want (0,0)-(2,2)", got.Bounds())
+	}
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			if pixel, want := got.RGBAAt(x, y), src.RGBAAt(5+x, 8+y); pixel != want {
+				t.Errorf("pixel at (%d,%d) = %#v, want %#v", x, y, pixel, want)
+			}
+		}
+	}
+}

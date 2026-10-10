@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -108,6 +109,7 @@ func main() {
 	redoButton, _ := win.AddButton("Повторить")
 	flipButton, _ := win.AddButton("Горизонтально")
 	flipVerticalButton, _ := win.AddButton("Вертикально")
+	cropButton, _ := win.AddButton("Кадрировать")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -120,6 +122,7 @@ func main() {
 		redoButton.Visible.Set(false)
 		flipButton.Visible.Set(false)
 		flipVerticalButton.Visible.Set(false)
+		cropButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -175,9 +178,13 @@ func main() {
 		flipVerticalButton.Top().Eq(rotateButton.Top()),
 		flipVerticalButton.Width().Is(140),
 		flipVerticalButton.Height().Is(32),
+		cropButton.Left().Eq(flipVerticalButton.Right().Plus(6)),
+		cropButton.Top().Eq(rotateButton.Top()),
+		cropButton.Width().Is(235),
+		cropButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(rotateButton.Bottom().Plus(pad)),
+		files.Top().Eq(cropButton.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
@@ -205,6 +212,8 @@ func main() {
 	var entries []imageEntry
 	var currentImage image.Image
 	var undoStack, redoStack []image.Image
+	var cropMode, cropSelecting, cropValid bool
+	var cropStart, cropEnd viewport.Point
 	var folder string
 	selectedIndex := -1
 	thumbGrid := thumbnailgrid.Grid{CellWidth: 144, CellHeight: 112, Gap: 10}
@@ -307,8 +316,37 @@ func main() {
 		undoStack = append(undoStack, currentImage)
 		currentImage = next
 		redoStack = nil
+		cropMode, cropSelecting, cropValid = false, false, false
+		cropButton.Text.Set("Кадрировать")
 		refreshCurrentImage(true)
 		updateHistoryButtons()
+	}
+	selectedCrop := func() (image.Rectangle, bool) {
+		if currentImage == nil || !cropValid {
+			return image.Rectangle{}, false
+		}
+		p0, p1 := viewState.ImagePoint(cropStart), viewState.ImagePoint(cropEnd)
+		bounds := currentImage.Bounds()
+		x0 := max(0, int(math.Floor(math.Min(p0.X, p1.X))))
+		y0 := max(0, int(math.Floor(math.Min(p0.Y, p1.Y))))
+		x1 := min(bounds.Dx(), int(math.Ceil(math.Max(p0.X, p1.X))))
+		y1 := min(bounds.Dy(), int(math.Ceil(math.Max(p0.Y, p1.Y))))
+		if x1 <= x0 || y1 <= y0 {
+			return image.Rectangle{}, false
+		}
+		return image.Rect(bounds.Min.X+x0, bounds.Min.Y+y0, bounds.Min.X+x1, bounds.Min.Y+y1), true
+	}
+	applyCrop := func() {
+		rect, ok := selectedCrop()
+		if !ok {
+			status.Text.Set("Сначала выделите область кадрирования")
+			return
+		}
+		applyEdit(transform.Crop(currentImage, rect))
+		cropMode, cropSelecting, cropValid = false, false, false
+		cropButton.Text.Set("Кадрировать")
+		status.Text.Set("Кадрировано в памяти: " + entries[selectedIndex].path)
+		canvas.Invalidate()
 	}
 	doUndo := func() {
 		if len(undoStack) == 0 {
@@ -367,11 +405,14 @@ func main() {
 			generation := renderGeneration.Load()
 			if qualityFrame != nil && qualityFrameGeneration == generation && qualityFrame.Bounds().Size() == frame.Image.Bounds().Size() {
 				copy(frame.Image.Pix, qualityFrame.Pix)
-				return
+			} else {
+				paintViewport(frame.Image, currentImage, viewState)
+				if scheduleQuality != nil {
+					scheduleQuality(frame.Image)
+				}
 			}
-			paintViewport(frame.Image, currentImage, viewState)
-			if scheduleQuality != nil {
-				scheduleQuality(frame.Image)
+			if cropMode && cropValid {
+				drawCropOutline(frame.Image, cropStart, cropEnd)
 			}
 		})
 	}
@@ -408,6 +449,8 @@ func main() {
 		selectedIndex = -1
 		currentImage = nil
 		undoStack, redoStack = nil, nil
+		cropMode, cropSelecting, cropValid = false, false, false
+		cropButton.Text.Set("Кадрировать")
 		updateHistoryButtons()
 		for _, item := range read {
 			if item.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(item.Name()))] {
@@ -448,6 +491,8 @@ func main() {
 		selectedIndex = i
 		e := entries[i]
 		if canvas != nil {
+			cropMode, cropSelecting, cropValid = false, false, false
+			cropButton.Text.Set("Кадрировать")
 			undoStack, redoStack = nil, nil
 			updateHistoryButtons()
 			img, _, err := decodeImage(e.path)
@@ -591,6 +636,19 @@ func main() {
 			status.Text.Set("Отражено по вертикали в памяти: " + entries[selectedIndex].path)
 		}
 	})
+	cropButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		if cropMode {
+			applyCrop()
+			return
+		}
+		cropMode, cropSelecting, cropValid = true, false, false
+		cropButton.Text.Set("Применить кадрирование")
+		status.Text.Set("Выделите область мышью, затем нажмите «Применить кадрирование» или Enter")
+		canvas.Invalidate()
+	})
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo
@@ -608,6 +666,9 @@ func main() {
 				return
 			}
 			if currentImage == nil {
+				return
+			}
+			if cropMode {
 				return
 			}
 			scale := win.Scale().Scale
@@ -633,6 +694,17 @@ func main() {
 				canvas.Invalidate()
 				return
 			}
+			if cropMode && mouse.Button == goWidgets.MouseLeft && currentImage != nil {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				cropStart = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+				cropEnd = cropStart
+				cropSelecting, cropValid = true, true
+				canvas.Invalidate()
+				return
+			}
 			if currentImage != nil {
 				if factor := shiftClickZoomFactor(mouse); factor != 0 {
 					scale := win.Scale().Scale
@@ -650,6 +722,15 @@ func main() {
 			}
 		})
 		canvas.MouseMove.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if cropSelecting {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				cropEnd = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+				canvas.Invalidate()
+				return
+			}
 			if !dragging {
 				return
 			}
@@ -664,6 +745,19 @@ func main() {
 		})
 		canvas.MouseUp.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
 			if mouse.Button == goWidgets.MouseLeft {
+				if cropSelecting {
+					scale := win.Scale().Scale
+					if scale <= 0 {
+						scale = 1
+					}
+					cropEnd = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+					cropSelecting = false
+					canvas.Invalidate()
+					if _, ok := selectedCrop(); ok {
+						status.Text.Set("Область выбрана. Нажмите «Применить кадрирование» или Enter")
+					}
+					return
+				}
 				dragging = false
 			}
 		})
@@ -686,7 +780,16 @@ func main() {
 		} else if key.Ctrl() && key.VirtualKeyCode == 0x59 { // Ctrl+Y
 			doRedo()
 		} else if key.VirtualKeyCode == 0x1B { // Escape
-			app.Quit()
+			if cropMode {
+				cropMode, cropSelecting, cropValid = false, false, false
+				cropButton.Text.Set("Кадрировать")
+				status.Text.Set("Кадрирование отменено")
+				canvas.Invalidate()
+			} else {
+				app.Quit()
+			}
+		} else if cropMode && key.VirtualKeyCode == 0x0D { // Enter
+			applyCrop()
 		} else {
 			if mode, zoom, ok := zoomShortcut(key.Char); ok {
 				setViewMode(mode)
@@ -731,6 +834,40 @@ func zoomShortcut(char rune) (viewport.Mode, float64, bool) {
 		return viewport.Fit, 1, true
 	default:
 		return 0, 0, false
+	}
+}
+
+func drawCropOutline(dst *image.RGBA, start, end viewport.Point) {
+	if dst == nil {
+		return
+	}
+	x0 := max(dst.Bounds().Min.X, int(math.Floor(math.Min(start.X, end.X))))
+	y0 := max(dst.Bounds().Min.Y, int(math.Floor(math.Min(start.Y, end.Y))))
+	x1 := min(dst.Bounds().Max.X, int(math.Ceil(math.Max(start.X, end.X))))
+	y1 := min(dst.Bounds().Max.Y, int(math.Ceil(math.Max(start.Y, end.Y))))
+	if x1 <= x0 || y1 <= y0 {
+		return
+	}
+	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	black := color.RGBA{A: 255}
+	for n := 0; n < 2; n++ {
+		c := black
+		if n == 1 {
+			c = white
+		}
+		left, right := x0+n, x1-1-n
+		top, bottom := y0+n, y1-1-n
+		if left > right || top > bottom {
+			break
+		}
+		for x := left; x <= right; x++ {
+			dst.SetRGBA(x, top, c)
+			dst.SetRGBA(x, bottom, c)
+		}
+		for y := top; y <= bottom; y++ {
+			dst.SetRGBA(left, y, c)
+			dst.SetRGBA(right, y, c)
+		}
 	}
 }
 
