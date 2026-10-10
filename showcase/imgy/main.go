@@ -130,6 +130,7 @@ func main() {
 	blueChannelLabel, _ := win.AddLabel("B, %:")
 	blueChannelEdit, _ := win.AddEdit("0")
 	channelsButton, _ := win.AddButton("Применить RGB")
+	redEyeButton, _ := win.AddButton("Красные глаза")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -162,6 +163,7 @@ func main() {
 		blueChannelLabel.Visible.Set(false)
 		blueChannelEdit.Visible.Set(false)
 		channelsButton.Visible.Set(false)
+		redEyeButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -285,6 +287,10 @@ func main() {
 		channelsButton.Top().Eq(blueChannelEdit.Top()),
 		channelsButton.Width().Is(145),
 		channelsButton.Height().Is(32),
+		redEyeButton.Left().Eq(channelsButton.Right().Plus(pad)),
+		redEyeButton.Top().Eq(channelsButton.Top()),
+		redEyeButton.Width().Is(150),
+		redEyeButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(channelsButton.Bottom().Plus(pad)),
@@ -324,6 +330,7 @@ func main() {
 	syncingResizeFields := false
 	var undoStack, redoStack []image.Image
 	var cropMode, cropSelecting, cropValid bool
+	var redEyeMode bool
 	var cropStart, cropEnd viewport.Point
 	var folder string
 	selectedIndex := -1
@@ -565,7 +572,9 @@ func main() {
 		currentImage = nil
 		undoStack, redoStack = nil, nil
 		cropMode, cropSelecting, cropValid = false, false, false
+		redEyeMode = false
 		cropButton.Text.Set("Кадрировать")
+		redEyeButton.Text.Set("Красные глаза")
 		updateHistoryButtons()
 		for _, item := range read {
 			if item.IsDir() || !imageExtensions[strings.ToLower(filepath.Ext(item.Name()))] {
@@ -607,7 +616,9 @@ func main() {
 		e := entries[i]
 		if canvas != nil {
 			cropMode, cropSelecting, cropValid = false, false, false
+			redEyeMode = false
 			cropButton.Text.Set("Кадрировать")
+			redEyeButton.Text.Set("Красные глаза")
 			undoStack, redoStack = nil, nil
 			updateHistoryButtons()
 			img, _, err := decodeImage(e.path)
@@ -759,9 +770,29 @@ func main() {
 			applyCrop()
 			return
 		}
+		redEyeMode = false
+		redEyeButton.Text.Set("Красные глаза")
 		cropMode, cropSelecting, cropValid = true, false, false
 		cropButton.Text.Set("Применить кадрирование")
 		status.Text.Set("Выделите область мышью, затем нажмите «Применить кадрирование» или Enter")
+		canvas.Invalidate()
+	})
+	redEyeButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		redEyeMode = !redEyeMode
+		if redEyeMode {
+			if cropMode {
+				cropMode, cropSelecting, cropValid = false, false, false
+				cropButton.Text.Set("Кадрировать")
+			}
+			redEyeButton.Text.Set("Кликните глаз")
+			status.Text.Set("Щёлкните по красному зрачку; Esc завершит выбор")
+		} else {
+			redEyeButton.Text.Set("Красные глаза")
+			status.Text.Set("Коррекция красных глаз завершена")
+		}
 		canvas.Invalidate()
 	})
 	resizeWidth.Changed.On(app.Scope(), func(string) {
@@ -935,6 +966,30 @@ func main() {
 				canvas.Invalidate()
 				return
 			}
+			if redEyeMode && mouse.Button == goWidgets.MouseLeft && currentImage != nil {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				imagePoint := viewState.ImagePoint(viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale})
+				if imagePoint.X < 0 || imagePoint.Y < 0 || imagePoint.X >= float64(currentImage.Bounds().Dx()) || imagePoint.Y >= float64(currentImage.Bounds().Dy()) {
+					status.Text.Set("Щёлкните по изображению внутри красного зрачка")
+					return
+				}
+				radius := 10
+				if viewScale := viewState.Transform().Scale; viewScale > 0 {
+					radius = int(math.Round(10 / viewScale))
+				}
+				radius = max(2, min(64, radius))
+				adjusted := transform.ReduceRedEye(currentImage, image.Pt(int(math.Floor(imagePoint.X)), int(math.Floor(imagePoint.Y))), radius)
+				if adjusted == nil {
+					status.Text.Set("Не удалось скорректировать красный глаз")
+					return
+				}
+				applyEdit(adjusted)
+				status.Text.Set("Коррекция красного глаза применена в памяти; щёлкните по следующему или нажмите Esc")
+				return
+			}
 			if cropMode && mouse.Button == goWidgets.MouseLeft && currentImage != nil {
 				scale := win.Scale().Scale
 				if scale <= 0 {
@@ -1025,6 +1080,11 @@ func main() {
 				cropMode, cropSelecting, cropValid = false, false, false
 				cropButton.Text.Set("Кадрировать")
 				status.Text.Set("Кадрирование отменено")
+				canvas.Invalidate()
+			} else if redEyeMode {
+				redEyeMode = false
+				redEyeButton.Text.Set("Красные глаза")
+				status.Text.Set("Выбор области красного глаза завершён")
 				canvas.Invalidate()
 			} else {
 				app.Quit()
