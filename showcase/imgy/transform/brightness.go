@@ -20,7 +20,7 @@ func AdjustBrightness(src image.Image, percent int) *image.RGBA {
 	for y := 0; y < bounds.Dy(); y++ {
 		for x := 0; x < bounds.Dx(); x++ {
 			pixel := color.NRGBA64Model.Convert(src.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA64)
-			dst.SetNRGBA64(x, y, color.NRGBA64{
+			dst.Set(x, y, color.NRGBA64{
 				R: adjustBrightnessChannel(pixel.R, percent),
 				G: adjustBrightnessChannel(pixel.G, percent),
 				B: adjustBrightnessChannel(pixel.B, percent),
