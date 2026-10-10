@@ -7,23 +7,23 @@ import (
 )
 
 func TestReduceRedEyeTargetsLocalCircleAndPreservesAlpha(t *testing.T) {
-	src := image.NewNRGBA(image.Rect(5, 7, 8, 8))
+	src := image.NewNRGBA(image.Rect(5, 7, 10, 8))
 	src.SetNRGBA(5, 7, color.NRGBA{R: 230, G: 25, B: 30, A: 255})
-	src.SetNRGBA(6, 7, color.NRGBA{R: 230, G: 25, B: 30, A: 128})
-	src.SetNRGBA(7, 7, color.NRGBA{R: 230, G: 25, B: 30, A: 255})
+	src.SetNRGBA(7, 7, color.NRGBA{R: 230, G: 25, B: 30, A: 128})
+	src.SetNRGBA(9, 7, color.NRGBA{R: 230, G: 25, B: 30, A: 255})
 
-	got := ReduceRedEye(src, image.Pt(1, 0), 1)
+	got := ReduceRedEye(src, image.Pt(2, 0), 1)
 	if got == nil {
 		t.Fatal("red-eye reduction returned nil")
 	}
-	if got.Bounds() != image.Rect(0, 0, 3, 1) {
-		t.Fatalf("adjusted bounds = %v, want (0,0)-(3,1)", got.Bounds())
+	if got.Bounds() != image.Rect(0, 0, 5, 1) {
+		t.Fatalf("adjusted bounds = %v, want (0,0)-(5,1)", got.Bounds())
 	}
-	center := color.NRGBA64Model.Convert(got.At(1, 0)).(color.NRGBA64)
+	center := color.NRGBA64Model.Convert(got.At(2, 0)).(color.NRGBA64)
 	if uint32(center.R)*2 > uint32(center.G)*3 || uint32(center.R)*2 > uint32(center.B)*3 || center.A != 128*257 {
 		t.Errorf("target pixel = %#v, want neutralized red and preserved alpha", center)
 	}
-	for _, x := range []int{0, 2} {
+	for _, x := range []int{0, 4} {
 		pixel := got.RGBAAt(x, 0)
 		if pixel.R != 230 || pixel.G != 25 || pixel.B != 30 {
 			t.Errorf("outside pixel %d = %#v, want unchanged red pixel", x, pixel)
