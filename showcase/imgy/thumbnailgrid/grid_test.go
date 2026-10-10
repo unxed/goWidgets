@@ -26,6 +26,22 @@ func TestFitThumbnailCentersAndPreservesAspect(t *testing.T) {
 	}
 }
 
+func TestPaintRendersVisibleThumbnailAndSelection(t *testing.T) {
+	g := Grid{Count: 1, Width: 140, Height: 120, CellWidth: 120, CellHeight: 100}
+	g.Select(0, false, false)
+	thumb := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	thumb.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	thumb.SetRGBA(1, 0, color.RGBA{B: 255, A: 255})
+	dst := image.NewRGBA(image.Rect(0, 0, 140, 120))
+	Paint(dst, &g, map[int]*image.RGBA{0: thumb}, 1)
+	if got, want := dst.RGBAAt(0, 0), (color.RGBA{R: 65, G: 150, B: 245, A: 255}); got != want {
+		t.Fatalf("selected card border = %#v, want %#v", got, want)
+	}
+	if got, want := dst.RGBAAt(10, 31), (color.RGBA{R: 255, A: 255}); got != want {
+		t.Fatalf("thumbnail pixel = %#v, want %#v", got, want)
+	}
+}
+
 func TestVisibleRangeVirtualizesRows(t *testing.T) {
 	g := Grid{Count: 10_000, Width: 520, Height: 260, CellWidth: 120, CellHeight: 90, Gap: 10, Scroll: 1_005}
 	first, end := g.VisibleRange()

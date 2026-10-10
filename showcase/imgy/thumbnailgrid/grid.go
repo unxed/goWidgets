@@ -4,6 +4,7 @@ package thumbnailgrid
 
 import (
 	"image"
+	"image/color"
 	"math"
 	"sort"
 )
@@ -29,6 +30,92 @@ func FitThumbnail(src image.Image, width, height int) *image.RGBA {
 		}
 	}
 	return dst
+}
+
+// Paint draws the visible portion of the thumbnail grid into dst. It only
+// iterates the rows intersecting the viewport, not the full directory.
+func Paint(dst *image.RGBA, g *Grid, thumbnails map[int]*image.RGBA, scale float64) {
+	if dst == nil || g == nil {
+		return
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	fill(dst, dst.Bounds(), color.RGBA{R: 34, G: 36, B: 40, A: 255})
+	first, end := g.VisibleRange()
+	for i := first; i < end; i++ {
+		x, y, w, h, ok := g.CellRect(i)
+		if !ok {
+			continue
+		}
+		card := scaledRect(dst, x, y, w, h, scale)
+		fill(dst, card, color.RGBA{R: 58, G: 61, B: 66, A: 255})
+		border := color.RGBA{R: 100, G: 104, B: 110, A: 255}
+		if g.IsSelected(i) {
+			border = color.RGBA{R: 65, G: 150, B: 245, A: 255}
+		}
+		stroke(dst, card, border, max(1, int(math.Round(2*scale))))
+		thumb := thumbnails[i]
+		if thumb == nil {
+			continue
+		}
+		pad := 8.0
+		areaX, areaY := x+pad, y+pad
+		areaW, areaH := w-2*pad, h-28
+		if areaW <= 0 || areaH <= 0 {
+			continue
+		}
+		drawThumbnail(dst, thumb, scaledRect(dst, areaX, areaY, areaW, areaH, scale))
+	}
+}
+
+func drawThumbnail(dst *image.RGBA, src *image.RGBA, area image.Rectangle) {
+	if src == nil || src.Bounds().Empty() || area.Empty() {
+		return
+	}
+	dstRect := aspectRect(src.Bounds().Dx(), src.Bounds().Dy(), area)
+	for y := dstRect.Min.Y; y < dstRect.Max.Y; y++ {
+		sy := src.Bounds().Min.Y + (y-dstRect.Min.Y)*src.Bounds().Dy()/dstRect.Dy()
+		for x := dstRect.Min.X; x < dstRect.Max.X; x++ {
+			sx := src.Bounds().Min.X + (x-dstRect.Min.X)*src.Bounds().Dx()/dstRect.Dx()
+			dst.Set(x, y, src.At(sx, sy))
+		}
+	}
+}
+
+func aspectRect(width, height int, bounds image.Rectangle) image.Rectangle {
+	if width <= 0 || height <= 0 || bounds.Empty() {
+		return image.Rectangle{}
+	}
+	scale := math.Min(float64(bounds.Dx())/float64(width), float64(bounds.Dy())/float64(height))
+	w, h := max(1, int(math.Round(float64(width)*scale))), max(1, int(math.Round(float64(height)*scale)))
+	return image.Rect(bounds.Min.X+(bounds.Dx()-w)/2, bounds.Min.Y+(bounds.Dy()-h)/2, bounds.Min.X+(bounds.Dx()-w)/2+w, bounds.Min.Y+(bounds.Dy()-h)/2+h)
+}
+
+func scaledRect(dst *image.RGBA, x, y, w, h, scale float64) image.Rectangle {
+	r := image.Rect(int(math.Round(x*scale)), int(math.Round(y*scale)), int(math.Round((x+w)*scale)), int(math.Round((y+h)*scale)))
+	return r.Intersect(dst.Bounds())
+}
+
+func fill(dst *image.RGBA, r image.Rectangle, c color.RGBA) {
+	r = r.Intersect(dst.Bounds())
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			dst.SetRGBA(x, y, c)
+		}
+	}
+}
+
+func stroke(dst *image.RGBA, r image.Rectangle, c color.RGBA, thickness int) {
+	if r.Empty() {
+		return
+	}
+	for n := 0; n < thickness && r.Dx() > n*2 && r.Dy() > n*2; n++ {
+		fill(dst, image.Rect(r.Min.X+n, r.Min.Y+n, r.Max.X-n, r.Min.Y+n+1), c)
+		fill(dst, image.Rect(r.Min.X+n, r.Max.Y-n-1, r.Max.X-n, r.Max.Y-n), c)
+		fill(dst, image.Rect(r.Min.X+n, r.Min.Y+n, r.Min.X+n+1, r.Max.Y-n), c)
+		fill(dst, image.Rect(r.Max.X-n-1, r.Min.Y+n, r.Max.X-n, r.Max.Y-n), c)
+	}
 }
 
 // Grid describes a fixed-cell grid in device-independent pixels. Scroll is
