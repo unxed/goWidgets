@@ -140,14 +140,14 @@ func main() {
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(sortLabel.Bottom().Plus(pad)),
 		files.Width().Is(280),
-		files.Bottom().Eq(status.Top().Minus(pad)),
+		files.Bottom().Eq(info.Top().Minus(pad)),
 
 		previewBox.Left().Eq(files.Right().Plus(pad)),
 		previewBox.Top().Eq(files.Top()),
 		previewBox.Right().Eq(title.Right()),
-		previewBox.Bottom().Eq(status.Top().Minus(pad)),
+		previewBox.Bottom().Eq(info.Top().Minus(pad)),
 		info.Left().Eq(previewBox.Left()),
-		info.Bottom().Eq(previewBox.Bottom().Minus(pad)),
+		info.Bottom().Eq(status.Top().Minus(pad)),
 
 		status.Left().Eq(title.Left()),
 		status.Right().Eq(title.Right()),
