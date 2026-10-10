@@ -476,7 +476,7 @@ func main() {
 		}
 	}
 
-	files.Selected.On(app.Scope(), func(index int, _ string) {
+	files.Selected.On(app.Scope(), func(index int) {
 		thumbGrid.Select(index, false, false)
 		if thumbCanvas != nil {
 			thumbCanvas.Invalidate()
