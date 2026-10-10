@@ -80,20 +80,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	title, _ := win.AddLabel("imgy — просмотр изображений")
-	pathEdit, _ := win.AddEdit(start)
-	openFolder, _ := win.AddButton("Открыть папку")
-	openImage, _ := win.AddButton("Открыть файл…")
-	thumbToggle, _ := win.AddButton("Миниатюры")
-	rotateButton, _ := win.AddButton("Повернуть 90°")
-	undoButton, _ := win.AddButton("Отменить")
-	redoButton, _ := win.AddButton("Повторить")
-	sortLabel, _ := win.AddLabel("Сортировка:")
-	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
-	sortBox.Select(sortByName)
-	sortDirection, _ := win.AddButton("По возрастанию")
-	files, _ := win.AddListBox(nil)
+	// Create the canvas first so native controls added afterward remain above
+	// it in Cocoa's subview z-order if their Auto Layout frames touch.
 	var previewBox goWidgets.Box
 	var canvas *goWidgets.Canvas
 	var imageView *goWidgets.ImageView
@@ -108,6 +96,22 @@ func main() {
 			log.Fatal(err)
 		}
 		previewBox = imageView
+	}
+
+	title, _ := win.AddLabel("imgy — просмотр изображений")
+	pathEdit, _ := win.AddEdit(start)
+	openFolder, _ := win.AddButton("Открыть папку")
+	openImage, _ := win.AddButton("Открыть файл…")
+	thumbToggle, _ := win.AddButton("Миниатюры")
+	rotateButton, _ := win.AddButton("Повернуть 90°")
+	undoButton, _ := win.AddButton("Отменить")
+	redoButton, _ := win.AddButton("Повторить")
+	sortLabel, _ := win.AddLabel("Сортировка:")
+	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
+	sortBox.Select(sortByName)
+	sortDirection, _ := win.AddButton("По возрастанию")
+	files, _ := win.AddListBox(nil)
+	if canvas == nil {
 		thumbToggle.Visible.Set(false)
 		rotateButton.Visible.Set(false)
 		undoButton.Visible.Set(false)
