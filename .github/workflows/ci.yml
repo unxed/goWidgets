@@ -94,6 +94,14 @@ jobs:
             xdotool keyup ctrl
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
+            # Switch back to the viewer, rotate the selected image, then
+            # exercise undo/redo before capturing the final edited preview.
+            xdotool mousemove --window "$window_id" 510 102 click 1
+            xdotool mousemove --window "$window_id" 660 102 click 1
+            xdotool key --clearmodifiers ctrl+z
+            xdotool key --clearmodifiers ctrl+y
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-rotate-redo.png"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"
