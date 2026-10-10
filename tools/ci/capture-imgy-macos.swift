@@ -24,8 +24,8 @@ Task {
                 try await Task.sleep(for: .seconds(1))
                 let filter = SCContentFilter(desktopIndependentWindow: window)
                 let configuration = SCStreamConfiguration()
-                configuration.width = max(1, Int(window.frame.width * CGFloat(window.pointPixelScale)))
-                configuration.height = max(1, Int(window.frame.height * CGFloat(window.pointPixelScale)))
+                configuration.width = max(1, Int(window.frame.width * CGFloat(filter.pointPixelScale)))
+                configuration.height = max(1, Int(window.frame.height * CGFloat(filter.pointPixelScale)))
                 captured = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
                 break
             }
