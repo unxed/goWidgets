@@ -107,6 +107,9 @@ func main() {
 	openImage, _ := win.AddButton("Открыть файл…")
 	thumbToggle, _ := win.AddButton("Миниатюры")
 	histogramButton, _ := win.AddButton("Гистограмма")
+	frameLabel, _ := win.AddLabel("Рамка px:")
+	frameWidthEdit, _ := win.AddEdit("8")
+	frameButton, _ := win.AddButton("Применить рамку")
 	rotateButton, _ := win.AddButton("Повернуть 90°")
 	undoButton, _ := win.AddButton("Отменить")
 	redoButton, _ := win.AddButton("Повторить")
@@ -141,6 +144,9 @@ func main() {
 	if canvas == nil {
 		thumbToggle.Visible.Set(false)
 		histogramButton.Visible.Set(false)
+		frameLabel.Visible.Set(false)
+		frameWidthEdit.Visible.Set(false)
+		frameButton.Visible.Set(false)
 		rotateButton.Visible.Set(false)
 		undoButton.Visible.Set(false)
 		redoButton.Visible.Set(false)
@@ -206,6 +212,16 @@ func main() {
 		histogramButton.Top().Eq(thumbToggle.Top()),
 		histogramButton.Width().Is(130),
 		histogramButton.Height().Is(32),
+		frameLabel.Left().Eq(histogramButton.Right().Plus(pad)),
+		frameLabel.Top().Eq(sortBox.Top()),
+		frameWidthEdit.Left().Eq(frameLabel.Right().Plus(6)),
+		frameWidthEdit.Top().Eq(sortBox.Top()),
+		frameWidthEdit.Width().Is(56),
+		frameWidthEdit.Height().Is(32),
+		frameButton.Left().Eq(frameWidthEdit.Right().Plus(pad)),
+		frameButton.Top().Eq(sortBox.Top()),
+		frameButton.Width().Is(124),
+		frameButton.Height().Is(32),
 		rotateButton.Left().Eq(title.Left()),
 		rotateButton.Top().Eq(sortBox.Bottom().Plus(6)),
 		rotateButton.Width().Is(142),
@@ -321,6 +337,7 @@ func main() {
 	openFolder.HugWidth()
 	openImage.HugWidth()
 	sortLabel.HugHeight()
+	frameLabel.HugHeight()
 	resizeLabel.HugHeight()
 	resizeTimes.HugHeight()
 	brightnessLabel.HugHeight()
@@ -921,6 +938,25 @@ func main() {
 	}
 	brightnessButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyBrightness() })
 	brightnessEdit.Activated.On(app.Scope(), func(string) { applyBrightness() })
+	applyFrame := func() {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		width, err := strconv.Atoi(strings.TrimSpace(frameWidthEdit.Text.Get()))
+		if err != nil || width < 1 || width > 256 {
+			status.Text.Set("Введите ширину рамки от 1 до 256 пикселей")
+			return
+		}
+		framed := transform.AddFrame(currentImage, width, color.NRGBA{R: 32, G: 32, B: 32, A: 255})
+		if framed == nil {
+			status.Text.Set("Не удалось добавить рамку: слишком большое изображение")
+			return
+		}
+		applyEdit(framed)
+		status.Text.Set(fmt.Sprintf("Рамка %d px применена в памяти: %s", width, entries[selectedIndex].path))
+	}
+	frameButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyFrame() })
+	frameWidthEdit.Activated.On(app.Scope(), func(string) { applyFrame() })
 	grayscaleButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if canvas == nil || currentImage == nil {
 			return

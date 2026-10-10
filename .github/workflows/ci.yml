@@ -167,6 +167,14 @@ jobs:
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-red-eye-redo.png"
             xdotool mousemove --window "$window_id" 900 263 click 1
+            # Add a frame with the default dark color, then prove the
+            # existing Undo/Redo stack restores the exact framed result.
+            xdotool mousemove --window "$window_id" 820 103 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 12
+            xdotool mousemove --window "$window_id" 920 103 click 1
+            xdotool key --clearmodifiers ctrl+z
+            xdotool key --clearmodifiers ctrl+y
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-frame-redo.png"
             xdotool mousemove --window "$window_id" 654 103 click 1
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-histogram.png"
