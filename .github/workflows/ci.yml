@@ -102,7 +102,7 @@ jobs:
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-rotate-redo.png"
-            xdotool mousemove --window "$window_id" 935 102 click 1
+            xdotool mousemove --window "$window_id" 435 141 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
