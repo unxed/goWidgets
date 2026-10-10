@@ -106,6 +106,7 @@ func main() {
 	rotateButton, _ := win.AddButton("Повернуть 90°")
 	undoButton, _ := win.AddButton("Отменить")
 	redoButton, _ := win.AddButton("Повторить")
+	flipButton, _ := win.AddButton("Отразить")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -116,6 +117,7 @@ func main() {
 		rotateButton.Visible.Set(false)
 		undoButton.Visible.Set(false)
 		redoButton.Visible.Set(false)
+		flipButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -147,22 +149,26 @@ func main() {
 		sortDirection.Top().Eq(sortBox.Top()),
 		thumbToggle.Left().Eq(sortDirection.Right().Plus(pad)),
 		thumbToggle.Top().Eq(sortBox.Top()),
-		sortDirection.Width().Is(150),
+		sortDirection.Width().Is(130),
 		sortDirection.Height().Is(32),
-		thumbToggle.Width().Is(116),
+		thumbToggle.Width().Is(108),
 		thumbToggle.Height().Is(32),
 		rotateButton.Left().Eq(thumbToggle.Right().Plus(pad)),
 		rotateButton.Top().Eq(sortBox.Top()),
-		rotateButton.Width().Is(142),
+		rotateButton.Width().Is(138),
 		rotateButton.Height().Is(32),
 		undoButton.Left().Eq(rotateButton.Right().Plus(6)),
 		undoButton.Top().Eq(sortBox.Top()),
-		undoButton.Width().Is(100),
+		undoButton.Width().Is(90),
 		undoButton.Height().Is(32),
 		redoButton.Left().Eq(undoButton.Right().Plus(6)),
 		redoButton.Top().Eq(sortBox.Top()),
-		redoButton.Width().Is(105),
+		redoButton.Width().Is(95),
 		redoButton.Height().Is(32),
+		flipButton.Left().Eq(redoButton.Right().Plus(6)),
+		flipButton.Top().Eq(sortBox.Top()),
+		flipButton.Width().Is(100),
+		flipButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(sortBox.Bottom().Plus(pad)),
@@ -567,6 +573,12 @@ func main() {
 	})
 	undoButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { doUndo() })
 	redoButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { doRedo() })
+	flipButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas != nil && currentImage != nil {
+			applyEdit(transform.MirrorHorizontal(currentImage))
+			status.Text.Set("Отражено по горизонтали в памяти: " + entries[selectedIndex].path)
+		}
+	})
 	if canvas != nil {
 		var dragging bool
 		var lastPointer goWidgets.MouseInfo

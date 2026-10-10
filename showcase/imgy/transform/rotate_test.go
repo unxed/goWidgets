@@ -35,3 +35,23 @@ func TestRotateClockwiseEmpty(t *testing.T) {
 		t.Fatalf("empty rotated bounds = %v", got.Bounds())
 	}
 }
+
+func TestMirrorHorizontal(t *testing.T) {
+	src := image.NewRGBA(image.Rect(4, 7, 6, 10))
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			src.SetRGBA(4+x, 7+y, color.RGBA{R: uint8(20 + x + y*2), A: 255})
+		}
+	}
+	got := MirrorHorizontal(src)
+	if got.Bounds() != image.Rect(0, 0, 2, 3) {
+		t.Fatalf("mirrored bounds = %v, want (0,0)-(2,3)", got.Bounds())
+	}
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			if pixel, want := got.RGBAAt(1-x, y), src.RGBAAt(4+x, 7+y); pixel != want {
+				t.Errorf("pixel at (%d,%d) = %#v, want %#v", 1-x, y, pixel, want)
+			}
+		}
+	}
+}

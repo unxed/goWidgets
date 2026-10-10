@@ -17,3 +17,18 @@ func RotateClockwise(src image.Image) *image.RGBA {
 	}
 	return dst
 }
+
+// MirrorHorizontal returns a copy reflected across the vertical axis.
+func MirrorHorizontal(src image.Image) *image.RGBA {
+	if src == nil || src.Bounds().Empty() {
+		return image.NewRGBA(image.Rectangle{})
+	}
+	sb := src.Bounds()
+	dst := image.NewRGBA(image.Rect(0, 0, sb.Dx(), sb.Dy()))
+	for y := 0; y < sb.Dy(); y++ {
+		for x := 0; x < sb.Dx(); x++ {
+			dst.Set(sb.Dx()-1-x, y, src.At(sb.Min.X+x, sb.Min.Y+y))
+		}
+	}
+	return dst
+}
