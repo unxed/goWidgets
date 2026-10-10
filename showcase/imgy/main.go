@@ -161,7 +161,7 @@ func main() {
 		redoButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(sortLabel.Bottom().Plus(pad)),
+		files.Top().Eq(sortBox.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
