@@ -23,7 +23,7 @@ func AddFrame(src image.Image, width int, border color.Color) *image.RGBA {
 	for y := 0; y < int(h); y++ {
 		for x := 0; x < int(w); x++ {
 			if x < width || y < width || x >= int(w)-width || y >= int(h)-width {
-				dst.SetNRGBA(x, y, fill)
+				dst.Set(x, y, fill)
 				continue
 			}
 			dst.Set(x, y, src.At(bounds.Min.X+x-width, bounds.Min.Y+y-width))
