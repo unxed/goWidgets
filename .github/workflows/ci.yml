@@ -152,10 +152,10 @@ jobs:
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-invert-redo.png"
-            xdotool mousemove --window "$window_id" 80 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
-            xdotool mousemove --window "$window_id" 190 263 click 1 key --clearmodifiers ctrl+a key minus 5 0
-            xdotool mousemove --window "$window_id" 305 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 0
-            xdotool mousemove --window "$window_id" 425 263 click 1
+            xdotool mousemove --window "$window_id" 120 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
+            xdotool mousemove --window "$window_id" 350 263 click 1 key --clearmodifiers ctrl+a key minus 5 0
+            xdotool mousemove --window "$window_id" 575 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 0
+            xdotool mousemove --window "$window_id" 745 263 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
