@@ -107,9 +107,9 @@ func main() {
 	openImage, _ := win.AddButton("Открыть файл…")
 	thumbToggle, _ := win.AddButton("Миниатюры")
 	histogramButton, _ := win.AddButton("Гистограмма")
-	frameLabel, _ := win.AddLabel("Рамка px:")
-	frameWidthEdit, _ := win.AddEdit("8")
-	frameButton, _ := win.AddButton("Применить рамку")
+	frameLabel, _ := win.AddLabel("Рамка:")
+	frameWidthEdit, _ := win.AddEdit("8 #202020")
+	frameButton, _ := win.AddButton("Применить")
 	rotateButton, _ := win.AddButton("Повернуть 90°")
 	undoButton, _ := win.AddButton("Отменить")
 	redoButton, _ := win.AddButton("Повторить")
@@ -216,11 +216,11 @@ func main() {
 		frameLabel.Top().Eq(sortBox.Top()),
 		frameWidthEdit.Left().Eq(frameLabel.Right().Plus(6)),
 		frameWidthEdit.Top().Eq(sortBox.Top()),
-		frameWidthEdit.Width().Is(56),
+		frameWidthEdit.Width().Is(96),
 		frameWidthEdit.Height().Is(32),
 		frameButton.Left().Eq(frameWidthEdit.Right().Plus(pad)),
 		frameButton.Top().Eq(sortBox.Top()),
-		frameButton.Width().Is(124),
+		frameButton.Width().Is(100),
 		frameButton.Height().Is(32),
 		rotateButton.Left().Eq(title.Left()),
 		rotateButton.Top().Eq(sortBox.Bottom().Plus(6)),
@@ -942,18 +942,18 @@ func main() {
 		if canvas == nil || currentImage == nil {
 			return
 		}
-		width, err := strconv.Atoi(strings.TrimSpace(frameWidthEdit.Text.Get()))
-		if err != nil || width < 1 || width > 256 {
-			status.Text.Set("Введите ширину рамки от 1 до 256 пикселей")
+		width, border, err := parseFrameSettings(frameWidthEdit.Text.Get())
+		if err != nil {
+			status.Text.Set("Задайте рамку как: ширина #RRGGBB, например 8 #202020")
 			return
 		}
-		framed := transform.AddFrame(currentImage, width, color.NRGBA{R: 32, G: 32, B: 32, A: 255})
+		framed := transform.AddFrame(currentImage, width, border)
 		if framed == nil {
 			status.Text.Set("Не удалось добавить рамку: слишком большое изображение")
 			return
 		}
 		applyEdit(framed)
-		status.Text.Set(fmt.Sprintf("Рамка %d px применена в памяти: %s", width, entries[selectedIndex].path))
+		status.Text.Set(fmt.Sprintf("Рамка %d px #%02X%02X%02X применена в памяти: %s", width, border.R, border.G, border.B, entries[selectedIndex].path))
 	}
 	frameButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyFrame() })
 	frameWidthEdit.Activated.On(app.Scope(), func(string) { applyFrame() })
