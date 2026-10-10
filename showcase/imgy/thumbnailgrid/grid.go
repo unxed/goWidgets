@@ -3,9 +3,33 @@
 package thumbnailgrid
 
 import (
+	"image"
 	"math"
 	"sort"
 )
+
+// FitThumbnail makes a centered, aspect-preserving nearest-neighbour preview
+// no larger than width by height. The transparent padding is left for the
+// Canvas card background to show through.
+func FitThumbnail(src image.Image, width, height int) *image.RGBA {
+	dst := image.NewRGBA(image.Rect(0, 0, max(0, width), max(0, height)))
+	if src == nil || width <= 0 || height <= 0 || src.Bounds().Empty() {
+		return dst
+	}
+	sb := src.Bounds()
+	scale := math.Min(float64(width)/float64(sb.Dx()), float64(height)/float64(sb.Dy()))
+	dw := max(1, int(math.Round(float64(sb.Dx())*scale)))
+	dh := max(1, int(math.Round(float64(sb.Dy())*scale)))
+	left, top := (width-dw)/2, (height-dh)/2
+	for y := 0; y < dh; y++ {
+		sy := sb.Min.Y + min(sb.Dy()-1, y*sb.Dy()/dh)
+		for x := 0; x < dw; x++ {
+			sx := sb.Min.X + min(sb.Dx()-1, x*sb.Dx()/dw)
+			dst.Set(left+x, top+y, src.At(sx, sy))
+		}
+	}
+	return dst
+}
 
 // Grid describes a fixed-cell grid in device-independent pixels. Scroll is
 // the vertical offset of the content from the top of the viewport.

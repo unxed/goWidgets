@@ -1,9 +1,30 @@
 package thumbnailgrid
 
 import (
+	"image"
+	"image/color"
 	"reflect"
 	"testing"
 )
+
+func TestFitThumbnailCentersAndPreservesAspect(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	src.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	src.SetRGBA(3, 1, color.RGBA{B: 255, A: 255})
+	dst := FitThumbnail(src, 4, 4)
+	if dst.Bounds() != image.Rect(0, 0, 4, 4) {
+		t.Fatalf("thumbnail bounds = %v", dst.Bounds())
+	}
+	if got := dst.RGBAAt(0, 0); got != (color.RGBA{}) {
+		t.Fatalf("top padding = %#v, want transparent", got)
+	}
+	if got := dst.RGBAAt(0, 1); got != (color.RGBA{R: 255, A: 255}) {
+		t.Fatalf("fitted source pixel = %#v", got)
+	}
+	if got := dst.RGBAAt(3, 2); got != (color.RGBA{B: 255, A: 255}) {
+		t.Fatalf("last fitted source pixel = %#v", got)
+	}
+}
 
 func TestVisibleRangeVirtualizesRows(t *testing.T) {
 	g := Grid{Count: 10_000, Width: 520, Height: 260, CellWidth: 120, CellHeight: 90, Gap: 10, Scroll: 1_005}
