@@ -136,6 +136,7 @@ func main() {
 	blueChannelEdit, _ := win.AddEdit("0")
 	channelsButton, _ := win.AddButton("Применить RGB")
 	redEyeButton, _ := win.AddButton("Красные глаза")
+	shadowButton, _ := win.AddButton("Тень")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -173,6 +174,7 @@ func main() {
 		blueChannelEdit.Visible.Set(false)
 		channelsButton.Visible.Set(false)
 		redEyeButton.Visible.Set(false)
+		shadowButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -314,6 +316,10 @@ func main() {
 		redEyeButton.Top().Eq(channelsButton.Top()),
 		redEyeButton.Width().Is(150),
 		redEyeButton.Height().Is(32),
+		shadowButton.Left().Eq(redEyeButton.Right().Plus(6)),
+		shadowButton.Top().Eq(redEyeButton.Top()),
+		shadowButton.Width().Is(90),
+		shadowButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(channelsButton.Bottom().Plus(pad)),
@@ -957,6 +963,18 @@ func main() {
 	}
 	frameButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { applyFrame() })
 	frameWidthEdit.Activated.On(app.Scope(), func(string) { applyFrame() })
+	shadowButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if canvas == nil || currentImage == nil {
+			return
+		}
+		shadowed := transform.DropShadow(currentImage, 8, 5, color.NRGBA{A: 160})
+		if shadowed == nil {
+			status.Text.Set("Не удалось добавить тень: слишком большое изображение")
+			return
+		}
+		applyEdit(shadowed)
+		status.Text.Set("Тень добавлена в памяти: " + entries[selectedIndex].path)
+	})
 	grayscaleButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if canvas == nil || currentImage == nil {
 			return

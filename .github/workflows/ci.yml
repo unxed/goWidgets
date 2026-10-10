@@ -175,6 +175,11 @@ jobs:
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-frame-color-redo.png"
+            xdotool mousemove --window "$window_id" 1045 263 click 1
+            xdotool key --clearmodifiers ctrl+z
+            xdotool key --clearmodifiers ctrl+y
+            sleep 0.2
+            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-shadow-redo.png"
             xdotool mousemove --window "$window_id" 654 103 click 1
             sleep 0.2
             scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-histogram.png"
