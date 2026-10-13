@@ -1,0 +1,156 @@
+name: FastStone 5.6 Reference
+
+# One-off manual run to capture reference screenshots of FastStone Image Viewer 5.6
+# under Wine in GitHub Actions. Triggers only on workflow_dispatch.
+# Screenshots are uploaded as artifacts; the owner downloads them and pastes in chat
+# (Actions artifacts require auth, model cannot download them).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fsref:
+    name: FastStone 5.6 Reference Screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Wine + Xvfb + capture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wine64 winetricks xvfb xdotool imagemagick scrot 7zip 2>&1 | tail -20
+
+      - name: Log Wine version
+        run: wine --version && winetricks --version 2>&1 || true
+
+      - name: Download FastStone 5.6 installer
+        run: |
+          FS_URL="http://2g0.ru/fs/FSViewerSetup56.exe"
+          FS_SHA256="1F6D5826D05046462CEEC503812A89E8347A68BC382678DB1D88BAEDC070C604"
+          curl -fsSL -o /tmp/FSViewerSetup56.exe "$FS_URL" || { echo "Download failed"; exit 1; }
+          echo "$FS_SHA256  /tmp/FSViewerSetup56.exe" | sha256sum -c - || { echo "SHA256 mismatch"; exit 1; }
+          ls -lh /tmp/FSViewerSetup56.exe
+
+      - name: Install FastStone under Wine (silent NSIS)
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          wine64 /tmp/FSViewerSetup56.exe /S 2>&1 | tail -30
+          # Wait for installer to finish
+          for i in {1..30}; do
+            if ls "$WINEPREFIX/drive_c/Program Files/FastStone Image Viewer/FSViewer.exe" 2>/dev/null; then
+              echo "FastStone installed"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Apply winetricks cc580 (fixes common controls rendering)
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          winetricks -q cc580 2>&1 | tail -20
+
+      - name: Prepare Xvfb and start FastStone
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+          DISPLAY: ":99"
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          export DISPLAY=":99"
+          Xvfb :99 -screen 0 1920x1080x24 &
+          XVFB_PID=$!
+          sleep 2
+          wine64 "C:/Program Files/FastStone Image Viewer/FSViewer.exe" &
+          FS_PID=$!
+          echo "XVFB_PID=$XVFB_PID" >> $GITHUB_ENV
+          echo "FS_PID=$FS_PID" >> $GITHUB_ENV
+          sleep 5  # wait for window to appear
+
+      - name: Capture scenario 1 - Browser default view
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+          DISPLAY: ":99"
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          export DISPLAY=":99"
+          # Find FastStone window
+          WIN_ID=$(xdotool search --onlyvisible --name "FastStone" | head -1)
+          if [ -z "$WIN_ID" ]; then
+            echo "FastStone window not found"
+            xwininfo -root -tree
+            exit 1
+          fi
+          xdotool windowactivate --sync $WIN_ID
+          sleep 1
+          import -window root /tmp/fsref-01-browser-default.png
+          ls -lh /tmp/fsref-01-browser-default.png
+
+      - name: Capture scenario 2 - Full-screen image view
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+          DISPLAY: ":99"
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          export DISPLAY=":99"
+          WIN_ID=$(xdotool search --onlyvisible --name "FastStone" | head -1)
+          xdotool windowactivate --sync $WIN_ID
+          # Press Enter to enter full-screen image view (default)
+          xdotool key --clearmodifiers Return
+          sleep 1
+          import -window root /tmp/fsref-02-fullscreen-image.png
+          ls -lh /tmp/fsref-02-fullscreen-image.png
+
+      - name: Capture scenario 3 - Full-screen edge panels (bottom/right/top/left)
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+          DISPLAY: ":99"
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          export DISPLAY=":99"
+          WIN_ID=$(xdotool search --onlyvisible --name "FastStone" | head -1)
+          xdotool windowactivate --sync $WIN_ID
+          # F - toggle full-screen edge panels (help says F shows/hides)
+          xdotool key --clearmodifiers f
+          sleep 1
+          import -window root /tmp/fsref-03-edge-panels.png
+          ls -lh /tmp/fsref-03-edge-panels.png
+
+      - name: Capture scenario 4 - One dialog per menu group
+        env:
+          WINEPREFIX: /home/runner/.wine-fs
+          DISPLAY: ":99"
+        run: |
+          export WINEPREFIX="/home/runner/.wine-fs"
+          export DISPLAY=":99"
+          WIN_ID=$(xdotool search --onlyvisible --name "FastStone" | head -1)
+          xdotool windowactivate --sync $WIN_ID
+          # Alt+F for File menu, then S for Settings (or similar)
+          xdotool key --clearmodifiers alt+f
+          sleep 0.5
+          xdotool key --clearmodifiers s
+          sleep 1
+          import -window root /tmp/fsref-04-settings-dialog.png
+          ls -lh /tmp/fsref-04-settings-dialog.png
+          # Close dialog
+          xdotool key --clearmodifiers Escape
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: faststone-5.6-reference-screenshots
+          path: /tmp/fsref-*.png
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -n "$FS_PID" ]; then kill $FS_PID 2>/dev/null || true; fi
+          if [ -n "$XVFB_PID" ]; then kill $XVFB_PID 2>/dev/null || true; fi
