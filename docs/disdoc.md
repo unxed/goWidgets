@@ -373,14 +373,16 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 > элемент (FFI без CGO + intrinsic-измерения) проверяется спайком **до** массовой разработки,
 > а не в Фазе 7. Каждая фаза имеет проверяемый Definition of Done.
 
-> **Статус на 2026-09-10 (см. ADR-0004, ADR-0005, ADR-0006).** Порядок фаз пересобран по риску:
+> **Статус на 2026-10-13 (см. ADR-0004, ADR-0005, ADR-0006, ADR-0013, ADR-0014, ADR-0018).** Порядок фаз пересобран по риску:
 > нативные бэкенды подняты выше Cassowary и Ebiten. Закрыто: Фаза 0 целиком,
 > Фаза 1 без Ebiten, бэкенды Фаз 3 и 4 (GTK 3 и Win32), трей, Фаза 2 (ADR-0005,
 > ADR-0006; `LayoutBoundary` отложен до `ScrollArea` — NFR выполнен без него).
-> Открыто: анимации, фокус/tab-order, Cocoa, Web.
+> В работе: Фаза 7 (Cocoa — микро-шагами на macOS-раннере), Фаза 8 (Web/WASM — ADR-0018, спайк W1).
+> Открыто: анимации, фокус/tab-order (частично), Electron/Node.js.
 
 ### Фаза 0. Inception: каркас, CI и разведка рисков
 * Репозиторий, модуль, `.golangci.yml` с правилами слоёв, CI-матрица (win/mac/linux/wasm).
+* **Спайк W1** (входит в Фазу 8, а не 0): `backends/web/driver.go` — `Init`/`RunMainLoop`/`Wake` на `syscall/js`; `go build -target=js/wasm` собирается.
 * **Спайк-проверки** (по 50–100 строк, результат — ADR): `objc_msgSend` через `purego` —
   создать `NSWindow` и закрыть; лимиты `windows.NewCallback`.
 * **`backends/headless`** — эталонный драйвер: детерминированные `MeasureIntrinsic`,
@@ -422,10 +424,19 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
   → отключение AutoLayout → `setFrame:`.
 * **DoD:** showcase запускается на macOS, `CGO_ENABLED=0`.
 
-### Фаза 8. Web / WASM
-* `syscall/js`, DOM-маппинг, координаты через `transform: translate3d` (дешевле, чем `left/top`),
-  батчинг в `requestAnimationFrame`, `devicePixelRatio`.
-* **DoD:** размер бандла в пределах NFR; тот же UI работает в браузере.
+### Фаза 8. Web / WASM (ADR-0018)
+
+Итерации W1–W7 (см. ADR-0018 §План реализации):
+
+* **W1** — `driver.go`: `Init`/`RunMainLoop`/`Wake` на `syscall/js`, `queueMicrotask`; сборка `GOOS=js GOARCH=wasm`.
+* **W2** — `window.go` + `widget.go`: root `<div>`, `CreateWidget` для Button/Label/Edit, `ApplyLayout` через `transform3d`.
+* **W3** — `intrinsic.go`: `MeasureIntrinsic` через временный элемент + `getBoundingClientRect`; CSS reset + light/dark тема.
+* **W4** — ComboBox, CheckBox, ListBox, TextView, FileDialog (`<input type=file>`), Clipboard.
+* **W5** — Canvas (2D context, `devicePixelRatio`), ScrollArea, Splitter, модальные `<dialog>`.
+* **W6** — Виртуализация (`IntersectionObserver`), анимации (Web Animations API), фокус/tab-order, IME.
+* **W7** — Electron Renderer (тот же WASM), Electron Main на wazero (опционально), трей через IPC.
+
+**DoD:** `go build -target=js/wasm` собирается; Playwright конформанс-тесты `vcontract` зелёные в CI; размер бандла ≤ 8 МБ gzip; `pixy` в браузере открывает картинку, зум/пан, миниатюры.
 
 ### Фаза 9. Transition
 * Showcase `pixy`, унификация API с `vtui` через `vcontract`, документация,
