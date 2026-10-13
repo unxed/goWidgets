@@ -70,17 +70,17 @@ jobs:
           path: ${{ runner.temp }}/snapshots
           if-no-files-found: error
 
-      - name: Capture imgy window under GTK
+      - name: Capture pixy window under GTK
         run: |
-          mkdir -p "$RUNNER_TEMP/imgy-snapshots"
-          go build -o "$RUNNER_TEMP/imgy" ./showcase/imgy
-          go run ./showcase/imgy/testfixture "$RUNNER_TEMP/imgy-sample.png"
+          mkdir -p "$RUNNER_TEMP/pixy-snapshots"
+          go build -o "$RUNNER_TEMP/pixy" ./showcase/pixy
+          go run ./showcase/pixy/testfixture "$RUNNER_TEMP/pixy-sample.png"
           xvfb-run -a bash -euo pipefail -c '
-            IMGY_SHOW_THUMBNAILS=1 "$RUNNER_TEMP/imgy" "$RUNNER_TEMP/imgy-sample.png" &
+            PIXY_SHOW_THUMBNAILS=1 "$RUNNER_TEMP/pixy" "$RUNNER_TEMP/pixy-sample.png" &
             app_pid=$!
             trap "kill $app_pid 2>/dev/null || true" EXIT
             for _ in $(seq 1 50); do
-              window_id=$(xdotool search --onlyvisible --name "imgy" 2>/dev/null | head -n1 || true)
+              window_id=$(xdotool search --onlyvisible --name "pixy" 2>/dev/null | head -n1 || true)
               if [ -n "$window_id" ]; then break; fi
               sleep 0.2
             done
@@ -93,7 +93,7 @@ jobs:
             xdotool mousemove --window "$window_id" 530 230 click 1
             xdotool keyup ctrl
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk.png"
             # Switch back to the viewer, rotate the selected image, then
             # exercise undo/redo before capturing the final edited preview.
             xdotool mousemove --window "$window_id" 510 102 click 1
@@ -101,17 +101,17 @@ jobs:
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-rotate-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-rotate-redo.png"
             xdotool mousemove --window "$window_id" 450 141 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-mirror-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-mirror-redo.png"
             xdotool mousemove --window "$window_id" 600 141 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-mirror-vertical-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-mirror-vertical-redo.png"
             xdotool mousemove --window "$window_id" 800 141 click 1
             xdotool mousemove --window "$window_id" 580 285 mousedown 1
             xdotool mousemove --sync --window "$window_id" 750 480
@@ -121,7 +121,7 @@ jobs:
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-crop-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-crop-redo.png"
             # Resize the cropped image to a specific width, keep the aspect
             # ratio, and verify that undo/redo restores the resized result.
             xdotool mousemove --window "$window_id" 140 195 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 200
@@ -129,29 +129,29 @@ jobs:
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-resize-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-resize-redo.png"
             # Apply a reversible brightness adjustment after resizing.
             xdotool mousemove --window "$window_id" 140 225 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
             xdotool mousemove --window "$window_id" 280 225 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-brightness-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-brightness-redo.png"
             xdotool mousemove --window "$window_id" 540 225 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-grayscale-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-grayscale-redo.png"
             xdotool mousemove --window "$window_id" 680 225 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-sepia-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-sepia-redo.png"
             xdotool mousemove --window "$window_id" 800 225 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-invert-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-invert-redo.png"
             xdotool mousemove --window "$window_id" 120 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
             xdotool mousemove --window "$window_id" 350 263 click 1 key --clearmodifiers ctrl+a key minus 5 0
             xdotool mousemove --window "$window_id" 575 263 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 0
@@ -159,13 +159,13 @@ jobs:
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-channels-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-channels-redo.png"
             xdotool mousemove --window "$window_id" 900 263 click 1
             xdotool mousemove --window "$window_id" 666 451 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-red-eye-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-red-eye-redo.png"
             xdotool mousemove --window "$window_id" 900 263 click 1
             # Add a frame with the default dark color, then prove the
             # existing Undo/Redo stack restores the exact framed result.
@@ -174,27 +174,27 @@ jobs:
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-frame-color-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-frame-color-redo.png"
             xdotool mousemove --window "$window_id" 1045 263 click 1
             xdotool key --clearmodifiers ctrl+z
             xdotool key --clearmodifiers ctrl+y
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-shadow-redo.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-shadow-redo.png"
             xdotool mousemove --window "$window_id" 654 103 click 1
             sleep 0.2
-            scrot "$RUNNER_TEMP/imgy-snapshots/imgy-gtk-histogram.png"
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-histogram.png"
             xdotool mousemove --window "$window_id" 654 103 click 1
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"
           '
 
-      - name: Upload imgy screenshot
+      - name: Upload pixy screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: imgy-gtk-screenshot
-          path: ${{ runner.temp }}/imgy-snapshots
+          name: pixy-gtk-screenshot
+          path: ${{ runner.temp }}/pixy-snapshots
           if-no-files-found: error
 
       # The debug build turns affinity and constraint violations into panics;
@@ -212,7 +212,7 @@ jobs:
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -trimpath -ldflags="$flags" -o /tmp/out ./showcase/crescent
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="$flags" -o /tmp/imgy ./showcase/imgy
+              go build -trimpath -ldflags="$flags" -o /tmp/pixy ./showcase/pixy
             echo "  $target ok"
           done
 
@@ -250,8 +250,8 @@ jobs:
         env:
           CGO_ENABLED: 0
 
-      - name: Build imgy as a GUI application
-        run: go build -ldflags="-H windowsgui" -o imgy.exe ./showcase/imgy
+      - name: Build pixy as a GUI application
+        run: go build -ldflags="-H windowsgui" -o pixy.exe ./showcase/pixy
         env:
           CGO_ENABLED: 0
 
@@ -285,25 +285,25 @@ jobs:
         env:
           CGO_ENABLED: 0
 
-      - name: Build imgy
-        run: go build -o /tmp/imgy ./showcase/imgy
+      - name: Build pixy
+        run: go build -o /tmp/pixy ./showcase/pixy
         env:
           CGO_ENABLED: 0
 
-      - name: Capture imgy window under Cocoa
+      - name: Capture pixy window under Cocoa
         run: |
-          mkdir -p "$RUNNER_TEMP/imgy-snapshots"
-          go run ./showcase/imgy/testfixture "$RUNNER_TEMP/imgy-sample.png"
-          IMGY_SHOW_THUMBNAILS=1 /tmp/imgy "$RUNNER_TEMP/imgy-sample.png" &
+          mkdir -p "$RUNNER_TEMP/pixy-snapshots"
+          go run ./showcase/pixy/testfixture "$RUNNER_TEMP/pixy-sample.png"
+          PIXY_SHOW_THUMBNAILS=1 /tmp/pixy "$RUNNER_TEMP/pixy-sample.png" &
           app_pid=$!
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
-          swift tools/ci/capture-imgy-macos.swift "$app_pid" "$RUNNER_TEMP/imgy-snapshots/imgy-cocoa.png"
+          swift tools/ci/capture-pixy-macos.swift "$app_pid" "$RUNNER_TEMP/pixy-snapshots/pixy-cocoa.png"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: imgy-cocoa-screenshot
-          path: ${{ runner.temp }}/imgy-snapshots
+          name: pixy-cocoa-screenshot
+          path: ${{ runner.temp }}/pixy-snapshots
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4

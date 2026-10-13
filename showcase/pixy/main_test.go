@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/unxed/goWidgets"
-	"github.com/unxed/goWidgets/showcase/imgy/viewport"
+	"github.com/unxed/goWidgets/showcase/pixy/viewport"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
 )

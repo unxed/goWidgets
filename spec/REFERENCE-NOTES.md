@@ -6,8 +6,8 @@
 - Local temporary file: `%TEMP%\FSViewerSetup56.exe` (not part of the repository)
 - File signature: `MZ` (Windows PE executable)
 - Installer family: NSIS 2 (LZMA solid archive).
-- Extraction method: 7-Zip 26.03 x64; 183 files extracted to `%TEMP%\imgy-reference-5.6` (outside the repository).
-- Help: primary English `CHM`, extracted to `%TEMP%\imgy-help-5.6`; table of contents is `Table of Contents.hhc` (1,384 bytes, ASCII-compatible HTML without a BOM).
+- Extraction method: 7-Zip 26.03 x64; 183 files extracted to `%TEMP%\pixy-reference-5.6` (outside the repository).
+- Help: primary English `CHM`, extracted to `%TEMP%\pixy-help-5.6`; table of contents is `Table of Contents.hhc` (1,384 bytes, ASCII-compatible HTML without a BOM).
 - Help pages declare `iso-8859-1`; confirm per-page as needed when reading non-ASCII text.
 - The license section is not a product feature. It contains restrictions against modifying or reverse-engineering the reference binary; only its handling implications were noted, and its text, the binary, and extracted files are not committed.
 - No legal interpretation is made here; this project is based on the help and independently written code, not on modifying or redistributing the reference program.

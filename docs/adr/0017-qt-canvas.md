@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-30
-- Plan: [`imgy/PLAN.md` §B5](../imgy/PLAN.md)
+- Plan: [`pixy/PLAN.md` §B5](../pixy/PLAN.md)
 - Builds on: [ADR-0016](0016-canvas-surface.md)
 
 ## Context

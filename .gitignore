@@ -3,4 +3,4 @@
 *.syso
 # go build ./showcase/... in the repository root
 /crescent
-/imgy
+/pixy

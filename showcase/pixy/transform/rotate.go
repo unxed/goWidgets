@@ -1,4 +1,4 @@
-// Package transform contains dependency-free pixel operations for imgy.
+// Package transform contains dependency-free pixel operations for pixy.
 package transform
 
 import "image"
