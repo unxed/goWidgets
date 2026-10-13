@@ -7,14 +7,14 @@ import (
 	"github.com/unxed/goWidgets/backends/headless"
 )
 
-// The imgy browser, as a regression: in a column with slack, it goes to the
+// The pixy browser, as a regression: in a column with slack, it goes to the
 // list and preview, not to a one-line field nor to a label that hugs its height.
 // Before one-line controls held
 // their natural height at medium, the text field came out 444 pixels tall.
 func TestColumnSlackGoesToTheList(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("imgy", 1040, 680)
-	title, _ := win.AddLabel("imgy — image browser")
+	win, _ := app.NewWindow("pixy", 1040, 680)
+	title, _ := win.AddLabel("pixy — image browser")
 	pathEdit, _ := win.AddEdit("/tmp")
 	open, _ := win.AddButton("Открыть папку")
 	files, _ := win.AddListBox(nil)

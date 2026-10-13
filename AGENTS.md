@@ -1,11 +1,11 @@
 # Для ИИ-ассистентов и новых участников
 
-Работа над showcase `imgy` (и над фреймворком ради него) ведётся по плану в
-[`docs/imgy/`](docs/imgy/README.md). План составлен моделью более мощной, чем та, что
+Работа над showcase `pixy` (и над фреймворком ради него) ведётся по плану в
+[`docs/pixy/`](docs/pixy/README.md). План составлен моделью более мощной, чем та, что
 обычно работает над этим репозиторием, и **обязателен к исполнению**; отступать можно только по
-процедуре из [`docs/imgy/PLAYBOOK.md`](docs/imgy/PLAYBOOK.md) §1.
+процедуре из [`docs/pixy/PLAYBOOK.md`](docs/pixy/PLAYBOOK.md) §1.
 
-Начни с `docs/imgy/README.md`, затем `docs/imgy/STATUS.md`.
+Начни с `docs/pixy/README.md`, затем `docs/pixy/STATUS.md`.
 
 Всегда действуют: нормативный дизайн `docs/disdoc.md` и решения `docs/adr/`.
 Файл `filelist.md` вручную не править — его пишет другой процесс.

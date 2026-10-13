@@ -1,4 +1,4 @@
-// Package viewport contains the image-to-window geometry used by imgy.
+// Package viewport contains the image-to-window geometry used by pixy.
 package viewport
 
 import "math"

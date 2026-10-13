@@ -44,7 +44,7 @@ type Node struct {
 	// than weak: no native toolkit grows these vertically (Qt's size policy
 	// is Fixed, GTK's vexpand is off, AppKit hugs), and in a column with
 	// slack to share the solver would otherwise hand it to whichever one
-	// widget was cheapest to stretch — a 444-pixel-tall text field in imgy.
+	// widget was cheapest to stretch — a 444-pixel-tall text field in pixy.
 	SingleLine bool
 
 	OnClicked     func()

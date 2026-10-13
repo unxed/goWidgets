@@ -6,7 +6,7 @@
 
 ## Context
 
-The `imgy` showcase needs one drawing surface for decoded images, selection
+The `pixy` showcase needs one drawing surface for decoded images, selection
 overlays, and later thumbnail browsing. Existing vtui vocabulary names cover
 terminal pixel storage (`ImageSurface`) and terminal image placement
 (`GraphicsLayer`), not an interactive GUI drawing widget. The user approved
@@ -31,4 +31,4 @@ terminal pixel storage (`ImageSurface`) and terminal image placement
 
 Image decoding and drawing remain application-owned and backend-independent.
 The first phase does not include partial invalidation, text, or native backend
-implementations. B2/B3/B5 remain required before `imgy` runs on those drivers.
+implementations. B2/B3/B5 remain required before `pixy` runs on those drivers.

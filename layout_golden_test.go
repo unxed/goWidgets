@@ -749,7 +749,7 @@ func TestFileDialogsScripted(t *testing.T) {
 
 func TestFolderDialogsScripted(t *testing.T) {
 	app := newHeadlessApp(t)
-	win, _ := app.NewWindow("imgy", 400, 300)
+	win, _ := app.NewWindow("pixy", 400, 300)
 	pumpUntilIdle(t, app)
 
 	headless.AnswerFolders("/tmp/изображения", "")

@@ -428,7 +428,7 @@ GTK: `GtkScrolledWindow`+`GtkFixed`; Web: `overflow:hidden` + `transform: transl
 * **DoD:** размер бандла в пределах NFR; тот же UI работает в браузере.
 
 ### Фаза 9. Transition
-* Showcase `imgy`, унификация API с `vtui` через `vcontract`, документация,
+* Showcase `pixy`, унификация API с `vtui` через `vcontract`, документация,
   политика fallback §3.3, релизная сборка.
 * **DoD:** конформанс-набор `vcontract` проходит одинаково на `vtui` и `goWidgets`.
 

@@ -1,4 +1,4 @@
-// Command imgy is the first interactive increment of the goWidgets image viewer.
+// Command pixy is the first interactive increment of the goWidgets image viewer.
 //
 // The browser shell stays constraint-based; Canvas pixels are only used for
 // image content, never for application controls or layout.
@@ -28,10 +28,10 @@ import (
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
-	imagehistogram "github.com/unxed/goWidgets/showcase/imgy/histogram"
-	"github.com/unxed/goWidgets/showcase/imgy/thumbnailgrid"
-	"github.com/unxed/goWidgets/showcase/imgy/transform"
-	"github.com/unxed/goWidgets/showcase/imgy/viewport"
+	imagehistogram "github.com/unxed/goWidgets/showcase/pixy/histogram"
+	"github.com/unxed/goWidgets/showcase/pixy/thumbnailgrid"
+	"github.com/unxed/goWidgets/showcase/pixy/transform"
+	"github.com/unxed/goWidgets/showcase/pixy/viewport"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -79,7 +79,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win, err := app.NewWindow("imgy — image viewer", 1040, 680)
+	win, err := app.NewWindow("pixy — image viewer", 1040, 680)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func main() {
 		previewBox = imageView
 	}
 
-	title, _ := win.AddLabel("imgy — просмотр изображений")
+	title, _ := win.AddLabel("pixy — просмотр изображений")
 	pathEdit, _ := win.AddEdit(start)
 	openFolder, _ := win.AddButton("Открыть папку")
 	openImage, _ := win.AddButton("Открыть файл…")
@@ -176,7 +176,7 @@ func main() {
 		redEyeButton.Visible.Set(false)
 		shadowButton.Visible.Set(false)
 	}
-	thumbMode := os.Getenv("IMGY_SHOW_THUMBNAILS") == "1" && canvas != nil
+	thumbMode := os.Getenv("PIXY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
 		thumbToggle.Text.Set("Просмотр")
 	}

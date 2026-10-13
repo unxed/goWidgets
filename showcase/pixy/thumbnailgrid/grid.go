@@ -1,5 +1,5 @@
 // Package thumbnailgrid contains the platform-independent geometry and
-// selection model for imgy's virtualized Canvas thumbnail browser.
+// selection model for pixy's virtualized Canvas thumbnail browser.
 package thumbnailgrid
 
 import (

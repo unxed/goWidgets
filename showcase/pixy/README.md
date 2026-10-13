@@ -1,6 +1,6 @@
-# imgy
+# pixy
 
-`imgy` is an image-viewer showcase for goWidgets. It provides a constraint-laid-
+`pixy` is an image-viewer showcase for goWidgets. It provides a constraint-laid-
 out window, a folder listing, file/folder selection, and an image preview with
 fit, actual-size, fill, cursor-centered zoom, and drag-to-pan. It decodes GIF,
 JPEG, and PNG using the Go standard library, plus BMP, TIFF, and WebP with
@@ -13,7 +13,7 @@ back to the native ImageView widget.
 Run it from this module with:
 
 ```sh
-go run ./showcase/imgy [image-file-or-folder]
+go run ./showcase/pixy [image-file-or-folder]
 ```
 
 Use **Open folder** to choose a directory, select an image in the list, or use
