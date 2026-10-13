@@ -1,8 +1,31 @@
-name: CI
+name: CI gui
 
+# Heavy GUI matrix: runs only when code changes. Docs-only pushes are
+# ignored here (and in CI fast) so parallel agents don't burn runner
+# minutes on plan edits. Same concurrency group as CI fast, so a PR run
+# cancels the duplicate push run for the same ref instead of queueing.
 on:
   push:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci-gui.yml'
+      - 'tools/ci/**'
+      - 'ci/**'
   pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci-gui.yml'
+      - 'tools/ci/**'
+      - 'ci/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   linux:
@@ -28,14 +51,8 @@ jobs:
             libqt6widgets6t64 libqt5widgets5t64 qt6-base-dev qtbase5-dev \
             qt6-translations-l10n qttranslations5-l10n
 
-      - name: gofmt
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
-
-      - name: go vet
-        run: |
-          go vet ./...
-          GOOS=windows go vet ./...
-
+      # Formatting, vet and cross-compilation live in CI fast; this job
+      # keeps the display-dependent checks only.
       - name: Probe Qt 5 and Qt 6 wheel-event ABI
         run: |
           for qt in Qt6Widgets Qt5Widgets; do
@@ -201,20 +218,6 @@ jobs:
       # it has to stay green too, or the diagnostics rot unnoticed.
       - name: Tests, debug build
         run: xvfb-run -a go test -count=1 -tags goWidgets_debug ./...
-
-      - name: Cross-compile
-        run: |
-          set -e
-          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/arm64; do
-            os="${target%/*}"; arch="${target#*/}"
-            flags="-s -w"
-            [ "$os" = windows ] && flags="$flags -H windowsgui"
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="$flags" -o /tmp/out ./showcase/crescent
-            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-              go build -trimpath -ldflags="$flags" -o /tmp/pixy ./showcase/pixy
-            echo "  $target ok"
-          done
 
   windows:
     runs-on: windows-latest
