@@ -63,3 +63,11 @@ jobs:
               go build -trimpath -ldflags="$flags" -o /tmp/pixy ./showcase/pixy
             echo "  $target ok"
           done
+
+      # The web backend (ADR-0018) builds only under the js && wasm tag,
+      # so the steps above never compile it. Build and vet it for its real
+      # target so a broken W1+ driver fails here instead of in a browser.
+      - name: WebAssembly build (backends/web)
+        run: |
+          CGO_ENABLED=0 GOOS=js GOARCH=wasm go build ./backends/web/...
+          CGO_ENABLED=0 GOOS=js GOARCH=wasm go vet ./backends/web/...
