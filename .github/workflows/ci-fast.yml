@@ -4,8 +4,10 @@ name: CI fast
 # toolkit-independent tests and cross-compilation. GUI tests detect the
 # missing DISPLAY and skip, so this stays green and fast (~1-2 min).
 # Docs-only pushes are ignored so plan edits don't queue runner time.
-# Same concurrency group as CI gui: a PR run cancels the duplicate push
-# run for the same ref instead of queueing behind it.
+# Concurrency is per workflow and ref: groups are repository-wide, so a
+# group shared with CI gui made the two PR runs cancel each other (the
+# required `fast` check ended up cancelled on every code PR). A new push
+# to a PR cancels that PR's outdated run; main runs are never cancelled.
 on:
   push:
     paths-ignore:
@@ -20,7 +22,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
