@@ -917,6 +917,20 @@ func SelectFile(path string) bool {
 	return c != 0 && gtkChooserSet(c, path) != 0
 }
 
+// SelectedFile reports the file the running file dialog currently has
+// selected, or "" (a test hook; call it on the UI thread, e.g. through
+// QueueUpdate). The chooser loads a folder asynchronously, so a SelectFile
+// takes effect only once the load is done; a test waits for this to match.
+func SelectedFile() string {
+	dialogMu.Lock()
+	c := chooserCurrent
+	dialogMu.Unlock()
+	if c == 0 {
+		return ""
+	}
+	return cString(gtkChooserGet(c))
+}
+
 // SelectFolder points an active native folder chooser at path (test hook).
 func SelectFolder(path string) bool {
 	dialogMu.Lock()

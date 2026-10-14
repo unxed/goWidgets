@@ -67,9 +67,30 @@ func TestModalDialogAgainstGTK(t *testing.T) {
 			}
 			if i == 2 {
 				// The open dialog: point it at the file first, as clicking
-				// it would, and give the chooser a moment to load the folder.
-				app.QueueUpdate(func() { gtk.SelectFile(tmp) })
-				time.Sleep(300 * time.Millisecond)
+				// it would, and wait until the chooser actually reports it
+				// selected. The chooser loads the folder asynchronously; a
+				// fixed sleep here raced with that load on slow runners and
+				// the dialog was accepted with nothing selected
+				// (OpenFile = "", false; goWidgets#13).
+				for time.Now().Before(deadline) {
+					got := make(chan string, 1)
+					app.QueueUpdate(func() {
+						if gtk.SelectedFile() != tmp {
+							gtk.SelectFile(tmp)
+						}
+						got <- gtk.SelectedFile()
+					})
+					sel := ""
+					select {
+					case sel = <-got:
+					case <-time.After(time.Second):
+					}
+					if sel == tmp {
+						break
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+				deadline = time.Now().Add(5 * time.Second)
 			}
 			if i == 3 {
 				time.Sleep(300 * time.Millisecond)
