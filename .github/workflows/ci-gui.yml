@@ -5,13 +5,16 @@ name: CI gui
 # minutes on plan edits. Concurrency is per workflow and ref (see CI fast:
 # a group shared between the two workflows made their PR runs cancel each
 # other); a new push to a PR cancels its outdated run, main runs are kept.
+# Any workflow change triggers it too: branch protection requires the
+# linux/windows/macos checks, and a workflow-only PR without this run
+# could never be merged.
 on:
   push:
     paths:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - '.github/workflows/ci-gui.yml'
+      - '.github/workflows/**'
       - 'tools/ci/**'
       - 'ci/**'
   pull_request:
@@ -19,7 +22,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - '.github/workflows/ci-gui.yml'
+      - '.github/workflows/**'
       - 'tools/ci/**'
       - 'ci/**'
   workflow_dispatch:
