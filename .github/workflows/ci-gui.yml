@@ -2,8 +2,9 @@ name: CI gui
 
 # Heavy GUI matrix: runs only when code changes. Docs-only pushes are
 # ignored here (and in CI fast) so parallel agents don't burn runner
-# minutes on plan edits. Same concurrency group as CI fast, so a PR run
-# cancels the duplicate push run for the same ref instead of queueing.
+# minutes on plan edits. Concurrency is per workflow and ref (see CI fast:
+# a group shared between the two workflows made their PR runs cancel each
+# other); a new push to a PR cancels its outdated run, main runs are kept.
 on:
   push:
     paths:
@@ -24,7 +25,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
