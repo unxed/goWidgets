@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/unxed/goWidgets"
+	"github.com/unxed/goWidgets/showcase/pixy/export"
 	"github.com/unxed/goWidgets/showcase/pixy/viewport"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
@@ -276,7 +278,7 @@ func TestSaveImageWritesDecodableFiles(t *testing.T) {
 	}
 	dir := t.TempDir()
 
-	pngPath, err := saveImage(filepath.Join(dir, "out.png"), src)
+	pngPath, err := saveImage(filepath.Join(dir, "out.png"), src, export.DefaultQuality)
 	if err != nil {
 		t.Fatalf("save png: %v", err)
 	}
@@ -296,7 +298,7 @@ func TestSaveImageWritesDecodableFiles(t *testing.T) {
 		t.Fatalf("png pixel = %d,%d,%d, want 200,30,40", r>>8, g>>8, b>>8)
 	}
 
-	jpgPath, err := saveImage(filepath.Join(dir, "out.jpg"), src)
+	jpgPath, err := saveImage(filepath.Join(dir, "out.jpg"), src, export.DefaultQuality)
 	if err != nil {
 		t.Fatalf("save jpeg: %v", err)
 	}
@@ -310,7 +312,7 @@ func TestSaveImageWritesDecodableFiles(t *testing.T) {
 		t.Fatalf("jpeg config = %+v, %q, %v", cfg, format, err)
 	}
 
-	bare, err := saveImage(filepath.Join(dir, "bare"), src)
+	bare, err := saveImage(filepath.Join(dir, "bare"), src, export.DefaultQuality)
 	if err != nil {
 		t.Fatalf("save without extension: %v", err)
 	}
@@ -321,10 +323,53 @@ func TestSaveImageWritesDecodableFiles(t *testing.T) {
 		t.Fatalf("file not written: %v", err)
 	}
 
-	if _, err := saveImage(filepath.Join(dir, "bad.bmp"), src); err == nil {
+	if _, err := saveImage(filepath.Join(dir, "bad.bmp"), src, export.DefaultQuality); err == nil {
 		t.Fatal("saving to .bmp succeeded, want an unsupported-extension error")
 	}
-	if _, err := saveImage(filepath.Join(dir, "nil.png"), nil); err == nil {
+	if _, err := saveImage(filepath.Join(dir, "nil.png"), nil, export.DefaultQuality); err == nil {
 		t.Fatal("saving a nil image succeeded, want an error")
+	}
+}
+
+func TestParseJPEGQuality(t *testing.T) {
+	ok := []struct {
+		in   string
+		want int
+	}{
+		{"1", 1},
+		{"100", 100},
+		{"90", 90},
+		{" 75 ", 75},
+		{"\t42\n", 42},
+	}
+	for _, c := range ok {
+		got, err := parseJPEGQuality(c.in)
+		if err != nil || got != c.want {
+			t.Errorf("parseJPEGQuality(%q) = %d, %v, want %d", c.in, got, err, c.want)
+		}
+	}
+	for _, in := range []string{"0", "101", "-5", "", "   ", "abc", "9x", "7.5", "1 0", "999999999999999999999"} {
+		if got, err := parseJPEGQuality(in); err == nil {
+			t.Errorf("parseJPEGQuality(%q) = %d, want an error", in, got)
+		}
+	}
+	if got, err := parseJPEGQuality(strconv.Itoa(export.DefaultQuality)); err != nil || got != 90 {
+		t.Errorf("default quality = %d, %v, want 90", got, err)
+	}
+}
+
+func TestFormatJPEGComparison(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	variants, err := export.CompareJPEG(src, jpegCompareQualities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(variants) != 3 {
+		t.Fatalf("got %d variants, want 3", len(variants))
+	}
+	got := formatJPEGComparison([]export.Variant{{Quality: 50, Size: 512}, {Quality: 90, Size: 2048}})
+	want := "Размер JPEG: качество 50 — 512 B; качество 90 — 2.0 KiB"
+	if got != want {
+		t.Errorf("formatJPEGComparison = %q, want %q", got, want)
 	}
 }
