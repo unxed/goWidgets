@@ -28,6 +28,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/headless"
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
+	"github.com/unxed/goWidgets/showcase/pixy/export"
 	imagehistogram "github.com/unxed/goWidgets/showcase/pixy/histogram"
 	"github.com/unxed/goWidgets/showcase/pixy/thumbnailgrid"
 	"github.com/unxed/goWidgets/showcase/pixy/transform"
@@ -47,6 +48,33 @@ var imageFilter = goWidgets.FileFilter{
 	Patterns: []string{
 		"*.bmp", "*.gif", "*.jpeg", "*.jpg", "*.png", "*.tif", "*.tiff", "*.webp",
 	},
+}
+
+var saveFilters = []goWidgets.FileFilter{
+	{Name: "PNG", Patterns: []string{"*.png"}},
+	{Name: "JPEG", Patterns: []string{"*.jpg", "*.jpeg"}},
+}
+
+// suggestedSaveName proposes a file name for Save As: the source name with a
+// supported extension (PNG for formats that export cannot write).
+func suggestedSaveName(sourcePath string) string {
+	base := filepath.Base(sourcePath)
+	if _, err := export.FormatFromPath(base); err == nil {
+		return base
+	}
+	return strings.TrimSuffix(base, filepath.Ext(base)) + ".png"
+}
+
+// saveImage writes img to the path chosen in the Save As dialog. A path without
+// an extension gets ".png"; JPEG uses export.DefaultQuality.
+func saveImage(path string, img image.Image) (string, error) {
+	if filepath.Ext(path) == "" {
+		path += ".png"
+	}
+	if err := export.Save(path, img, export.DefaultQuality); err != nil {
+		return path, err
+	}
+	return path, nil
 }
 
 type imageEntry struct {
@@ -137,6 +165,7 @@ func main() {
 	channelsButton, _ := win.AddButton("Применить RGB")
 	redEyeButton, _ := win.AddButton("Красные глаза")
 	shadowButton, _ := win.AddButton("Тень")
+	saveAsButton, _ := win.AddButton("Сохранить как…")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -175,6 +204,7 @@ func main() {
 		channelsButton.Visible.Set(false)
 		redEyeButton.Visible.Set(false)
 		shadowButton.Visible.Set(false)
+		saveAsButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("PIXY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -320,6 +350,10 @@ func main() {
 		shadowButton.Top().Eq(redEyeButton.Top()),
 		shadowButton.Width().Is(90),
 		shadowButton.Height().Is(32),
+		saveAsButton.Left().Eq(shadowButton.Right().Plus(6)),
+		saveAsButton.Top().Eq(shadowButton.Top()),
+		saveAsButton.Width().Is(150),
+		saveAsButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
 		files.Top().Eq(channelsButton.Bottom().Plus(pad)),
@@ -705,6 +739,22 @@ func main() {
 		if ok {
 			selectPath(path)
 		}
+	}
+	saveAs := func() {
+		if currentImage == nil || selectedIndex < 0 || selectedIndex >= len(entries) {
+			status.Text.Set("Нет изображения для сохранения")
+			return
+		}
+		path, ok := win.SaveFile("Сохранить как", suggestedSaveName(entries[selectedIndex].path), saveFilters...)
+		if !ok {
+			return
+		}
+		saved, err := saveImage(path, currentImage)
+		if err != nil {
+			status.Text.Set("Не удалось сохранить: " + err.Error())
+			return
+		}
+		status.Text.Set("Сохранено: " + saved)
 	}
 	setViewMode := func(mode viewport.Mode) {
 		viewState.SetMode(mode)
@@ -1174,6 +1224,7 @@ func main() {
 		}
 	})
 	openImage.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { chooseImage() })
+	saveAsButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { saveAs() })
 	pathEdit.Activated.On(app.Scope(), func(string) { loadFolder(pathEdit.Text.Get()) })
 	win.KeyPressed().On(app.Scope(), func(key goWidgets.Key) {
 		if !key.KeyDown {
@@ -1181,6 +1232,8 @@ func main() {
 		}
 		if key.Ctrl() && key.VirtualKeyCode == 0x4F { // Ctrl+O
 			chooseImage()
+		} else if key.Ctrl() && key.VirtualKeyCode == 0x53 { // Ctrl+S (Save As until in-place save exists)
+			saveAs()
 		} else if key.Ctrl() && key.VirtualKeyCode == 0x5A { // Ctrl+Z
 			doUndo()
 		} else if key.Ctrl() && key.VirtualKeyCode == 0x59 { // Ctrl+Y
