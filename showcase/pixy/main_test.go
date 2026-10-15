@@ -250,3 +250,81 @@ func TestSortEntriesByTypeSizeAndDate(t *testing.T) {
 		})
 	}
 }
+
+func TestSuggestedSaveNameKeepsWritableFormats(t *testing.T) {
+	cases := map[string]string{
+		filepath.Join("dir", "photo.jpg"):  "photo.jpg",
+		filepath.Join("dir", "photo.JPEG"): "photo.JPEG",
+		filepath.Join("dir", "pic.png"):    "pic.png",
+		filepath.Join("dir", "scan.tiff"):  "scan.png",
+		"anim.gif":                         "anim.png",
+		"noext":                            "noext.png",
+	}
+	for in, want := range cases {
+		if got := suggestedSaveName(in); got != want {
+			t.Errorf("suggestedSaveName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSaveImageWritesDecodableFiles(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 4, 3))
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 4; x++ {
+			src.SetRGBA(x, y, color.RGBA{R: 200, G: 30, B: 40, A: 255})
+		}
+	}
+	dir := t.TempDir()
+
+	pngPath, err := saveImage(filepath.Join(dir, "out.png"), src)
+	if err != nil {
+		t.Fatalf("save png: %v", err)
+	}
+	f, err := os.Open(pngPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := png.Decode(f)
+	f.Close()
+	if err != nil {
+		t.Fatalf("decode png: %v", err)
+	}
+	if got.Bounds() != src.Bounds() {
+		t.Fatalf("png bounds = %v, want %v", got.Bounds(), src.Bounds())
+	}
+	if r, g, b, _ := got.At(1, 1).RGBA(); r>>8 != 200 || g>>8 != 30 || b>>8 != 40 {
+		t.Fatalf("png pixel = %d,%d,%d, want 200,30,40", r>>8, g>>8, b>>8)
+	}
+
+	jpgPath, err := saveImage(filepath.Join(dir, "out.jpg"), src)
+	if err != nil {
+		t.Fatalf("save jpeg: %v", err)
+	}
+	f, err = os.Open(jpgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, format, err := image.DecodeConfig(f)
+	f.Close()
+	if err != nil || format != "jpeg" || cfg.Width != 4 || cfg.Height != 3 {
+		t.Fatalf("jpeg config = %+v, %q, %v", cfg, format, err)
+	}
+
+	bare, err := saveImage(filepath.Join(dir, "bare"), src)
+	if err != nil {
+		t.Fatalf("save without extension: %v", err)
+	}
+	if want := filepath.Join(dir, "bare.png"); bare != want {
+		t.Fatalf("path without extension = %q, want %q", bare, want)
+	}
+	if _, err := os.Stat(bare); err != nil {
+		t.Fatalf("file not written: %v", err)
+	}
+
+	if _, err := saveImage(filepath.Join(dir, "bad.bmp"), src); err == nil {
+		t.Fatal("saving to .bmp succeeded, want an unsupported-extension error")
+	}
+	if _, err := saveImage(filepath.Join(dir, "nil.png"), nil); err == nil {
+		t.Fatal("saving a nil image succeeded, want an error")
+	}
+}
