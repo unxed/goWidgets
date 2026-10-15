@@ -66,15 +66,46 @@ func suggestedSaveName(sourcePath string) string {
 }
 
 // saveImage writes img to the path chosen in the Save As dialog. A path without
-// an extension gets ".png"; JPEG uses export.DefaultQuality.
-func saveImage(path string, img image.Image) (string, error) {
+// an extension gets ".png"; JPEG uses the given quality (export.MinQuality to
+// export.MaxQuality), PNG ignores it.
+func saveImage(path string, img image.Image, quality int) (string, error) {
 	if filepath.Ext(path) == "" {
 		path += ".png"
 	}
-	if err := export.Save(path, img, export.DefaultQuality); err != nil {
+	if err := export.Save(path, img, quality); err != nil {
 		return path, err
 	}
 	return path, nil
+}
+
+// parseJPEGQuality reads the "JPEG quality" field: an integer from
+// export.MinQuality to export.MaxQuality, surrounding spaces ignored.
+func parseJPEGQuality(text string) (int, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, fmt.Errorf("качество JPEG не задано")
+	}
+	quality, err := strconv.Atoi(text)
+	if err != nil {
+		return 0, fmt.Errorf("качество JPEG должно быть целым числом: %q", text)
+	}
+	if quality < export.MinQuality || quality > export.MaxQuality {
+		return 0, fmt.Errorf("качество JPEG должно быть от %d до %d, получено %d", export.MinQuality, export.MaxQuality, quality)
+	}
+	return quality, nil
+}
+
+// jpegCompareQualities are the qualities whose result sizes the "JPEG sizes"
+// button reports.
+var jpegCompareQualities = []int{50, 75, 90}
+
+// formatJPEGComparison renders export.CompareJPEG results for the status line.
+func formatJPEGComparison(variants []export.Variant) string {
+	parts := make([]string, len(variants))
+	for i, v := range variants {
+		parts[i] = fmt.Sprintf("качество %d — %s", v.Quality, formatBytes(int64(v.Size)))
+	}
+	return "Размер JPEG: " + strings.Join(parts, "; ")
 }
 
 type imageEntry struct {
@@ -166,6 +197,9 @@ func main() {
 	redEyeButton, _ := win.AddButton("Красные глаза")
 	shadowButton, _ := win.AddButton("Тень")
 	saveAsButton, _ := win.AddButton("Сохранить как…")
+	qualityLabel, _ := win.AddLabel("Качество JPEG, 1–100:")
+	qualityEdit, _ := win.AddEdit(strconv.Itoa(export.DefaultQuality))
+	qualityCompareButton, _ := win.AddButton("Размеры JPEG")
 	sortLabel, _ := win.AddLabel("Сортировка:")
 	sortBox, _ := win.AddComboBox([]string{"Имя", "Тип", "Размер", "Дата изменения"}, true)
 	sortBox.Select(sortByName)
@@ -205,6 +239,9 @@ func main() {
 		redEyeButton.Visible.Set(false)
 		shadowButton.Visible.Set(false)
 		saveAsButton.Visible.Set(false)
+		qualityLabel.Visible.Set(false)
+		qualityEdit.Visible.Set(false)
+		qualityCompareButton.Visible.Set(false)
 	}
 	thumbMode := os.Getenv("PIXY_SHOW_THUMBNAILS") == "1" && canvas != nil
 	if thumbMode {
@@ -354,9 +391,19 @@ func main() {
 		saveAsButton.Top().Eq(shadowButton.Top()),
 		saveAsButton.Width().Is(150),
 		saveAsButton.Height().Is(32),
+		qualityLabel.Left().Eq(title.Left()),
+		qualityLabel.Top().Eq(channelsButton.Bottom().Plus(6)),
+		qualityEdit.Left().Eq(qualityLabel.Right().Plus(6)),
+		qualityEdit.Top().Eq(qualityLabel.Top()),
+		qualityEdit.Width().Is(68),
+		qualityEdit.Height().Is(32),
+		qualityCompareButton.Left().Eq(qualityEdit.Right().Plus(pad)),
+		qualityCompareButton.Top().Eq(qualityEdit.Top()),
+		qualityCompareButton.Width().Is(150),
+		qualityCompareButton.Height().Is(32),
 
 		files.Left().Eq(title.Left()),
-		files.Top().Eq(channelsButton.Bottom().Plus(pad)),
+		files.Top().Eq(qualityEdit.Bottom().Plus(pad)),
 		files.Width().Is(280),
 		files.Bottom().Eq(info.Top().Minus(pad)),
 
@@ -384,6 +431,7 @@ func main() {
 	redChannelLabel.HugHeight()
 	greenChannelLabel.HugHeight()
 	blueChannelLabel.HugHeight()
+	qualityLabel.HugHeight()
 	sortBox.HugHeight()
 	title.HugHeight()
 	status.HugHeight()
@@ -745,11 +793,16 @@ func main() {
 			status.Text.Set("Нет изображения для сохранения")
 			return
 		}
+		quality, err := parseJPEGQuality(qualityEdit.Text.Get())
+		if err != nil {
+			status.Text.Set("Не удалось сохранить: " + err.Error())
+			return
+		}
 		path, ok := win.SaveFile("Сохранить как", suggestedSaveName(entries[selectedIndex].path), saveFilters...)
 		if !ok {
 			return
 		}
-		saved, err := saveImage(path, currentImage)
+		saved, err := saveImage(path, currentImage, quality)
 		if err != nil {
 			status.Text.Set("Не удалось сохранить: " + err.Error())
 			return
@@ -1225,6 +1278,27 @@ func main() {
 	})
 	openImage.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { chooseImage() })
 	saveAsButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { saveAs() })
+	compareJPEG := func() {
+		if canvas == nil || currentImage == nil {
+			status.Text.Set("Нет изображения для сравнения размеров")
+			return
+		}
+		variants, err := export.CompareJPEG(currentImage, jpegCompareQualities)
+		if err != nil {
+			status.Text.Set("Не удалось оценить размер JPEG: " + err.Error())
+			return
+		}
+		status.Text.Set(formatJPEGComparison(variants))
+	}
+	qualityCompareButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { compareJPEG() })
+	qualityEdit.Activated.On(app.Scope(), func(string) {
+		quality, err := parseJPEGQuality(qualityEdit.Text.Get())
+		if err != nil {
+			status.Text.Set(err.Error())
+			return
+		}
+		status.Text.Set(fmt.Sprintf("Качество JPEG: %d", quality))
+	})
 	pathEdit.Activated.On(app.Scope(), func(string) { loadFolder(pathEdit.Text.Get()) })
 	win.KeyPressed().On(app.Scope(), func(key goWidgets.Key) {
 		if !key.KeyDown {
