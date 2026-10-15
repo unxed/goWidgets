@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>goWidgets web backend smoke test</title>
+<script src="wasm_exec.js"></script>
+<script>
+  // run.mjs reads window.__result once the Go test binary has exited:
+  // {exitCode: number} on exit, {error: string} if it could not be started.
+  const go = new Go();
+  go.argv = ["web.test.wasm", "-test.v", "-test.timeout=60s"];
+  go.exit = (code) => { window.__result = { exitCode: code }; };
+  WebAssembly.instantiateStreaming(fetch("web.test.wasm"), go.importObject)
+    .then((r) => go.run(r.instance))
+    .catch((err) => { window.__result = { error: String(err) }; });
+</script>

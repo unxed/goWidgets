@@ -319,3 +319,25 @@ jobs:
           name: macos-snapshots
           path: ${{ runner.temp }}/snapshots
           if-no-files-found: error
+
+  # Web W1: the backends/web tests run as a WebAssembly binary in headless
+  # Chromium (tools/ci/webtest). Not a required check in branch protection:
+  # the owner decides that after a few green runs.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright and Chromium
+        working-directory: tools/ci/webtest
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Run backends/web tests in the browser
+        working-directory: tools/ci/webtest
+        run: node run.mjs
