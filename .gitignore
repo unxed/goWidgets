@@ -4,3 +4,4 @@
 # go build ./showcase/... in the repository root
 /crescent
 /pixy
+/tools/ci/webtest/node_modules/

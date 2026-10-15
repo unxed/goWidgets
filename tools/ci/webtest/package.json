@@ -1,0 +1,12 @@
+{
+  "name": "gowidgets-webtest",
+  "private": true,
+  "type": "module",
+  "description": "Runs the backends/web test binary (GOOS=js GOARCH=wasm) in headless Chromium.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.49.1"
+  }
+}
