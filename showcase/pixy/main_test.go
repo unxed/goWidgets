@@ -373,3 +373,23 @@ func TestFormatJPEGComparison(t *testing.T) {
 		t.Errorf("formatJPEGComparison = %q, want %q", got, want)
 	}
 }
+
+func TestIsHistogramShortcut(t *testing.T) {
+	cases := []struct {
+		name string
+		key  goWidgets.Key
+		want bool
+	}{
+		{"lower i", goWidgets.Key{KeyDown: true, Char: 'i'}, true},
+		{"upper I", goWidgets.Key{KeyDown: true, Char: 'I'}, true},
+		{"ctrl+i", goWidgets.Key{KeyDown: true, Char: 'i', ControlKeyState: 0x0008}, false},
+		{"alt+i", goWidgets.Key{KeyDown: true, Char: 'i', ControlKeyState: 0x0002}, false},
+		{"other letter", goWidgets.Key{KeyDown: true, Char: 'f'}, false},
+		{"no char", goWidgets.Key{KeyDown: true, VirtualKeyCode: 0x49}, false},
+	}
+	for _, tc := range cases {
+		if got := isHistogramShortcut(tc.key); got != tc.want {
+			t.Errorf("%s: isHistogramShortcut = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

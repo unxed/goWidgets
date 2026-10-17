@@ -894,7 +894,7 @@ func main() {
 		}
 		canvas.Invalidate()
 	})
-	histogramButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+	toggleHistogram := func() {
 		if canvas == nil || currentImage == nil {
 			return
 		}
@@ -918,7 +918,8 @@ func main() {
 		info.Text.Set(fmt.Sprintf("Гистограмма RGB · %d видимых пикселей", currentHistogram.Pixels))
 		status.Text.Set(currentHistogram.Summary())
 		canvas.Invalidate()
-	})
+	}
+	histogramButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { toggleHistogram() })
 	rotateButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if canvas != nil && currentImage != nil {
 			applyEdit(transform.RotateClockwise(currentImage))
@@ -1332,6 +1333,8 @@ func main() {
 			}
 		} else if cropMode && key.VirtualKeyCode == 0x0D { // Enter
 			applyCrop()
+		} else if isHistogramShortcut(key) {
+			toggleHistogram()
 		} else {
 			if mode, zoom, ok := zoomShortcut(key.Char); ok {
 				setViewMode(mode)
@@ -1364,6 +1367,12 @@ func main() {
 	if err := app.Run(win); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// isHistogramShortcut reports whether key is the plain I key (FastStone's histogram/info key);
+// Ctrl/Alt combinations are left to other shortcuts.
+func isHistogramShortcut(key goWidgets.Key) bool {
+	return !key.Ctrl() && !key.Alt() && (key.Char == 'i' || key.Char == 'I')
 }
 
 func zoomShortcut(char rune) (viewport.Mode, float64, bool) {
