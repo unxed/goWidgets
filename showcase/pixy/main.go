@@ -439,6 +439,8 @@ func main() {
 	var entries []imageEntry
 	var currentImage image.Image
 	var histogramMode bool
+	var loupeHeld bool
+	var loupeCursor viewport.Point
 	var currentHistogram *imagehistogram.Distribution
 	resizeWidthEdited := true
 	syncingResizeFields := false
@@ -659,6 +661,16 @@ func main() {
 			}
 			if cropMode && cropValid {
 				drawCropOutline(frame.Image, cropStart, cropEnd)
+			}
+			if loupeHeld && currentImage != nil {
+				scale := frame.Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				size := viewport.Size{W: loupeSize * scale, H: loupeSize * scale}
+				if loupe, ok := viewState.LoupeAt(loupeCursor, size, loupeMagnification); ok {
+					paintLoupe(frame.Image, currentImage, loupe)
+				}
 			}
 		})
 	}
@@ -1228,6 +1240,15 @@ func main() {
 				}
 			}
 			if mouse.Button == goWidgets.MouseLeft && currentImage != nil {
+				if loupeAvailable(viewState) {
+					scale := win.Scale().Scale
+					if scale <= 0 {
+						scale = 1
+					}
+					loupeHeld, loupeCursor = true, viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+					canvas.Invalidate()
+					return
+				}
 				dragging, lastPointer = true, mouse
 			}
 		})
@@ -1238,6 +1259,15 @@ func main() {
 					scale = 1
 				}
 				cropEnd = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+				canvas.Invalidate()
+				return
+			}
+			if loupeHeld {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				loupeCursor = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
 				canvas.Invalidate()
 				return
 			}
@@ -1269,6 +1299,10 @@ func main() {
 					return
 				}
 				dragging = false
+				if loupeHeld {
+					loupeHeld = false
+					canvas.Invalidate()
+				}
 			}
 		})
 	}
