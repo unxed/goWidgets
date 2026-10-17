@@ -144,3 +144,54 @@ func (v *Viewport) SetMode(mode Mode) {
 	}
 	v.Mode, v.Zoom, v.Pan = mode, 1, Point{}
 }
+
+// Rect is an axis-aligned rectangle in a shared coordinate unit.
+type Rect struct {
+	Min, Max Point
+}
+
+// Loupe is a temporary magnifier (MOU-003): Dest is where the magnified patch
+// is drawn in viewport units and Src is the image region it shows.
+type Loupe struct {
+	Dest, Src Rect
+}
+
+const (
+	minLoupeMagnification = 1
+	maxLoupeMagnification = 16
+)
+
+// LoupeAt returns the loupe for a pointer held at cursor. Dest is a window of
+// the given size centered on the cursor and kept inside the viewport (shrunk
+// when larger than it); Src is the image region that fills Dest when magnified
+// relative to the current view scale, centered on the image point under the
+// cursor and kept inside the image. Magnification is clamped to 1..16. The
+// loupe exists only while the cursor is over the image, so ok is false outside
+// it and for degenerate input.
+func (v Viewport) LoupeAt(cursor Point, size Size, magnification float64) (loupe Loupe, ok bool) {
+	t := v.Transform()
+	if t.Scale <= 0 || size.W <= 0 || size.H <= 0 ||
+		magnification <= 0 || math.IsNaN(magnification) || math.IsInf(magnification, 0) {
+		return Loupe{}, false
+	}
+	center := v.ImagePoint(cursor)
+	if center.X < 0 || center.Y < 0 || center.X > v.Image.W || center.Y > v.Image.H {
+		return Loupe{}, false
+	}
+	magnification = math.Max(minLoupeMagnification, math.Min(maxLoupeMagnification, magnification))
+	size = Size{W: math.Min(size.W, v.Area.W), H: math.Min(size.H, v.Area.H)}
+	srcW, srcH := size.W/(t.Scale*magnification), size.H/(t.Scale*magnification)
+	return Loupe{
+		Dest: fitRect(cursor.X-size.W/2, cursor.Y-size.H/2, size, v.Area),
+		Src:  fitRect(center.X-srcW/2, center.Y-srcH/2, Size{W: srcW, H: srcH}, v.Image),
+	}, true
+}
+
+// fitRect returns the w-by-h rectangle at x, y moved inside [0,bounds] and
+// shrunk to bounds where it is larger.
+func fitRect(x, y float64, size, bounds Size) Rect {
+	w, h := math.Min(size.W, bounds.W), math.Min(size.H, bounds.H)
+	x = math.Max(0, math.Min(x, bounds.W-w))
+	y = math.Max(0, math.Min(y, bounds.H-h))
+	return Rect{Min: Point{X: x, Y: y}, Max: Point{X: x + w, Y: y + h}}
+}
