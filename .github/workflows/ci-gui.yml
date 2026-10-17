@@ -216,36 +216,49 @@ jobs:
             sleep 0.2
             scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-jpeg-quality-50.png"
             # Save the edited image through pixy's native dialog, then decode
-            # the result and ensure the edit changed its dimensions.
-            echo "pixy-save: before Ctrl+S; DISPLAY=${DISPLAY:-<unset>}"
+            # the result and ensure the edit changed its dimensions. Without a
+            # window manager the modal GTK dialog does not get the keyboard
+            # focus by itself, so find it and focus it explicitly.
+            out_jpg="$RUNNER_TEMP/pixy-edited.jpg"
             xdotool key --clearmodifiers ctrl+s
-            echo "pixy-save: after Ctrl+S; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before save-dialog wait; DISPLAY=${DISPLAY:-<unset>}"
-            sleep 0.5
-            echo "pixy-save: after save-dialog wait; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before Ctrl+L; DISPLAY=${DISPLAY:-<unset>}"
-            xdotool key --clearmodifiers ctrl+l
-            echo "pixy-save: after Ctrl+L; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before filename entry; DISPLAY=${DISPLAY:-<unset>}"
-            xdotool type --clearmodifiers "$RUNNER_TEMP/pixy-edited.jpg"
-            echo "pixy-save: after filename entry; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before filename confirmation; DISPLAY=${DISPLAY:-<unset>}"
-            xdotool key Return
-            echo "pixy-save: after filename confirmation; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before post-save wait; DISPLAY=${DISPLAY:-<unset>}"
-            sleep 0.5
-            echo "pixy-save: after post-save wait; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before output-file inspection; DISPLAY=${DISPLAY:-<unset>}"
-            if [ -f "$RUNNER_TEMP/pixy-edited.jpg" ]; then
-              ls -l "$RUNNER_TEMP/pixy-edited.jpg"
-            else
-              echo "pixy-save: output file is missing: $RUNNER_TEMP/pixy-edited.jpg"
+            dialog_id=""
+            for _ in $(seq 1 50); do
+              dialog_id=$(xdotool search --onlyvisible --name "Сохранить как" 2>/dev/null | head -n1 || true)
+              if [ -n "$dialog_id" ]; then break; fi
+              sleep 0.2
+            done
+            echo "pixy-save: dialog window id: ${dialog_id:-<none>}"
+            xwininfo -root -tree || true
+            if [ -n "$dialog_id" ]; then
+              xdotool windowraise "$dialog_id" || true
+              xdotool windowfocus --sync "$dialog_id" || true
+              sleep 1
+              scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-dialog.png"
+              # The name entry is pre-filled with the suggested name: replace it
+              # with the full output path.
+              xdotool key --clearmodifiers ctrl+a
+              xdotool type --clearmodifiers --delay 20 "$out_jpg"
+              sleep 0.5
+              scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-dialog-typed.png"
+              xdotool key Return
             fi
-            echo "pixy-save: after output-file inspection; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before verify-save; DISPLAY=${DISPLAY:-<unset>}"
-            go run ./showcase/pixy/testfixture -verify-save "$RUNNER_TEMP/pixy-sample.png" "$RUNNER_TEMP/pixy-edited.jpg"
-            echo "pixy-save: verify-save passed; DISPLAY=${DISPLAY:-<unset>}"
-            echo "pixy-save: before Escape; DISPLAY=${DISPLAY:-<unset>}"
+            for _ in $(seq 1 50); do
+              if [ -s "$out_jpg" ]; then break; fi
+              sleep 0.2
+            done
+            sleep 0.3
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-after.png"
+            if [ -f "$out_jpg" ]; then
+              ls -l "$out_jpg"
+            else
+              echo "pixy-save: output file is missing: $out_jpg"
+              xwininfo -root -tree || true
+              ls -la "$RUNNER_TEMP" || true
+            fi
+            go run ./showcase/pixy/testfixture -verify-save "$RUNNER_TEMP/pixy-sample.png" "$out_jpg"
+            # The dialog is gone: give the keyboard focus back to pixy.
+            xdotool windowfocus --sync "$window_id" || true
+            sleep 0.3
             xdotool key --clearmodifiers Escape
             echo "pixy-save: after Escape; DISPLAY=${DISPLAY:-<unset>}"
             echo "pixy-save: before waiting for pixy exit; DISPLAY=${DISPLAY:-<unset>}"
