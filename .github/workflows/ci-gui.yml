@@ -206,6 +206,13 @@ jobs:
             scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-histogram.png"
             xdotool mousemove --window "$window_id" 654 103 click 1
             xdotool key --clearmodifiers Escape
+            # Capture the JPEG quality workflow after comparing sizes at a
+            # non-default quality; the artifact makes the field and result
+            # available for visual review.
+            xdotool mousemove --window "$window_id" 190 317 click 1 key --clearmodifiers ctrl+a type --clearmodifiers 50
+            xdotool mousemove --window "$window_id" 360 317 click 1
+            sleep 0.2
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-jpeg-quality-50.png"
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"
           '
