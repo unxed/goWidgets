@@ -215,6 +215,15 @@ jobs:
             xdotool mousemove --window "$window_id" 360 317 click 1
             sleep 0.2
             scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-jpeg-quality-50.png"
+            # Save the edited image through pixy's native dialog, then decode
+            # the result and ensure the edit changed its dimensions.
+            xdotool key --clearmodifiers ctrl+s
+            sleep 0.5
+            xdotool key --clearmodifiers ctrl+l
+            xdotool type --clearmodifiers "$RUNNER_TEMP/pixy-edited.jpg"
+            xdotool key Return
+            sleep 0.5
+            go run ./showcase/pixy/testfixture -verify-save "$RUNNER_TEMP/pixy-sample.png" "$RUNNER_TEMP/pixy-edited.jpg"
             xdotool key --clearmodifiers Escape
             timeout 10s tail --pid="$app_pid" -f /dev/null
             wait "$app_pid"

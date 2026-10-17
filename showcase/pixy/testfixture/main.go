@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/jpeg"
 	"image/png"
 	"log"
 	"os"
@@ -13,8 +14,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "-verify-save" {
+		verifySave(os.Args[2], os.Args[3])
+		return
+	}
 	if len(os.Args) != 2 {
-		log.Fatal("usage: testfixture output.png")
+		log.Fatal("usage: testfixture output.png | testfixture -verify-save input.png output.jpg")
 	}
 	const width, height = 640, 420
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -69,4 +74,38 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func verifySave(inputPath, outputPath string) {
+	input, err := os.Open(inputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	inputImage, _, err := image.Decode(input)
+	if closeErr := input.Close(); err == nil && closeErr != nil {
+		err = closeErr
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	output, err := os.Open(outputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	outputImage, format, err := image.Decode(output)
+	if closeErr := output.Close(); err == nil && closeErr != nil {
+		err = closeErr
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	if format != "jpeg" {
+		log.Fatalf("saved image format = %q, want jpeg", format)
+	}
+	inputBounds, outputBounds := inputImage.Bounds(), outputImage.Bounds()
+	if outputBounds.Empty() || outputBounds.Size() == inputBounds.Size() {
+		log.Fatalf("saved image bounds = %v, want a non-empty edited size different from input %v", outputBounds, inputBounds)
+	}
+	fmt.Printf("decoded edited JPEG: %s (%dx%d; input %dx%d)\n", outputPath, outputBounds.Dx(), outputBounds.Dy(), inputBounds.Dx(), inputBounds.Dy())
 }
