@@ -96,7 +96,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/pixy-snapshots"
           go build -o "$RUNNER_TEMP/pixy" ./showcase/pixy
           go run ./showcase/pixy/testfixture "$RUNNER_TEMP/pixy-sample.png"
-          xvfb-run -a bash -euo pipefail -c '
+          xvfb-run -a bash -euo pipefail <<'PIXY_GTK'
             PIXY_SHOW_THUMBNAILS=1 "$RUNNER_TEMP/pixy" "$RUNNER_TEMP/pixy-sample.png" &
             app_pid=$!
             trap "kill $app_pid 2>/dev/null || true" EXIT
@@ -215,10 +215,59 @@ jobs:
             xdotool mousemove --window "$window_id" 360 317 click 1
             sleep 0.2
             scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-jpeg-quality-50.png"
+            # Save the edited image through pixy's native dialog, then decode
+            # the result and ensure the edit changed its dimensions. Without a
+            # window manager the modal GTK dialog does not get the keyboard
+            # focus by itself, so find it and focus it explicitly.
+            out_jpg="$RUNNER_TEMP/pixy-edited.jpg"
+            xdotool key --clearmodifiers ctrl+s
+            dialog_id=""
+            for _ in $(seq 1 50); do
+              dialog_id=$(xdotool search --onlyvisible --name "Сохранить как" 2>/dev/null | head -n1 || true)
+              if [ -n "$dialog_id" ]; then break; fi
+              sleep 0.2
+            done
+            echo "pixy-save: dialog window id: ${dialog_id:-<none>}"
+            xwininfo -root -tree || true
+            if [ -n "$dialog_id" ]; then
+              xdotool windowraise "$dialog_id" || true
+              xdotool windowfocus --sync "$dialog_id" || true
+              sleep 1
+              scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-dialog.png"
+              # The name entry is pre-filled with the suggested name: replace it
+              # with the full output path.
+              xdotool key --clearmodifiers ctrl+a
+              xdotool type --clearmodifiers --delay 20 "$out_jpg"
+              sleep 0.5
+              scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-dialog-typed.png"
+              xdotool key Return
+            fi
+            for _ in $(seq 1 50); do
+              if [ -s "$out_jpg" ]; then break; fi
+              sleep 0.2
+            done
+            sleep 0.3
+            scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-save-after.png"
+            if [ -f "$out_jpg" ]; then
+              ls -l "$out_jpg"
+            else
+              echo "pixy-save: output file is missing: $out_jpg"
+              xwininfo -root -tree || true
+              ls -la "$RUNNER_TEMP" || true
+            fi
+            go run ./showcase/pixy/testfixture -verify-save "$RUNNER_TEMP/pixy-sample.png" "$out_jpg"
+            # The dialog is gone: give the keyboard focus back to pixy.
+            xdotool windowfocus --sync "$window_id" || true
+            sleep 0.3
             xdotool key --clearmodifiers Escape
+            echo "pixy-save: after Escape; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before waiting for pixy exit; DISPLAY=${DISPLAY:-<unset>}"
             timeout 10s tail --pid="$app_pid" -f /dev/null
+            echo "pixy-save: pixy exited; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before wait; DISPLAY=${DISPLAY:-<unset>}"
             wait "$app_pid"
-          '
+            echo "pixy-save: wait completed; DISPLAY=${DISPLAY:-<unset>}"
+          PIXY_GTK
 
       - name: Upload pixy screenshot
         if: always()
