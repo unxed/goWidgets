@@ -217,16 +217,43 @@ jobs:
             scrot "$RUNNER_TEMP/pixy-snapshots/pixy-gtk-jpeg-quality-50.png"
             # Save the edited image through pixy's native dialog, then decode
             # the result and ensure the edit changed its dimensions.
+            echo "pixy-save: before Ctrl+S; DISPLAY=${DISPLAY:-<unset>}"
             xdotool key --clearmodifiers ctrl+s
+            echo "pixy-save: after Ctrl+S; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before save-dialog wait; DISPLAY=${DISPLAY:-<unset>}"
             sleep 0.5
+            echo "pixy-save: after save-dialog wait; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before Ctrl+L; DISPLAY=${DISPLAY:-<unset>}"
             xdotool key --clearmodifiers ctrl+l
+            echo "pixy-save: after Ctrl+L; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before filename entry; DISPLAY=${DISPLAY:-<unset>}"
             xdotool type --clearmodifiers "$RUNNER_TEMP/pixy-edited.jpg"
+            echo "pixy-save: after filename entry; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before filename confirmation; DISPLAY=${DISPLAY:-<unset>}"
             xdotool key Return
+            echo "pixy-save: after filename confirmation; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before post-save wait; DISPLAY=${DISPLAY:-<unset>}"
             sleep 0.5
+            echo "pixy-save: after post-save wait; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before output-file inspection; DISPLAY=${DISPLAY:-<unset>}"
+            if [ -f "$RUNNER_TEMP/pixy-edited.jpg" ]; then
+              ls -l "$RUNNER_TEMP/pixy-edited.jpg"
+            else
+              echo "pixy-save: output file is missing: $RUNNER_TEMP/pixy-edited.jpg"
+            fi
+            echo "pixy-save: after output-file inspection; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before verify-save; DISPLAY=${DISPLAY:-<unset>}"
             go run ./showcase/pixy/testfixture -verify-save "$RUNNER_TEMP/pixy-sample.png" "$RUNNER_TEMP/pixy-edited.jpg"
+            echo "pixy-save: verify-save passed; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before Escape; DISPLAY=${DISPLAY:-<unset>}"
             xdotool key --clearmodifiers Escape
+            echo "pixy-save: after Escape; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before waiting for pixy exit; DISPLAY=${DISPLAY:-<unset>}"
             timeout 10s tail --pid="$app_pid" -f /dev/null
+            echo "pixy-save: pixy exited; DISPLAY=${DISPLAY:-<unset>}"
+            echo "pixy-save: before wait; DISPLAY=${DISPLAY:-<unset>}"
             wait "$app_pid"
+            echo "pixy-save: wait completed; DISPLAY=${DISPLAY:-<unset>}"
           '
 
       - name: Upload pixy screenshot
