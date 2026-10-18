@@ -174,6 +174,40 @@ func TestKeyboardNavigationMatchesViewerShortcuts(t *testing.T) {
 	}
 }
 
+func TestArrowKeysPanOnlyWhenImageOverflows(t *testing.T) {
+	fit := viewport.New(viewport.Size{W: 100, H: 100}, viewport.Size{W: 200, H: 200})
+	if panByArrow(&fit, 0x25) {
+		t.Fatal("left arrow panned a fitted image instead of remaining available for navigation")
+	}
+	if fit.Pan != (viewport.Point{}) {
+		t.Fatalf("fitted view pan = %+v, want unchanged", fit.Pan)
+	}
+
+	zoomed := viewport.New(viewport.Size{W: 400, H: 300}, viewport.Size{W: 100, H: 100})
+	zoomed.SetMode(viewport.Actual)
+	for _, tc := range []struct {
+		key uint16
+		pan viewport.Point
+	}{
+		{0x25, viewport.Point{X: keyboardPanStep}},
+		{0x26, viewport.Point{Y: keyboardPanStep}},
+		{0x27, viewport.Point{X: -keyboardPanStep}},
+		{0x28, viewport.Point{Y: -keyboardPanStep}},
+	} {
+		zoomed.Pan = viewport.Point{}
+		if !panByArrow(&zoomed, tc.key) {
+			t.Errorf("arrow %#x did not pan overflowing image", tc.key)
+			continue
+		}
+		if zoomed.Pan != tc.pan {
+			t.Errorf("arrow %#x pan = %+v, want %+v", tc.key, zoomed.Pan, tc.pan)
+		}
+	}
+	if panByArrow(&zoomed, 0x21) {
+		t.Fatal("Page Up was consumed as a pan key")
+	}
+}
+
 func TestZoomShortcutsMatchViewerControls(t *testing.T) {
 	for _, tt := range []struct {
 		key  rune
