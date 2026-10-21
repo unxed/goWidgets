@@ -142,17 +142,11 @@ func TestFormatsMatchZipper(t *testing.T) {
 			if err != nil {
 				t.Fatalf("appending to %s: %v", f.Ext, err)
 			}
-			// The tar index OpenFS keeps in the cache was built by the
-			// Open above and is not rebuilt when the archive changes, so
-			// the updated archive is read through an index of its own.
-			fsys, err := archive.OpenFS(out, archive.Options{IndexPath: filepath.Join(t.TempDir(), "fresh.index")})
-			if err != nil {
-				t.Fatalf("OpenFS(updated %s): %v", f.Ext, err)
-			}
-			got, err := Summarize(fsys)
-			if cerr := fsys.Close(); err == nil {
-				err = cerr
-			}
+			// Read back through the default tar index in the cache, which the
+			// Open above built for the old contents: since zipper v0.1.179 its
+			// name carries a fingerprint of the archive, so the changed
+			// archive gets a fresh index (unxed/zipper#35, Z7).
+			got, err := Open(out)
 			if err != nil || got.Files != 3 {
 				t.Fatalf("updated %s holds %+v, %v; want 3 files", f.Ext, got, err)
 			}
