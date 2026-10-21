@@ -277,6 +277,39 @@ jobs:
           path: ${{ runner.temp }}/pixy-snapshots
           if-no-files-found: error
 
+      # zipgui (ADR-0019) is a separate module: its tests run here under a
+      # display too, and its window is captured over a small zip of docs/.
+      - name: zipgui tests with a display
+        working-directory: showcase/zipgui
+        run: xvfb-run -a go test -count=1 ./...
+
+      - name: Capture zipgui window under GTK
+        run: |
+          mkdir -p "$RUNNER_TEMP/zipgui-snapshots"
+          (cd showcase/zipgui && go build -o "$RUNNER_TEMP/zipgui" .)
+          git archive --format=zip -o "$RUNNER_TEMP/zipgui-sample.zip" HEAD docs
+          xvfb-run -a bash -euo pipefail <<'ZIPGUI_GTK'
+            "$RUNNER_TEMP/zipgui" "$RUNNER_TEMP/zipgui-sample.zip" &
+            app_pid=$!
+            trap "kill $app_pid 2>/dev/null || true" EXIT
+            for _ in $(seq 1 50); do
+              window_id=$(xdotool search --onlyvisible --name "zipgui" 2>/dev/null | head -n1 || true)
+              if [ -n "$window_id" ]; then break; fi
+              sleep 0.2
+            done
+            test -n "${window_id:-}"
+            sleep 1
+            scrot "$RUNNER_TEMP/zipgui-snapshots/zipgui-gtk.png"
+          ZIPGUI_GTK
+
+      - name: Upload zipgui screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zipgui-gtk-screenshot
+          path: ${{ runner.temp }}/zipgui-snapshots
+          if-no-files-found: error
+
       # The debug build turns affinity and constraint violations into panics;
       # it has to stay green too, or the diagnostics rot unnoticed.
       - name: Tests, debug build
@@ -318,6 +351,14 @@ jobs:
 
       - name: Build pixy as a GUI application
         run: go build -ldflags="-H windowsgui" -o pixy.exe ./showcase/pixy
+        env:
+          CGO_ENABLED: 0
+
+      - name: zipgui tests and GUI build
+        working-directory: showcase/zipgui
+        run: |
+          go test -count=1 ./...
+          go build -ldflags="-H windowsgui" -o zipgui.exe .
         env:
           CGO_ENABLED: 0
 
@@ -370,6 +411,30 @@ jobs:
         with:
           name: pixy-cocoa-screenshot
           path: ${{ runner.temp }}/pixy-snapshots
+          if-no-files-found: error
+
+      - name: zipgui tests and build
+        working-directory: showcase/zipgui
+        run: |
+          go test -count=1 ./...
+          go build -o /tmp/zipgui .
+        env:
+          CGO_ENABLED: 0
+
+      - name: Capture zipgui window under Cocoa
+        run: |
+          mkdir -p "$RUNNER_TEMP/zipgui-snapshots"
+          git archive --format=zip -o "$RUNNER_TEMP/zipgui-sample.zip" HEAD docs
+          /tmp/zipgui "$RUNNER_TEMP/zipgui-sample.zip" &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          swift tools/ci/capture-pixy-macos.swift "$app_pid" "$RUNNER_TEMP/zipgui-snapshots/zipgui-cocoa.png"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zipgui-cocoa-screenshot
+          path: ${{ runner.temp }}/zipgui-snapshots
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
