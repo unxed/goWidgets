@@ -1381,6 +1381,8 @@ func main() {
 				viewState.ZoomAt(viewport.Point{X: viewState.Area.W / 2, Y: viewState.Area.H / 2}, factor)
 				viewState.ClampPan()
 				invalidateView()
+			} else if currentImage != nil && panByArrow(&viewState, key.VirtualKeyCode) {
+				invalidateView()
 			} else if step := keyNavigationDelta(key.VirtualKeyCode); step != 0 {
 				navigate(selectedIndex + step)
 			} else {
@@ -1500,6 +1502,37 @@ func keyNavigationDelta(virtualKeyCode uint16) int {
 	default:
 		return 0
 	}
+}
+
+const keyboardPanStep = 32.0
+
+// panByArrow moves an overflowing image in the direction indicated by the
+// viewport arrow. It returns false when this key should retain file navigation.
+func panByArrow(view *viewport.Viewport, virtualKeyCode uint16) bool {
+	if view == nil || !viewportOverflows(*view) {
+		return false
+	}
+	var delta viewport.Point
+	switch virtualKeyCode {
+	case 0x25: // Left: move the viewport left, revealing the image's left side.
+		delta.X = keyboardPanStep
+	case 0x26: // Up
+		delta.Y = keyboardPanStep
+	case 0x27: // Right
+		delta.X = -keyboardPanStep
+	case 0x28: // Down
+		delta.Y = -keyboardPanStep
+	default:
+		return false
+	}
+	view.PanBy(delta)
+	view.ClampPan()
+	return true
+}
+
+func viewportOverflows(view viewport.Viewport) bool {
+	scale := view.Transform().Scale
+	return scale > 0 && (view.Image.W*scale > view.Area.W || view.Image.H*scale > view.Area.H)
 }
 
 func decodeImage(path string) (image.Image, string, error) {
