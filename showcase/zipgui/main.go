@@ -3,7 +3,8 @@
 // archiver (ADR-0019, docs/zipgui/PLAN.md).
 //
 // Step 1 is the frame: open an archive (argument or «Открыть…») and see what
-// it holds in one line. The list, navigation and commands come in later steps.
+// it holds in one line (since step 3 with the packed size and ratio, from
+// zipper's listing). The list, navigation and commands come in later steps.
 //
 //	go run . [archive]                            # from showcase/zipgui
 //	goWidgets_BACKEND=headless go run . [archive] # no window system
@@ -90,9 +91,15 @@ func main() {
 	}
 }
 
-// describe is the summary line for an opened archive.
+// describe is the summary line for an opened archive. The packed size and
+// the ratio (packed to unpacked, as WinRAR's Ratio column) appear only when
+// the format tells them: a zip does, a tar stream does not.
 func describe(name string, s engine.Summary) string {
-	return fmt.Sprintf("%s — файлов: %d, папок: %d, %s", name, s.Files, s.Dirs, humanSize(s.Size))
+	line := fmt.Sprintf("%s — файлов: %d, папок: %d, %s", name, s.Files, s.Dirs, humanSize(s.Size))
+	if s.Packed >= 0 && s.Size > 0 {
+		line += fmt.Sprintf(", сжато: %s (%d %%)", humanSize(s.Packed), s.Packed*100/s.Size)
+	}
+	return line
 }
 
 // humanSize prints a byte count the way the file list will: bytes as they

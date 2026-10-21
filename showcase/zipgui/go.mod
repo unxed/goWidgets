@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/unxed/goWidgets v0.0.0-00010101000000-000000000000
-	github.com/unxed/zipper v0.1.178
+	github.com/unxed/zipper v0.1.179
 )
 
 require (
@@ -36,7 +36,7 @@ require (
 	github.com/unxed/sevenzip v0.1.7 // indirect
 	github.com/unxed/tar v0.1.137 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
-	github.com/unxed/xz v0.1.47 // indirect
+	github.com/unxed/xz v0.1.48 // indirect
 	github.com/unxed/zip v0.1.145 // indirect
 	github.com/unxed/zipcharset v0.1.5 // indirect
 	github.com/unxed/zlib4go v0.1.16 // indirect

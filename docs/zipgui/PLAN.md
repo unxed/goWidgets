@@ -17,11 +17,11 @@
 
 ## Пробелы, найденные при разборе (20-10-2026)
 
-### API zipper (`zipper/archive` v0.1.178)
+### API zipper (`zipper/archive` v0.1.178; тикет unxed/zipper#35)
 
 | # | Нужно showcase | Что есть | Пробел |
 |---|---|---|---|
-| Z1 | Колонки Packed / CRC / Method, признак шифрования | `OpenFS` → `fs.FileInfo` (имя, размер, время, режим) | единая запись листинга: `archive.Entry{Name, Size, Packed, Modified, CRC32, Method, Encrypted, IsDir}` и функция листинга для zip / tar / 7z / rar (Packed = −1, где формат его не знает) |
+| Z1 | Колонки Packed / CRC / Method, признак шифрования | `OpenFS` → `fs.FileInfo` (имя, размер, время, режим) | единая запись листинга: `archive.Entry{Name, Size, Packed, Modified, CRC32, Method, Encrypted, IsDir}` и функция листинга для zip / tar / 7z / rar (Packed = −1, где формат его не знает) — **сделано**: `archive.List`, unxed/zipper#36, v0.1.179 |
 | Z2 | Извлечь выделенное | `NewExtractor` извлекает всё | `Options.Include []string` — пути внутри архива, каталог включает поддерево |
 | Z3 | Test | нет | проверка целостности без записи на диск, с `Progresser` и списком ошибок по файлам |
 | Z4 | Режим «спрашивать» при перезаписи | `KeepOldFiles` / `KeepNewerFiles` / перезапись | обратный вызов на конфликт имён (заменить / пропустить / отменить) |
@@ -64,6 +64,9 @@ Remove; 7z и rar — нет, это capability в zipgui), форматы за�
    *Готово:* REFERENCE и `engine.Formats` влиты.
 3. **API zipper.** Тикет в unxed/zipper с атомарным планом Z1–Z6 (по PR на пункт), первый PR —
    Z1 (листинг с метаданными), тег zipper выпущен. *Готово:* тикет заведён, Z1 влит, ссылка здесь.
+   **Сделано:** тикет unxed/zipper#35; Z1 — unxed/zipper#36, Z7 (индекс tar после изменения) —
+   unxed/zipper#37; тег v0.1.179. В zipgui — версия zipper поднята, `engine.List` / `engine.Entry`,
+   строка-сводка показывает сжатый размер и степень сжатия.
 4. **Окно со списком (только чтение).** Сначала библиотека (L1), подшагами по одному PR:
    4a. core: `Window.AddTable(columns []TableColumn) (*Table, error)`, `SetRows`, `Selected`,
        `Activated`, `HeaderClicked(col)`; headless-реализация и тест модели; capability
@@ -112,7 +115,8 @@ Remove; 7z и rar — нет, это capability в zipgui), форматы за�
   `-tags tarindex_simple` (индекс tar без SQLite), потом — разговор в тикете.
 * Индекс tar, который `OpenFS` держит в кэше (путь — по абсолютному имени архива), после
   изменения архива (`NewUpdater`) не перестраивается: `tar.NewFS` (unxed/tar v0.1.137) строит
-  индекс, только если его файла нет, и листинг показывает старое содержимое. Пункт для тикета
-  zipper (шаг 3); до исправления после изменения читать архив со свежим `Options.IndexPath`
-  (так делает тест `engine.TestFormatsMatchZipper`; шаг 9).
+  индекс, только если его файла нет, и листинг показывает старое содержимое. Исправлено в zipper
+  v0.1.179 (Z7, unxed/zipper#37): имя индекса несёт отпечаток архива; `engine.TestFormatsMatchZipper`
+  читает изменённый архив через обычный `Open`. Свой `Options.IndexPath` по-прежнему не
+  перестраивается сам — не задавать его без нужды.
 * Docs-only PR не запускает CI: шаг без кода не может получить обязательные проверки.

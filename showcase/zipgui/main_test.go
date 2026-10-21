@@ -27,9 +27,16 @@ func TestHumanSize(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	got := describe("a.zip", engine.Summary{Files: 2, Dirs: 1, Size: 11})
-	want := "a.zip — файлов: 2, папок: 1, 11 Б"
-	if got != want {
-		t.Fatalf("describe = %q, want %q", got, want)
+	for _, tc := range []struct {
+		s    engine.Summary
+		want string
+	}{
+		{engine.Summary{Files: 2, Dirs: 1, Size: 11, Packed: -1}, "a.zip — файлов: 2, папок: 1, 11 Б"},
+		{engine.Summary{Files: 2, Dirs: 1, Size: 2048, Packed: 512}, "a.zip — файлов: 2, папок: 1, 2.0 КБ, сжато: 512 Б (25 %)"},
+		{engine.Summary{Dirs: 1}, "a.zip — файлов: 0, папок: 1, 0 Б"},
+	} {
+		if got := describe("a.zip", tc.s); got != tc.want {
+			t.Errorf("describe(%+v) = %q, want %q", tc.s, got, tc.want)
+		}
 	}
 }
