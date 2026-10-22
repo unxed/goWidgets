@@ -2,15 +2,15 @@
 // github.com/unxed/zipper engine with the UX of a classic single-window
 // archiver (ADR-0019, docs/zipgui/PLAN.md).
 //
-// Step 1 is the frame: open an archive (argument or «Открыть…») and see what
-// it holds in one line (since step 3 with the packed size and ratio, from
-// zipper's listing). The list, navigation and commands come in later steps.
+// The window opens an archive (argument or «Открыть…»), lists its root, and
+// navigates directories inside it (docs/zipgui/PLAN.md, steps 4f and 5).
 //
 //	go run . [archive]                            # from showcase/zipgui
 //	goWidgets_BACKEND=headless go run . [archive] # no window system
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -23,6 +23,7 @@ import (
 	_ "github.com/unxed/goWidgets/backends/qt"
 	_ "github.com/unxed/goWidgets/backends/win32"
 	"github.com/unxed/goWidgets/showcase/zipgui/engine"
+	"github.com/unxed/goWidgets/showcase/zipgui/listing"
 )
 
 const hint = "Откройте архив: кнопка «Открыть…» или zipgui <архив>"
@@ -45,16 +46,55 @@ func main() {
 		log.Fatal(err)
 	}
 
-	open, err := win.AddButton("Открыть…")
+	ui, err := newZipGUI(app, win)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if len(os.Args) > 1 {
+		if err := ui.open(os.Args[1]); err != nil {
+			log.Print(err)
+		}
+	}
+
+	if err := app.Run(win); err != nil {
+		log.Fatal(err)
+	}
+}
+
+type zipGUI struct {
+	win    *goWidgets.Window
+	table  *goWidgets.Table
+	path   *goWidgets.Label
+	status *goWidgets.Label
+
+	tree *listing.Tree
+	nav  listing.Nav
+}
+
+func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
+	open, err := win.AddButton("Открыть…")
+	if err != nil {
+		return nil, err
 	}
 	status, err := win.AddLabel(hint)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
+	}
+	pathLabel, err := win.AddLabel("/")
+	if err != nil {
+		return nil, err
+	}
+	table, err := win.AddTable([]goWidgets.TableColumn{
+		{Title: "Name"},
+		{Title: "Size", Align: goWidgets.AlignRight},
+		{Title: "Packed", Align: goWidgets.AlignRight},
+		{Title: "Modified"},
+		{Title: "CRC32"},
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	// Command row on top, the summary line under it across the window.
 	const pad = 8
 	if err := win.Constrain(
 		open.Left().Eq(win.Left().Plus(pad)),
@@ -62,33 +102,106 @@ func main() {
 		status.Left().Eq(open.Left()),
 		status.Top().Eq(open.Bottom().Plus(pad)),
 		status.Right().Eq(win.Right().Minus(pad)),
+		pathLabel.Left().Eq(status.Left()),
+		pathLabel.Top().Eq(status.Bottom().Plus(pad)),
+		table.Left().Eq(pathLabel.Left()),
+		table.Right().Eq(status.Right()),
+		table.Top().Eq(pathLabel.Bottom().Plus(pad)),
+		table.Bottom().Eq(win.Bottom().Minus(pad)),
 	); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	open.HugWidth()
 
-	show := func(path string) {
-		s, err := engine.Open(path)
-		if err != nil {
-			status.Text.Set(fmt.Sprintf("Не удалось открыть %s: %v", filepath.Base(path), err))
-			return
-		}
-		win.Title.Set("zipgui — " + filepath.Base(path))
-		status.Text.Set(describe(filepath.Base(path), s))
-	}
+	ui := &zipGUI{win: win, table: table, path: pathLabel, status: status}
 	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
-		if path, ok := win.OpenFile("Открыть архив", archiveFilter); ok {
-			show(path)
+		if file, ok := win.OpenFile("Открыть архив", archiveFilter); ok {
+			if err := ui.open(file); err != nil {
+				status.Text.Set(err.Error())
+			}
 		}
 	})
-	if len(os.Args) > 1 {
-		show(os.Args[1])
-	}
+	table.Activated.On(app.Scope(), func(row int) {
+		if ui.tree == nil {
+			return
+		}
+		entries := ui.visible()
+		if row < 0 || row >= len(entries) {
+			return
+		}
+		entry := entries[row]
+		if !entry.IsDir {
+			return // Viewing files is outside the 12-step plan.
+		}
+		if entry.Name == ".." {
+			ui.nav.Up()
+		} else {
+			ui.nav.Enter(entry.Name)
+		}
+		ui.render()
+	})
+	win.KeyPressed().On(app.Scope(), func(key goWidgets.Key) {
+		if key.KeyDown && key.VirtualKeyCode == 0x08 && ui.tree != nil { // VK_BACK
+			ui.nav.Up()
+			ui.render()
+		}
+	})
 	open.Focus()
+	return ui, nil
+}
 
-	if err := app.Run(win); err != nil {
-		log.Fatal(err)
+func (ui *zipGUI) open(file string) error {
+	entries, err := engine.List(context.Background(), file)
+	if err != nil {
+		return fmt.Errorf("Не удалось открыть %s: %w", filepath.Base(file), err)
 	}
+	ui.tree = listing.NewTree(entries)
+	ui.nav = listing.Nav{}
+	ui.win.Title.Set("zipgui — " + filepath.Base(file))
+	ui.status.Text.Set(describe(filepath.Base(file), engine.SummaryOf(entries)))
+	ui.render()
+	return nil
+}
+
+func (ui *zipGUI) visible() []engine.Entry {
+	entries := ui.tree.Children(ui.nav.Path())
+	if ui.nav.Path() == "/" {
+		return entries
+	}
+	return append([]engine.Entry{{Name: "..", IsDir: true}}, entries...)
+}
+
+func (ui *zipGUI) render() {
+	if ui.tree == nil {
+		return
+	}
+	ui.path.Text.Set(ui.nav.Path())
+	entries := ui.visible()
+	rows := make([][]string, len(entries))
+	for i, entry := range entries {
+		if entry.Name == ".." {
+			rows[i] = []string{"..", "", "", "", ""}
+			continue
+		}
+		name := entry.Name
+		if entry.IsDir {
+			name += "/"
+		}
+		packed := "—"
+		if entry.Packed >= 0 {
+			packed = humanSize(entry.Packed)
+		}
+		modified := ""
+		if !entry.Modified.IsZero() {
+			modified = entry.Modified.Format("2006-01-02 15:04")
+		}
+		crc := ""
+		if entry.CRC32 != 0 {
+			crc = fmt.Sprintf("%08X", entry.CRC32)
+		}
+		rows[i] = []string{name, humanSize(entry.Size), packed, modified, crc}
+	}
+	ui.table.SetRows(rows)
 }
 
 // describe is the summary line for an opened archive. The packed size and

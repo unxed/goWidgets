@@ -1,8 +1,13 @@
 package main
 
 import (
+	"archive/zip"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/unxed/goWidgets"
+	"github.com/unxed/goWidgets/backends/headless"
 	"github.com/unxed/goWidgets/showcase/zipgui/engine"
 )
 
@@ -38,5 +43,70 @@ func TestDescribe(t *testing.T) {
 		if got := describe("a.zip", tc.s); got != tc.want {
 			t.Errorf("describe(%+v) = %q, want %q", tc.s, got, tc.want)
 		}
+	}
+}
+
+func TestArchiveNavigationWindow(t *testing.T) {
+	t.Setenv("goWidgets_BACKEND", "headless")
+	archivePath := filepath.Join(t.TempDir(), "nested.zip")
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(file)
+	entry, err := zw.Create("sub/b.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("content")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	app, err := goWidgets.NewApp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	win, err := app.NewWindow("zipgui test", 640, 400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui, err := newZipGUI(app, win)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ui.open(archivePath); err != nil {
+		t.Fatal(err)
+	}
+	if rows := ui.table.Rows(); len(rows) != 1 || rows[0][0] != "sub/" {
+		t.Fatalf("root rows = %v, want only sub/", rows)
+	}
+	if !headless.OpenTableRow(0) {
+		t.Fatal("headless did not activate the sub directory")
+	}
+	pump(app)
+	if got := ui.path.Text.Get(); got != "/sub" {
+		t.Fatalf("path after opening sub = %q, want /sub", got)
+	}
+	if rows := ui.table.Rows(); len(rows) != 2 || rows[0][0] != ".." || rows[1][0] != "b.txt" {
+		t.Fatalf("sub rows = %v, want .. and b.txt", rows)
+	}
+
+	win.KeyPressed().Emit(goWidgets.Key{VirtualKeyCode: 0x08, KeyDown: true}) // VK_BACK
+	if got := ui.path.Text.Get(); got != "/" {
+		t.Fatalf("path after Backspace = %q, want /", got)
+	}
+	if rows := ui.table.Rows(); len(rows) != 1 || rows[0][0] != "sub/" {
+		t.Fatalf("root rows after Backspace = %v, want only sub/", rows)
+	}
+}
+
+func pump(app *goWidgets.App) {
+	for i := 0; i < 8 && app.PumpOnce(); i++ {
 	}
 }
