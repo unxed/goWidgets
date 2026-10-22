@@ -47,17 +47,18 @@ type Node struct {
 	// widget was cheapest to stretch — a 444-pixel-tall text field in pixy.
 	SingleLine bool
 
-	OnClicked     func()
-	OnToggled     func(bool)
-	OnTextChanged func(string)
-	OnActivated   func(string)
-	OnSelected    func(int, string)
-	OnItemOpened  func(int, string)
-	OnCanvasPaint func(*CanvasFrame)
-	OnCanvasMouse func(EventKind, MouseInfo)
-	OnCanvasScale func(float64)
-	canvasFrame   *CanvasFrame
-	paintDirty    bool
+	OnClicked       func()
+	OnToggled       func(bool)
+	OnTextChanged   func(string)
+	OnActivated     func(string)
+	OnSelected      func(int, string)
+	OnItemOpened    func(int, string)
+	OnHeaderClicked func(int)
+	OnCanvasPaint   func(*CanvasFrame)
+	OnCanvasMouse   func(EventKind, MouseInfo)
+	OnCanvasScale   func(float64)
+	canvasFrame     *CanvasFrame
+	paintDirty      bool
 
 	// Vars are the node's Cassowary variables (core/layout.go).
 	Vars *Vars
@@ -236,7 +237,7 @@ func (a *App) NewNode(kind WidgetKind) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{H: h, Kind: kind, Parent: a.root, Visible: true, Vars: newVars(h),
-		Stretchy:   kind == KindListBox || kind == KindTextView || kind == KindImageView || kind == KindCanvas,
+		Stretchy:   kind == KindListBox || kind == KindTable || kind == KindTextView || kind == KindImageView || kind == KindCanvas,
 		SingleLine: kind == KindButton || kind == KindCheckBox || kind == KindEdit || kind == KindComboBox}
 	if kind == KindCanvas {
 		n.paintDirty = true
@@ -393,6 +394,10 @@ func (a *App) dispatch(ev BackendEvent) {
 	case EventItemActivated:
 		if n := a.nodes[ev.H]; n != nil && n.OnItemOpened != nil {
 			n.OnItemOpened(ev.Int, ev.Text)
+		}
+	case EventHeaderClicked:
+		if n := a.nodes[ev.H]; n != nil && n.OnHeaderClicked != nil {
+			n.OnHeaderClicked(ev.Int)
 		}
 	case EventMouseDown, EventMouseUp, EventMouseMove, EventMouseWheel:
 		if n := a.nodes[ev.H]; n != nil && n.OnCanvasMouse != nil {

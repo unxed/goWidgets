@@ -59,6 +59,8 @@ const (
 	// KindListBox is a scrolling list of strings with one selected —
 	// GtkListBox in a scrolled window on GTK, LISTBOX on Win32.
 	KindListBox
+	// KindTable displays rows of cells under a set of column headers.
+	KindTable
 	// KindImageView displays one image file, scaled to fit its allocated area.
 	KindImageView
 	KindCanvas
@@ -80,6 +82,8 @@ func (k WidgetKind) String() string {
 		return "ComboBox"
 	case KindListBox:
 		return "ListBox"
+	case KindTable:
+		return "Table"
 	case KindImageView:
 		return "ImageView"
 	case KindCanvas:
@@ -187,6 +191,20 @@ type Caps struct {
 	MaxCallbacks    int
 }
 
+// Align is the horizontal alignment of a table column.
+type Align uint8
+
+const (
+	AlignLeft Align = iota
+	AlignRight
+)
+
+// TableColumn describes one table column.
+type TableColumn struct {
+	Title string
+	Align Align
+}
+
 // EventKind classifies a backend event.
 type EventKind uint8
 
@@ -214,6 +232,8 @@ const (
 	// EventItemActivated is a list item opened (double-click or Enter);
 	// Int is its index, Text its text.
 	EventItemActivated
+	// EventHeaderClicked reports a clicked table column in Int.
+	EventHeaderClicked
 	EventMouseDown
 	EventMouseUp
 	EventMouseMove
@@ -427,4 +447,12 @@ type FolderDialogWindow interface {
 	// FolderDialog asks the user to select an existing directory. initial is
 	// the directory to show first; an empty path leaves that choice to the OS.
 	FolderDialog(title, initial string) (path string, ok bool)
+}
+
+// TableWindow is an optional extension for drivers with a native table view.
+// Drivers advertise Caps.GridView only when they implement this interface.
+type TableWindow interface {
+	SetTableColumns(h Handle, cols []TableColumn)
+	SetTableRows(h Handle, rows [][]string)
+	SetSortIndicator(h Handle, col int, descending bool)
 }

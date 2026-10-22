@@ -11,6 +11,7 @@
 package goWidgets
 
 import (
+	"strings"
 	"time"
 
 	"github.com/unxed/goWidgets/core"
@@ -33,6 +34,10 @@ type (
 	Modifiers   = core.Modifiers
 	// DriverInfo answers "why am I not seeing native controls?".
 	DriverInfo = core.DriverInfo
+	// Align is a table column's horizontal alignment.
+	Align = core.Align
+	// TableColumn describes a table column.
+	TableColumn = core.TableColumn
 	// Scope owns subscriptions.
 	Scope = vreactive.Scope
 )
@@ -45,6 +50,8 @@ const (
 	ModShift    = core.ModShift
 	ModControl  = core.ModControl
 	ModAlt      = core.ModAlt
+	AlignLeft   = core.AlignLeft
+	AlignRight  = core.AlignRight
 )
 
 // ClickInfo carries the details of a click. Empty in iteration 1; it exists so
@@ -554,6 +561,151 @@ func (lb *ListBox) Select(i int) {
 
 // SelectedIndex is the selected item's index, -1 when none.
 func (lb *ListBox) SelectedIndex() int { return lb.selected }
+
+// Table displays rows of strings under native column headers when the backend
+// supports GridView. Otherwise it uses a ListBox with aligned, joined cells.
+type Table struct {
+	*widget
+	Selected      *vreactive.Event[int]
+	Activated     *vreactive.Event[int]
+	HeaderClicked *vreactive.Event[int]
+
+	columns  []TableColumn
+	rows     [][]string
+	selected int
+	fallback *ListBox
+	native   core.TableWindow
+}
+
+// AddTable appends a table. Drivers without TableWindow support get a ListBox
+// representation; HeaderClicked is unavailable in that fallback.
+func (w *Window) AddTable(cols []TableColumn) (*Table, error) {
+	t := &Table{
+		Selected:      vreactive.NewEvent[int](),
+		Activated:     vreactive.NewEvent[int](),
+		HeaderClicked: vreactive.NewEvent[int](),
+		columns:       append([]TableColumn(nil), cols...),
+		selected:      -1,
+	}
+	if tw, ok := w.app.eng.Window().(core.TableWindow); ok {
+		wd, err := w.newWidget(core.KindTable, "")
+		if err != nil {
+			return nil, err
+		}
+		t.widget, t.native = wd, tw
+		t.native.SetTableColumns(wd.node.H, t.columns)
+		wd.node.OnSelected = func(i int, _ string) {
+			if i == t.selected {
+				return
+			}
+			t.selected = i
+			t.Selected.Emit(i)
+		}
+		wd.node.OnItemOpened = func(i int, _ string) { t.Activated.Emit(i) }
+		wd.node.OnHeaderClicked = func(i int) { t.HeaderClicked.Emit(i) }
+		return t, nil
+	}
+	lb, err := w.AddListBox(nil)
+	if err != nil {
+		return nil, err
+	}
+	t.widget, t.fallback = lb.widget, lb
+	lb.Selected.On(w.app.scope, func(i int) {
+		t.selected = i
+		t.Selected.Emit(i)
+	})
+	lb.Activated.On(w.app.scope, func(i int) { t.Activated.Emit(i) })
+	return t, nil
+}
+
+// SetRows replaces the table contents and clears its selection.
+func (t *Table) SetRows(rows [][]string) {
+	t.rows = cloneRows(rows)
+	t.selected = -1
+	if t.native != nil {
+		t.native.SetTableRows(t.node.H, cloneRows(t.rows))
+		t.app.eng.Invalidate()
+		return
+	}
+	if t.fallback != nil {
+		t.fallback.SetItems(t.fallbackRows())
+		t.app.eng.Invalidate()
+	}
+}
+
+// Rows returns a copy of the table contents.
+func (t *Table) Rows() [][]string { return cloneRows(t.rows) }
+
+// Select selects a row by index, or clears selection with -1.
+func (t *Table) Select(i int) {
+	if i < -1 || i >= len(t.rows) {
+		i = -1
+	}
+	t.selected = i
+	if t.fallback != nil {
+		t.fallback.Select(i)
+	} else {
+		t.app.eng.Window().SetInt(t.node.H, core.PropSelected, i)
+	}
+}
+
+// SelectedIndex is the selected row, or -1 when none.
+func (t *Table) SelectedIndex() int { return t.selected }
+
+// SetSortIndicator asks the backend to display the sort direction; sorting is
+// deliberately left to the application. col -1 clears the indicator.
+func (t *Table) SetSortIndicator(col int, descending bool) {
+	if t.native != nil {
+		t.native.SetSortIndicator(t.node.H, col, descending)
+	}
+}
+
+// Fallback reports whether this table is represented by a ListBox.
+func (t *Table) Fallback() bool { return t.fallback != nil }
+
+func (t *Table) fallbackRows() []string {
+	widths := make([]int, len(t.columns))
+	for i, col := range t.columns {
+		widths[i] = len([]rune(col.Title))
+	}
+	for _, row := range t.rows {
+		for i, cell := range row {
+			if i < len(widths) && len([]rune(cell)) > widths[i] {
+				widths[i] = len([]rune(cell))
+			}
+		}
+	}
+	out := make([]string, len(t.rows))
+	for ri, row := range t.rows {
+		cells := make([]string, len(t.columns))
+		for ci := range cells {
+			cell := ""
+			if ci < len(row) {
+				cell = row[ci]
+			}
+			padding := widths[ci] - len([]rune(cell))
+			if padding > 0 {
+				spaces := strings.Repeat(" ", padding)
+				if t.columns[ci].Align == AlignRight {
+					cell = spaces + cell
+				} else {
+					cell += spaces
+				}
+			}
+			cells[ci] = cell
+		}
+		out[ri] = strings.Join(cells, "  │  ")
+	}
+	return out
+}
+
+func cloneRows(rows [][]string) [][]string {
+	copyRows := make([][]string, len(rows))
+	for i := range rows {
+		copyRows[i] = append([]string(nil), rows[i]...)
+	}
+	return copyRows
+}
 
 // CheckBox is a native check box. Checked is two-way: setting it moves the
 // control, and the user moving the control updates it.

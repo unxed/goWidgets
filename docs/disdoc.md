@@ -272,6 +272,11 @@ type Caps struct {
 }
 ```
 
+`GridView` is advertised only by a driver whose window implements the optional
+`core.TableWindow` extension. The public `Window.AddTable` API uses that native
+table contract when available and otherwise provides its aligned `ListBox`
+fallback; a driver must not claim `GridView` for that fallback.
+
 > Ключевые исправления против v1: появились `CreateWidget`/`DestroyWidget`,
 > `MeasureIntrinsic`, `Caps`; `UpdateLayout(map[string]Rect)` заменён на батч-диф по
 > `Handle` (строковые ID хрупки и требуют уникальности во всём приложении).
