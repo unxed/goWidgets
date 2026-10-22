@@ -163,28 +163,31 @@ const (
 type driver struct {
 	win *window
 
-	cbClicked      uintptr
-	cbToggled      uintptr
-	cbEntryChanged uintptr
-	cbComboChanged uintptr
-	cbRowSelected  uintptr
-	cbRowActivated uintptr
-	cbEntryEnter   uintptr
-	cbKeyPress     uintptr
-	cbKeyRelease   uintptr
-	cbTrayActivate uintptr
-	cbTrayPopup    uintptr
-	cbMenuItem     uintptr
-	cbDelete       uintptr
-	cbAlloc        uintptr
-	cbCanvasDraw   uintptr
-	cbCanvasInput  [4]uintptr
-	cbCanvasScale  uintptr
-	cbWake         uintptr
-	cbQuit         uintptr
-	pump           func()
-	pumpMu         sync.Mutex
-	initedOnce     bool
+	cbClicked        uintptr
+	cbToggled        uintptr
+	cbEntryChanged   uintptr
+	cbComboChanged   uintptr
+	cbRowSelected    uintptr
+	cbRowActivated   uintptr
+	cbTableSelected  uintptr
+	cbTableActivated uintptr
+	cbTableHeader    uintptr
+	cbEntryEnter     uintptr
+	cbKeyPress       uintptr
+	cbKeyRelease     uintptr
+	cbTrayActivate   uintptr
+	cbTrayPopup      uintptr
+	cbMenuItem       uintptr
+	cbDelete         uintptr
+	cbAlloc          uintptr
+	cbCanvasDraw     uintptr
+	cbCanvasInput    [4]uintptr
+	cbCanvasScale    uintptr
+	cbWake           uintptr
+	cbQuit           uintptr
+	pump             func()
+	pumpMu           sync.Mutex
+	initedOnce       bool
 }
 
 func (d *driver) Name() string { return "gtk" }
@@ -198,6 +201,7 @@ func (d *driver) Capabilities() core.Caps {
 		Menus:           true,
 		SmoothAnimation: true,
 		Canvas:          true,
+		GridView:        true,
 		TrayIcon:        true, // GtkStatusIcon; see the note in tray_linux.go
 		MaxCallbacks:    2000, // purego's callback pool
 	}
@@ -316,6 +320,9 @@ func (d *driver) Init() error {
 	purego.RegisterLibFunc(&gtkAllocH, lib, "gtk_widget_get_allocated_height")
 	purego.RegisterLibFunc(&gSignalConnect, gobj, "g_signal_connect_data")
 	purego.RegisterLibFunc(&gIdleAdd, glib, "g_idle_add")
+	if err := d.initTable(lib, gobj); err != nil {
+		return err
+	}
 	if err := d.initCanvas(lib); err != nil {
 		return err
 	}
@@ -548,7 +555,10 @@ type node struct {
 	inner         uintptr // the text view itself, when different from handle
 	kind          core.WidgetKind
 	items         []string // list box rows, for event text
-	path          string   // image view file
+	tableModel    uintptr
+	tableColumns  []uintptr
+	tableRows     int
+	path          string // image view file
 	canvasFrame   *core.CanvasFrame
 	canvasSurface uintptr
 	canvasWidth   int32
@@ -631,6 +641,24 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 		gtkFixedPut(w.fixed, sw, 0, 0)
 		gtkWidgetShow(sw)
 		return h, nil
+	case core.KindTable:
+		view := gtkTreeViewNew()
+		if view == 0 {
+			return 0, fmt.Errorf("gtk: table constructor returned NULL")
+		}
+		selection := gtkTreeViewGetSelection(view)
+		gtkTreeSelectionSetMode(selection, 1) // GTK_SELECTION_SINGLE
+		gSignalConnect(selection, "changed", w.drv.cbTableSelected, uintptr(h), 0, 0)
+		gSignalConnect(view, "row-activated", w.drv.cbTableActivated, uintptr(h), 0, 0)
+		sw := gtkScrollNew(0, 0)
+		const policyNever, policyAutomatic = 2, 1
+		gtkScrollPolicy(sw, policyNever, policyAutomatic)
+		gtkContAdd(sw, view)
+		gtkWidgetShow(view)
+		w.nodes[h] = &node{handle: sw, inner: view, kind: kind}
+		gtkFixedPut(w.fixed, sw, 0, 0)
+		gtkWidgetShow(sw)
+		return h, nil
 	case core.KindTextView:
 		// A text view goes inside a scrolled window: the scroller is what the
 		// layout places and sizes, the view is what holds the text. Read-only
@@ -688,6 +716,11 @@ func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Ha
 
 func (w *window) DestroyWidget(h core.Handle) {
 	if n := w.nodes[h]; n != nil {
+		if n.kind == core.KindTable && n.tableModel != 0 {
+			gtkTreeViewSetModel(n.inner, 0)
+			gObjectUnref(n.tableModel)
+			n.tableModel = 0
+		}
 		if n.canvasSurface != 0 {
 			cairoSurfaceDestroy(n.canvasSurface)
 		}
@@ -1034,8 +1067,21 @@ func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
 		} else if row := gtkListRowAt(n.inner, int32(v)); row != 0 {
 			gtkListSelect(n.inner, row)
 		}
+	case core.KindTable:
+		selection := gtkTreeViewGetSelection(n.inner)
+		if v < 0 {
+			gtkTreeSelectionUnselectAll(selection)
+		} else {
+			path := gtkTreePathNewFromString(fmt.Sprint(v))
+			if path != 0 {
+				gtkTreeSelectionSelectPath(selection, path)
+				gtkTreePathFree(path)
+			}
+		}
 	}
 }
+
+var _ core.TableWindow = (*window)(nil)
 
 func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
 	n := w.nodes[h]
@@ -1091,6 +1137,9 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 		}
 		return core.Size{W: float64(mn.Width), H: float64(mn.Height)},
 			core.Size{W: float64(lnat.Width) + scrollbarW, H: h}
+	}
+	if n.kind == core.KindTable {
+		return n.tableIntrinsic()
 	}
 	return core.Size{W: float64(mn.Width), H: float64(mn.Height)},
 		core.Size{W: float64(nat.Width), H: float64(nat.Height)}
