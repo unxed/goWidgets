@@ -45,13 +45,28 @@ type Extractor interface {
 	CurrentFile() string
 }
 
+type extractor struct {
+	archive.Extractor
+}
+
+func (e extractor) CurrentFile() string {
+	if current, ok := e.Extractor.(archive.CurrentFiler); ok {
+		return current.CurrentFile()
+	}
+	return ""
+}
+
 // NewExtractor starts extracting archive paths into destination. An empty
 // include list means all entries; keepOld skips existing destination files.
 func NewExtractor(filename, destination string, include []string, keepOld bool) (Extractor, error) {
-	return archive.NewExtractor(filename, destination, archive.Options{
+	inner, err := archive.NewExtractor(filename, destination, archive.Options{
 		Include:      include,
 		KeepOldFiles: keepOld,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return extractor{Extractor: inner}, nil
 }
 
 // List returns every entry of the archive at path, directories included, in
