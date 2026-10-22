@@ -52,7 +52,7 @@ func (d *driver) Init() error {
 }
 
 func (d *driver) Capabilities() core.Caps {
-	return core.Caps{NativeControls: false, Canvas: true, MaxCallbacks: 1 << 30}
+	return core.Caps{NativeControls: false, Canvas: true, GridView: true, MaxCallbacks: 1 << 30}
 }
 
 func (d *driver) CreateWindow(spec core.WindowSpec) (core.BackendWindow, error) {
@@ -112,6 +112,10 @@ type node struct {
 
 	items    []string // combo box
 	selected int
+	columns  []core.TableColumn
+	rows     [][]string
+	sortCol  int
+	sortDesc bool
 	bounds   core.Rect
 }
 
@@ -149,7 +153,7 @@ func (w *window) Events() <-chan core.BackendEvent { return w.events }
 func (w *window) CreateWidget(kind core.WidgetKind, parent core.Handle) (core.Handle, error) {
 	w.nextH++
 	h := w.nextH
-	w.nodes[h] = &node{kind: kind, parent: parent, enabled: true, visible: true, selected: -1}
+	w.nodes[h] = &node{kind: kind, parent: parent, enabled: true, visible: true, selected: -1, sortCol: -1}
 	return h, nil
 }
 
@@ -373,7 +377,40 @@ func (w *window) SetInt(h core.Handle, p core.PropKey, v int) {
 			default:
 			}
 		}
+		if n.kind == core.KindTable {
+			select {
+			case w.events <- core.BackendEvent{Kind: core.EventSelected, H: h, Int: v}:
+			default:
+			}
+		}
 	}
+}
+
+func (w *window) SetTableColumns(h core.Handle, cols []core.TableColumn) {
+	if n := w.nodes[h]; n != nil && n.kind == core.KindTable {
+		n.columns = append([]core.TableColumn(nil), cols...)
+	}
+}
+
+func (w *window) SetTableRows(h core.Handle, rows [][]string) {
+	if n := w.nodes[h]; n != nil && n.kind == core.KindTable {
+		n.rows = cloneTableRows(rows)
+		n.selected = -1
+	}
+}
+
+func (w *window) SetSortIndicator(h core.Handle, col int, descending bool) {
+	if n := w.nodes[h]; n != nil && n.kind == core.KindTable {
+		n.sortCol, n.sortDesc = col, descending
+	}
+}
+
+func cloneTableRows(rows [][]string) [][]string {
+	out := make([][]string, len(rows))
+	for i := range rows {
+		out[i] = append([]string(nil), rows[i]...)
+	}
+	return out
 }
 
 func (w *window) SetList(h core.Handle, p core.PropKey, items []string) {
@@ -391,6 +428,53 @@ func PickListItem(i int) bool { return pick(core.KindListBox, i, core.EventSelec
 
 // OpenListItem double-clicks an item in the first list box.
 func OpenListItem(i int) bool { return pick(core.KindListBox, i, core.EventItemActivated) }
+
+// PickTableRow simulates the user selecting a table row.
+func PickTableRow(i int) bool { return pickTable(i, core.EventSelected) }
+
+// OpenTableRow simulates the user activating a table row.
+func OpenTableRow(i int) bool { return pickTable(i, core.EventItemActivated) }
+
+// ClickTableHeader simulates clicking a table column header.
+func ClickTableHeader(col int) bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind == core.KindTable && col >= 0 && col < len(n.columns) {
+			current.events <- core.BackendEvent{Kind: core.EventHeaderClicked, H: h, Int: col}
+			return true
+		}
+	}
+	return false
+}
+
+func pickTable(i int, ev core.EventKind) bool {
+	if current == nil {
+		return false
+	}
+	for h, n := range current.nodes {
+		if n.kind == core.KindTable && i >= 0 && i < len(n.rows) {
+			n.selected = i
+			current.events <- core.BackendEvent{Kind: ev, H: h, Int: i}
+			return true
+		}
+	}
+	return false
+}
+
+// TableState reports the first table's columns, rows, selection and sort arrow.
+func TableState() (cols []core.TableColumn, rows [][]string, selected, sortCol int, descending, ok bool) {
+	if current == nil {
+		return nil, nil, -1, -1, false, false
+	}
+	for _, n := range current.nodes {
+		if n.kind == core.KindTable {
+			return append([]core.TableColumn(nil), n.columns...), cloneTableRows(n.rows), n.selected, n.sortCol, n.sortDesc, true
+		}
+	}
+	return nil, nil, -1, -1, false, false
+}
 
 func pick(kind core.WidgetKind, i int, ev core.EventKind) bool {
 	if current == nil {
@@ -463,11 +547,18 @@ func (w *window) MeasureIntrinsic(h core.Handle, avail core.Size) (min, natural 
 	case core.KindEdit:
 		h := LineHeight + 2*EditPadY
 		return core.Size{W: EditMinW, H: h}, core.Size{W: EditW, H: h}
-	case core.KindListBox:
+	case core.KindListBox, core.KindTable:
 		// A list wants room for its rows but must shrink: the minimum is
 		// a few rows, the natural eight, and the layout decides the rest.
 		widest := 0.0
-		for _, it := range n.items {
+		items := n.items
+		if n.kind == core.KindTable {
+			items = make([]string, len(n.rows))
+			for i, row := range n.rows {
+				items[i] = strings.Join(row, "  │  ")
+			}
+		}
+		for _, it := range items {
 			if w := float64(len([]rune(it))) * CharWidth; w > widest {
 				widest = w
 			}
