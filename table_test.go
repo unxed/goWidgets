@@ -128,19 +128,30 @@ type noGridWindow struct {
 }
 
 func (*noGridWindow) SetTitle(string) {}
+
 func (*noGridWindow) Show() {}
+
 func (*noGridWindow) Close() {}
+
 func (*noGridWindow) Scale() core.ScaleInfo { return core.ScaleInfo{Scale: 1, FontScale: 1} }
+
 func (w *noGridWindow) CreateWidget(core.WidgetKind, core.Handle) (core.Handle, error) {
 	w.next++
 	return w.next, nil
 }
+
 func (*noGridWindow) DestroyWidget(core.Handle) {}
+
 func (*noGridWindow) SetParent(core.Handle, core.Handle, int) {}
+
 func (*noGridWindow) SetString(core.Handle, core.PropKey, string) {}
+
 func (*noGridWindow) SetBool(core.Handle, core.PropKey, bool) {}
+
 func (*noGridWindow) SetFloat(core.Handle, core.PropKey, float64) {}
+
 func (*noGridWindow) SetInt(core.Handle, core.PropKey, int) {}
+
 func (w *noGridWindow) SetList(_ core.Handle, _ core.PropKey, items []string) {
 	w.items = append([]string(nil), items...)
 }
@@ -148,18 +159,25 @@ func (w *noGridWindow) SetList(_ core.Handle, _ core.PropKey, items []string) {
 func (*noGridWindow) MeasureIntrinsic(core.Handle, core.Size) (core.Size, core.Size) {
 	return core.Size{}, core.Size{}
 }
+
 func (*noGridWindow) ApplyLayout([]core.BoundsChange) {}
+
 func (*noGridWindow) Focus(core.Handle) {}
+
 func (*noGridWindow) Dialog(core.DialogKind, string, string) core.DialogResult {
 	return core.DialogCancel
 }
+
 func (*noGridWindow) FileDialog(bool, string, string, []core.FileFilter) (string, bool) {
 	return "", false
 }
+
 func (w *noGridWindow) RootHandle() core.Handle { return w.root }
+
 func (w *noGridWindow) Events() <-chan core.BackendEvent { return w.events }
 
 func (*noGridDriver) Shutdown() {}
+
 func (*noGridDriver) CreateTray(core.TraySpec) (core.BackendTray, error) {
 	return nil, core.ErrNoTray
 }
