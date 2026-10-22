@@ -44,7 +44,6 @@ var (
 	gValueInit                    func(value *gtkGValue, typ uintptr) *gtkGValue
 	gValueSetString               func(value *gtkGValue, text string)
 	gValueUnset                   func(value *gtkGValue)
-	gObjectUnref                  func(object uintptr)
 )
 
 // gtkTreeIter and gtkGValue mirror GTK's pointer-free public ABI structs.
@@ -96,7 +95,6 @@ func (d *driver) initTable(gtkLib, gobjectLib uintptr) error {
 	purego.RegisterLibFunc(&gValueInit, gobjectLib, "g_value_init")
 	purego.RegisterLibFunc(&gValueSetString, gobjectLib, "g_value_set_string")
 	purego.RegisterLibFunc(&gValueUnset, gobjectLib, "g_value_unset")
-	purego.RegisterLibFunc(&gObjectUnref, gobjectLib, "g_object_unref")
 
 	d.cbTableSelected = purego.NewCallback(func(selection, data uintptr) uintptr {
 		h := core.Handle(data)
