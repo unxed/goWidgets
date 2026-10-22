@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/unxed/goWidgets"
 	"github.com/unxed/goWidgets/backends/headless"
@@ -89,7 +91,13 @@ func TestArchiveNavigationWindow(t *testing.T) {
 	if !headless.OpenTableRow(0) {
 		t.Fatal("headless did not activate the sub directory")
 	}
-	pump(app)
+	// Backend events are forwarded to the UI queue asynchronously. Pumping
+	// until the first idle frame can race the event-forwarding goroutine.
+	deadline := time.Now().Add(time.Second)
+	for ui.path.Text.Get() != "/sub" && time.Now().Before(deadline) {
+		app.PumpOnce()
+		runtime.Gosched()
+	}
 	if got := ui.path.Text.Get(); got != "/sub" {
 		t.Fatalf("path after opening sub = %q, want /sub", got)
 	}
@@ -103,10 +111,5 @@ func TestArchiveNavigationWindow(t *testing.T) {
 	}
 	if rows := ui.table.Rows(); len(rows) != 1 || rows[0][0] != "sub/" {
 		t.Fatalf("root rows after Backspace = %v, want only sub/", rows)
-	}
-}
-
-func pump(app *goWidgets.App) {
-	for i := 0; i < 8 && app.PumpOnce(); i++ {
 	}
 }
