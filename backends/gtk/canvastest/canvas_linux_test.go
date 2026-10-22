@@ -130,9 +130,15 @@ func TestCanvasDrawPointerAndScreenshot(t *testing.T) {
 			if inputErr == nil {
 				time.Sleep(100 * time.Millisecond)
 				// Other GTK package tests run in parallel and can raise their own
-				// windows between the left click and wheel tick. Re-target the
-				// Canvas window for the wheel instead of relying on stale stacking.
-				inputErr = exec.Command("xdotool", "windowraise", windowID, "mousemove", "--window", windowID, fmt.Sprint(coords[1]), fmt.Sprint(coords[2]), "click", "4").Run()
+				// windows between input events. Re-target the Canvas for several
+				// wheel ticks so a single overlapping window cannot lose the test.
+				for range 3 {
+					inputErr = exec.Command("xdotool", "windowraise", windowID, "mousemove", "--window", windowID, fmt.Sprint(coords[1]), fmt.Sprint(coords[2]), "click", "4").Run()
+					if inputErr != nil {
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
 			}
 		}
 		time.Sleep(180 * time.Millisecond)
