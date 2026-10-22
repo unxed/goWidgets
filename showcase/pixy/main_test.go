@@ -208,6 +208,29 @@ func TestArrowKeysPanOnlyWhenImageOverflows(t *testing.T) {
 	}
 }
 
+func TestMousePanStartsOnlyForLeftButtonWhenImageOverflows(t *testing.T) {
+	fitted := viewport.New(viewport.Size{W: 100, H: 100}, viewport.Size{W: 200, H: 200})
+	overflowing := viewport.New(viewport.Size{W: 400, H: 300}, viewport.Size{W: 100, H: 100})
+	overflowing.SetMode(viewport.Actual)
+
+	for _, tc := range []struct {
+		name  string
+		view  viewport.Viewport
+		mouse goWidgets.MouseInfo
+		want  bool
+	}{
+		{name: "fitted image", view: fitted, mouse: goWidgets.MouseInfo{Button: goWidgets.MouseLeft}},
+		{name: "left button pans overflowing image", view: overflowing, mouse: goWidgets.MouseInfo{Button: goWidgets.MouseLeft}, want: true},
+		{name: "other button does not pan", view: overflowing, mouse: goWidgets.MouseInfo{Button: goWidgets.MouseRight}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldStartMousePan(tc.view, tc.mouse); got != tc.want {
+				t.Errorf("shouldStartMousePan() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestZoomShortcutsMatchViewerControls(t *testing.T) {
 	for _, tt := range []struct {
 		key  rune
