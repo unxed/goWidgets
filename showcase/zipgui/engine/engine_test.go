@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"hash/crc32"
@@ -165,6 +166,87 @@ func TestExtractCanceledBeforeStart(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(destination, "a.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("cancelled extraction wrote a.txt: stat error = %v", err)
 	}
+}
+
+func TestTestZipIntegrityAndProgress(t *testing.T) {
+	for _, corrupt := range []bool{false, true} {
+		name := "valid"
+		if corrupt {
+			name = "corrupt"
+		}
+		t.Run(name, func(t *testing.T) {
+			filename := makeTestZip(t, corrupt)
+			var gotBytes, gotFiles int64
+			failures, err := Test(context.Background(), filename, func(bytes, files int64) {
+				gotBytes, gotFiles = bytes, files
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if corrupt {
+				if len(failures) != 1 || failures[0].Name != "payload.txt" || failures[0].Err == nil {
+					t.Fatalf("Test failures = %+v, want one payload.txt integrity error", failures)
+				}
+			} else if len(failures) != 0 {
+				t.Fatalf("Test failures = %+v, want none", failures)
+			}
+			if gotBytes != int64(len("integrity payload")) || gotFiles != 1 {
+				t.Fatalf("progress = (%d bytes, %d files), want (%d, 1)", gotBytes, gotFiles, len("integrity payload"))
+			}
+		})
+	}
+}
+
+func makeTestZip(t *testing.T, corrupt bool) string {
+	t.Helper()
+	filename := filepath.Join(t.TempDir(), "test.zip")
+	file, err := os.Create(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(file)
+	entry, err := zw.CreateHeader(&zip.FileHeader{Name: "payload.txt", Method: zip.Store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("integrity payload")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if corrupt {
+		zr, err := zip.OpenReader(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		offset, err := zr.File[0].DataOffset()
+		_ = zr.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.OpenFile(filename, os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := []byte{0}
+		if _, err := f.ReadAt(b, offset); err != nil {
+			_ = f.Close()
+			t.Fatal(err)
+		}
+		b[0] ^= 0xff
+		if _, err := f.WriteAt(b, offset); err != nil {
+			_ = f.Close()
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return filename
 }
 
 func TestSummaryOf(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/unxed/goWidgets"
@@ -75,6 +76,7 @@ type zipGUI struct {
 	mode          *goWidgets.ComboBox
 	extractButton *goWidgets.Button
 	cancelButton  *goWidgets.Button
+	testButton    *goWidgets.Button
 
 	archivePath string
 	entries     []engine.Entry
@@ -86,6 +88,10 @@ type zipGUI struct {
 
 func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	open, err := win.AddButton("Открыть…")
+	if err != nil {
+		return nil, err
+	}
+	testButton, err := win.AddButton("Проверить")
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +140,8 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	if err := win.Constrain(
 		open.Left().Eq(win.Left().Plus(pad)),
 		open.Top().Eq(win.Top().Plus(pad)),
+		testButton.Left().Eq(open.Right().Plus(pad)),
+		testButton.Top().Eq(open.Top()),
 		status.Left().Eq(open.Left()),
 		status.Top().Eq(open.Bottom().Plus(pad)),
 		status.Right().Eq(win.Right().Minus(pad)),
@@ -160,12 +168,13 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 		return nil, err
 	}
 	open.HugWidth()
+	testButton.HugWidth()
 	browse.HugWidth()
 	mode.HugWidth()
 	extractButton.HugWidth()
 	cancelButton.HugWidth()
 
-	ui := &zipGUI{app: app, win: win, table: table, path: pathLabel, status: status, dest: destination, mode: mode, extractButton: extractButton, cancelButton: cancelButton}
+	ui := &zipGUI{app: app, win: win, table: table, path: pathLabel, status: status, dest: destination, mode: mode, extractButton: extractButton, cancelButton: cancelButton, testButton: testButton}
 	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if file, ok := win.OpenFile("Открыть архив", archiveFilter); ok {
 			if err := ui.open(file); err != nil {
@@ -179,6 +188,7 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 		}
 	})
 	extractButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { ui.extract() })
+	testButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { ui.testArchive() })
 	cancelButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if ui.cancel != nil {
 			ui.cancel()
@@ -211,6 +221,87 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	})
 	open.Focus()
 	return ui, nil
+}
+
+func (ui *zipGUI) testArchive() {
+	if ui.archivePath == "" || ui.tree == nil {
+		ui.status.Text.Set("Сначала откройте архив")
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	archivePath := ui.archivePath
+	totalSize := ui.totalSize
+	ui.cancel = cancel
+	ui.extractButton.Enabled.Set(false)
+	ui.testButton.Enabled.Set(false)
+	ui.cancelButton.Enabled.Set(true)
+	var progressBytes, progressFiles atomic.Int64
+	go func() {
+		var failures []engine.TestError
+		var testErr error
+		done := make(chan struct{})
+		go func() {
+			failures, testErr = engine.Test(ctx, archivePath, func(bytes, files int64) {
+				progressBytes.Store(bytes)
+				progressFiles.Store(files)
+			})
+			close(done)
+		}()
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				ui.app.QueueUpdate(func() {
+					ui.cancel = nil
+					ui.extractButton.Enabled.Set(true)
+					ui.testButton.Enabled.Set(true)
+					ui.cancelButton.Enabled.Set(false)
+					cancel()
+					if errors.Is(testErr, context.Canceled) {
+						ui.status.Text.Set("Проверка отменена")
+						return
+					}
+					if testErr != nil {
+						ui.win.Message("Проверка архива", "Ошибка проверки: "+testErr.Error())
+						return
+					}
+					ui.win.Message("Проверка архива", describeTestResults(failures))
+				})
+				return
+			case <-ticker.C:
+				bytes, files := progressBytes.Load(), progressFiles.Load()
+				percent := 0
+				if totalSize > 0 {
+					percent = int(bytes * 100 / totalSize)
+					if percent > 100 {
+						percent = 100
+					}
+				}
+				message := fmt.Sprintf("Проверка: %d%% — файлов: %d", percent, files)
+				ui.app.QueueUpdate(func() { ui.status.Text.Set(message) })
+			}
+		}
+	}()
+}
+
+func describeTestResults(failures []engine.TestError) string {
+	if len(failures) == 0 {
+		return "Ошибок нет"
+	}
+	const limit = 20
+	var lines strings.Builder
+	for i, failure := range failures {
+		if i == limit {
+			fmt.Fprintf(&lines, "\nи ещё %d", len(failures)-limit)
+			break
+		}
+		if i > 0 {
+			lines.WriteByte('\n')
+		}
+		fmt.Fprintf(&lines, "%s: %v", failure.Name, failure.Err)
+	}
+	return lines.String()
 }
 
 func (ui *zipGUI) open(file string) error {

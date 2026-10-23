@@ -2,9 +2,12 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +48,20 @@ func TestDescribe(t *testing.T) {
 		if got := describe("a.zip", tc.s); got != tc.want {
 			t.Errorf("describe(%+v) = %q, want %q", tc.s, got, tc.want)
 		}
+	}
+}
+
+func TestDescribeTestResults(t *testing.T) {
+	if got := describeTestResults(nil); got != "Ошибок нет" {
+		t.Fatalf("describeTestResults(nil) = %q, want no-errors message", got)
+	}
+	failures := make([]engine.TestError, 22)
+	for i := range failures {
+		failures[i] = engine.TestError{Name: fmt.Sprintf("file-%02d", i), Err: errors.New("bad data")}
+	}
+	got := describeTestResults(failures)
+	if strings.Count(got, "bad data") != 20 || !strings.Contains(got, "и ещё 2") || strings.Contains(got, "file-20:") {
+		t.Fatalf("describeTestResults did not cap output at 20 errors: %q", got)
 	}
 }
 
