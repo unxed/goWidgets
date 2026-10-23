@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/unxed/goWidgets v0.0.0-00010101000000-000000000000
-	github.com/unxed/zipper v0.1.180-0.20261022221128-b82116790f77
+	github.com/unxed/zipper v0.1.180-0.20261023064129-b7a45a8cf3f7
 )
 
 require (
