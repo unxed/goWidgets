@@ -1,5 +1,10 @@
 package engine
 
+import (
+	"path/filepath"
+	"strings"
+)
+
 // Format is what zipgui can do with one kind of archive, told by the end of
 // its file name. The table follows zipper/archive: NewArchiver for Write,
 // NewUpdater for Update; docs/zipgui/REFERENCE.md shows the same table.
@@ -9,20 +14,34 @@ type Format struct {
 	Write    bool   // create a new archive
 	Update   bool   // add to and remove from an existing archive in place
 	Password bool   // a password protects what is written, or opens what is read
+	Level    bool   // archive.Options.Level affects this writer
 }
 
 var formats = []Format{
-	{Ext: ".zip", Read: true, Write: true, Update: true, Password: true},
+	{Ext: ".zip", Read: true, Write: true, Update: true, Password: true, Level: true},
 	{Ext: ".tar", Read: true, Write: true, Update: true, Password: true},
-	{Ext: ".tar.gz", Read: true, Write: true, Update: true, Password: true},
-	{Ext: ".tar.xz", Read: true, Write: true, Update: true, Password: true},
-	{Ext: ".tar.zst", Read: true, Write: true, Update: true, Password: true},
+	{Ext: ".tar.gz", Read: true, Write: true, Update: true, Password: true, Level: true},
+	{Ext: ".tar.xz", Read: true, Write: true, Update: true, Password: true, Level: true},
+	{Ext: ".tar.zst", Read: true, Write: true, Update: true, Password: true, Level: true},
 	// The tar package reads bzip2 but has no bzip2 compressor.
 	{Ext: ".tar.bz2", Read: true, Password: true},
 	// zipper's updater refuses the formats it hands to the archives package.
 	{Ext: ".7z", Read: true, Write: true, Password: true},
 	// zipper does not write RAR.
 	{Ext: ".rar", Read: true, Password: true},
+}
+
+// WritableFormat finds the longest writable extension suffix of filename.
+// Longest-first matching keeps .tar.gz/.tar.xz/.tar.zst ahead of .tar.
+func WritableFormat(filename string) (Format, bool) {
+	name := strings.ToLower(filepath.Base(filename))
+	var match Format
+	for _, f := range formats {
+		if f.Write && len(f.Ext) > len(match.Ext) && strings.HasSuffix(name, f.Ext) {
+			match = f
+		}
+	}
+	return match, match.Ext != ""
 }
 
 // Formats returns the archive formats zipgui knows, in the order a format

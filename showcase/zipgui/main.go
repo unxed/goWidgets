@@ -2,8 +2,9 @@
 // github.com/unxed/zipper engine with the UX of a classic single-window
 // archiver (ADR-0019, docs/zipgui/PLAN.md).
 //
-// The window opens an archive (argument or «Открыть…»), lists its root, and
-// navigates directories inside it (docs/zipgui/PLAN.md, steps 4f and 5).
+// The window opens an archive (argument or «Открыть…»), lists its root,
+// navigates directories inside it, and creates archives through «Добавить файл…»
+// (docs/zipgui/PLAN.md, steps 5 and 8a).
 //
 //	go run . [archive]                            # from showcase/zipgui
 //	goWidgets_BACKEND=headless go run . [archive] # no window system
@@ -41,6 +42,25 @@ var archiveFilter = goWidgets.FileFilter{
 	},
 }
 
+var sourceFileFilter = goWidgets.FileFilter{
+	Name:     "Все файлы",
+	Patterns: []string{"*"},
+}
+
+func archiveSaveFilters() []goWidgets.FileFilter {
+	var filters []goWidgets.FileFilter
+	for _, format := range engine.Formats() {
+		if !format.Write {
+			continue
+		}
+		filters = append(filters, goWidgets.FileFilter{
+			Name:     strings.TrimPrefix(format.Ext, "."),
+			Patterns: []string{"*" + format.Ext},
+		})
+	}
+	return filters
+}
+
 func main() {
 	app, err := goWidgets.NewApp()
 	if err != nil {
@@ -67,18 +87,25 @@ func main() {
 }
 
 type zipGUI struct {
-	app           *goWidgets.App
-	win           *goWidgets.Window
-	table         *goWidgets.Table
-	path          *goWidgets.Label
-	status        *goWidgets.Label
-	dest          *goWidgets.Edit
-	mode          *goWidgets.ComboBox
-	extractButton *goWidgets.Button
-	cancelButton  *goWidgets.Button
-	testButton    *goWidgets.Button
+	app                 *goWidgets.App
+	win                 *goWidgets.Window
+	table               *goWidgets.Table
+	path                *goWidgets.Label
+	status              *goWidgets.Label
+	addFile             *goWidgets.Button
+	selectedFiles       *goWidgets.Label
+	archiveName         *goWidgets.Edit
+	chooseArchive       *goWidgets.Button
+	compression         *goWidgets.ComboBox
+	createArchiveButton *goWidgets.Button
+	dest                *goWidgets.Edit
+	mode                *goWidgets.ComboBox
+	extractButton       *goWidgets.Button
+	cancelButton        *goWidgets.Button
+	testButton          *goWidgets.Button
 
 	archivePath string
+	sources     []string
 	entries     []engine.Entry
 	totalSize   int64
 	tree        *listing.Tree
@@ -95,7 +122,37 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	if err != nil {
 		return nil, err
 	}
+	addFile, err := win.AddButton("Добавить файл…")
+	if err != nil {
+		return nil, err
+	}
 	status, err := win.AddLabel(hint)
+	if err != nil {
+		return nil, err
+	}
+	archiveName, err := win.AddEdit("")
+	if err != nil {
+		return nil, err
+	}
+	chooseArchive, err := win.AddButton("Имя архива…")
+	if err != nil {
+		return nil, err
+	}
+	selectedFiles, err := win.AddLabel("Файлов: 0")
+	if err != nil {
+		return nil, err
+	}
+	compressionLabel, err := win.AddLabel("Сжатие:")
+	if err != nil {
+		return nil, err
+	}
+	compression, err := win.AddComboBox([]string{"Быстро", "Обычно", "Максимум"}, true)
+	if err != nil {
+		return nil, err
+	}
+	compression.Select(1)
+	compression.Enabled.Set(false)
+	createArchiveButton, err := win.AddButton("Создать архив")
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +199,8 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 		open.Top().Eq(win.Top().Plus(pad)),
 		testButton.Left().Eq(open.Right().Plus(pad)),
 		testButton.Top().Eq(open.Top()),
+		addFile.Left().Eq(testButton.Right().Plus(pad)),
+		addFile.Top().Eq(open.Top()),
 		status.Left().Eq(open.Left()),
 		status.Top().Eq(open.Bottom().Plus(pad)),
 		status.Right().Eq(win.Right().Minus(pad)),
@@ -150,10 +209,24 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 		table.Left().Eq(pathLabel.Left()),
 		table.Right().Eq(status.Right()),
 		table.Top().Eq(pathLabel.Bottom().Plus(pad)),
-		table.Bottom().Eq(destination.Top().Minus(pad)),
+		table.Bottom().Eq(archiveName.Top().Minus(pad)),
+		archiveName.Left().Eq(table.Left()),
+		archiveName.Right().Eq(chooseArchive.Left().Minus(pad)),
+		archiveName.Top().Eq(table.Bottom().Plus(pad)),
+		chooseArchive.Right().Eq(table.Right()),
+		chooseArchive.Top().Eq(archiveName.Top()),
+		selectedFiles.Left().Eq(table.Left()),
+		selectedFiles.Top().Eq(archiveName.Bottom().Plus(pad)),
+		compressionLabel.Left().Eq(selectedFiles.Right().Plus(pad)),
+		compressionLabel.Top().Eq(selectedFiles.Top()),
+		compression.Left().Eq(compressionLabel.Right().Plus(pad)),
+		compression.Top().Eq(selectedFiles.Top()),
+		createArchiveButton.Left().Eq(compression.Right().Plus(pad)),
+		createArchiveButton.Right().Eq(table.Right()),
+		createArchiveButton.Top().Eq(selectedFiles.Top()),
 		destination.Left().Eq(table.Left()),
 		destination.Right().Eq(browse.Left().Minus(pad)),
-		destination.Top().Eq(table.Bottom().Plus(pad)),
+		destination.Top().Eq(selectedFiles.Bottom().Plus(pad)),
 		browse.Right().Eq(table.Right()),
 		browse.Top().Eq(destination.Top()),
 		mode.Left().Eq(table.Left()),
@@ -169,12 +242,24 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	}
 	open.HugWidth()
 	testButton.HugWidth()
+	addFile.HugWidth()
 	browse.HugWidth()
+	chooseArchive.HugWidth()
+	selectedFiles.HugWidth()
+	compressionLabel.HugWidth()
+	compression.HugWidth()
+	createArchiveButton.HugWidth()
 	mode.HugWidth()
 	extractButton.HugWidth()
 	cancelButton.HugWidth()
 
-	ui := &zipGUI{app: app, win: win, table: table, path: pathLabel, status: status, dest: destination, mode: mode, extractButton: extractButton, cancelButton: cancelButton, testButton: testButton}
+	ui := &zipGUI{
+		app: app, win: win, table: table, path: pathLabel, status: status,
+		addFile: addFile, selectedFiles: selectedFiles, archiveName: archiveName,
+		chooseArchive: chooseArchive, compression: compression, createArchiveButton: createArchiveButton,
+		dest: destination, mode: mode, extractButton: extractButton,
+		cancelButton: cancelButton, testButton: testButton,
+	}
 	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if file, ok := win.OpenFile("Открыть архив", archiveFilter); ok {
 			if err := ui.open(file); err != nil {
@@ -182,6 +267,20 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 			}
 		}
 	})
+	addFile.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if file, ok := win.OpenFile("Добавить файл", sourceFileFilter); ok {
+			ui.addSource(file)
+		}
+	})
+	chooseArchive.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if file, ok := win.SaveFile("Создать архив", "new-archive.zip", archiveSaveFilters()...); ok {
+			archiveName.Text.Set(file)
+		}
+	})
+	archiveName.Text.OnChange(app.Scope(), func(filename, _ string) {
+		ui.updateCompressionAvailability(filename)
+	})
+	createArchiveButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { ui.createArchive() })
 	browse.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if folder, ok := win.SelectFolder("Выберите папку для извлечения", destination.Text.Get()); ok {
 			destination.Text.Set(folder)
@@ -282,6 +381,85 @@ func (ui *zipGUI) testArchive() {
 				ui.app.QueueUpdate(func() { ui.status.Text.Set(message) })
 			}
 		}
+	}()
+}
+
+func (ui *zipGUI) addSource(filename string) {
+	filename, err := filepath.Abs(filename)
+	if err != nil {
+		ui.status.Text.Set("Не удалось выбрать файл: " + err.Error())
+		return
+	}
+	for _, selected := range ui.sources {
+		if selected == filename {
+			ui.status.Text.Set("Этот файл уже выбран")
+			return
+		}
+	}
+	ui.sources = append(ui.sources, filename)
+	ui.selectedFiles.Text.Set(fmt.Sprintf("Файлов: %d", len(ui.sources)))
+	ui.status.Text.Set("Выберите имя архива и нажмите «Создать архив»")
+}
+
+func (ui *zipGUI) updateCompressionAvailability(filename string) {
+	format, ok := engine.WritableFormat(strings.TrimSpace(filename))
+	ui.compression.Enabled.Set(ok && format.Level)
+	if strings.TrimSpace(filename) == "" {
+		return
+	}
+	if ok && !format.Level {
+		ui.status.Text.Set("Для " + format.Ext + " уровень сжатия недоступен; будет использован уровень формата по умолчанию")
+	} else if !ok {
+		ui.status.Text.Set("Выберите расширение поддерживаемого формата архива")
+	}
+}
+
+func (ui *zipGUI) createArchive() {
+	if len(ui.sources) == 0 {
+		ui.status.Text.Set("Сначала добавьте хотя бы один файл")
+		return
+	}
+	destination := strings.TrimSpace(ui.archiveName.Text.Get())
+	format, ok := engine.WritableFormat(destination)
+	if !ok {
+		ui.status.Text.Set("Укажите имя с расширением поддерживаемого формата архива")
+		return
+	}
+	level := 0
+	if format.Level {
+		levels := [...]int{1, 5, 9}
+		index := ui.compression.SelectedIndex()
+		if index < 0 || index >= len(levels) {
+			index = 1
+		}
+		level = levels[index]
+	}
+	sources := append([]string(nil), ui.sources...)
+	ui.addFile.Enabled.Set(false)
+	ui.chooseArchive.Enabled.Set(false)
+	ui.archiveName.Enabled.Set(false)
+	ui.compression.Enabled.Set(false)
+	ui.createArchiveButton.Enabled.Set(false)
+	ui.status.Text.Set("Создаётся архив…")
+	go func() {
+		err := engine.Create(context.Background(), destination, sources, level)
+		ui.app.QueueUpdate(func() {
+			ui.addFile.Enabled.Set(true)
+			ui.chooseArchive.Enabled.Set(true)
+			ui.archiveName.Enabled.Set(true)
+			ui.createArchiveButton.Enabled.Set(true)
+			if err != nil {
+				ui.updateCompressionAvailability(destination)
+				ui.status.Text.Set("Не удалось создать архив: " + err.Error())
+				return
+			}
+			ui.sources = nil
+			ui.selectedFiles.Text.Set("Файлов: 0")
+			ui.archiveName.Text.Set("")
+			if err := ui.open(destination); err != nil {
+				ui.status.Text.Set("Архив создан, но не удалось открыть: " + err.Error())
+			}
+		})
 	}()
 }
 

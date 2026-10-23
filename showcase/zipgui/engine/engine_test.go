@@ -66,6 +66,67 @@ func TestOpenReadsArchivesWrittenByZipper(t *testing.T) {
 	}
 }
 
+func TestCreateArchivesAndListsSelectedFiles(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	source := t.TempDir()
+	first := filepath.Join(source, "first.txt")
+	second := filepath.Join(source, "second.txt")
+	write(t, first, "hello")
+	write(t, second, "world!")
+
+	for _, ext := range []string{".zip", ".7z", ".tar.zst", ".tar.gz", ".tar.xz"} {
+		t.Run(ext, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "created"+ext)
+			format, ok := WritableFormat(out)
+			if !ok {
+				t.Fatalf("WritableFormat(%q) failed", out)
+			}
+			level := 0
+			if format.Level {
+				level = 5
+			}
+			if err := Create(context.Background(), out, []string{first, second}, level); err != nil {
+				t.Fatalf("Create(%s): %v", ext, err)
+			}
+			entries, err := List(context.Background(), out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make(map[string]int64, len(entries))
+			for _, entry := range entries {
+				got[entry.Name] = entry.Size
+			}
+			if len(got) != 2 || got["first.txt"] != 5 || got["second.txt"] != 6 {
+				t.Fatalf("List(%s) = %v, want first.txt (5 bytes) and second.txt (6 bytes)", ext, got)
+			}
+		})
+	}
+}
+
+func TestCreateRejectsUnsupportedCompressionLevel(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "a.txt")
+	write(t, source, "hello")
+	if err := Create(context.Background(), filepath.Join(t.TempDir(), "created.7z"), []string{source}, 5); err == nil {
+		t.Fatal("Create(.7z) accepted a compression level that zipper's 7z writer ignores")
+	}
+}
+
+func TestCreateDoesNotOverwriteASelectedSource(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "source.zip")
+	write(t, destination, "keep this source")
+	if err := Create(context.Background(), destination, []string{destination}, 0); err == nil {
+		t.Fatal("Create accepted the destination as its own source")
+	}
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "keep this source" {
+		t.Fatalf("source was changed: %q", got)
+	}
+}
+
 // TestListReportsZipperMetadata checks the columns of the file list on what
 // zipper writes: a zip names its method and keeps sizes and CRC-32 of each
 // file; a tar.zst only knows the method of the whole stream.
