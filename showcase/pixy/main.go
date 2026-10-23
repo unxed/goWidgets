@@ -448,6 +448,8 @@ func main() {
 	var cropMode, cropSelecting, cropValid bool
 	var redEyeMode bool
 	var cropStart, cropEnd viewport.Point
+	var selectingZoom bool
+	var zoomSelectionStart, zoomSelectionEnd viewport.Point
 	var folder string
 	selectedIndex := -1
 	thumbGrid := thumbnailgrid.Grid{CellWidth: 144, CellHeight: 112, Gap: 10}
@@ -661,6 +663,9 @@ func main() {
 			}
 			if cropMode && cropValid {
 				drawCropOutline(frame.Image, cropStart, cropEnd)
+			}
+			if selectingZoom {
+				drawCropOutline(frame.Image, zoomSelectionStart, zoomSelectionEnd)
 			}
 			if loupeHeld && currentImage != nil {
 				scale := frame.Scale
@@ -1192,6 +1197,17 @@ func main() {
 			if histogramMode {
 				return
 			}
+			if shouldStartZoomSelection(currentImage != nil, cropMode, redEyeMode, mouse) {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				zoomSelectionStart = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+				zoomSelectionEnd = zoomSelectionStart
+				selectingZoom = true
+				canvas.Invalidate()
+				return
+			}
 			if redEyeMode && mouse.Button == goWidgets.MouseLeft && currentImage != nil {
 				scale := win.Scale().Scale
 				if scale <= 0 {
@@ -1255,6 +1271,15 @@ func main() {
 			}
 		})
 		canvas.MouseMove.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
+			if selectingZoom {
+				scale := win.Scale().Scale
+				if scale <= 0 {
+					scale = 1
+				}
+				zoomSelectionEnd = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+				canvas.Invalidate()
+				return
+			}
 			if cropSelecting {
 				scale := win.Scale().Scale
 				if scale <= 0 {
@@ -1287,6 +1312,20 @@ func main() {
 		})
 		canvas.MouseUp.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
 			if mouse.Button == goWidgets.MouseLeft {
+				if selectingZoom {
+					scale := win.Scale().Scale
+					if scale <= 0 {
+						scale = 1
+					}
+					zoomSelectionEnd = viewport.Point{X: mouse.X * scale, Y: mouse.Y * scale}
+					selectingZoom = false
+					if zoomToSelection(&viewState, zoomSelectionStart, zoomSelectionEnd) {
+						invalidateView()
+					} else {
+						canvas.Invalidate()
+					}
+					return
+				}
 				if cropSelecting {
 					scale := win.Scale().Scale
 					if scale <= 0 {
@@ -1458,6 +1497,29 @@ func drawCropOutline(dst *image.RGBA, start, end viewport.Point) {
 			dst.SetRGBA(right, y, c)
 		}
 	}
+}
+
+// zoomToSelection maps a drag rectangle from Canvas coordinates to image
+// coordinates, then zooms it to fit the viewport.
+func zoomToSelection(view *viewport.Viewport, start, end viewport.Point) bool {
+	if view == nil || view.Image.W <= 0 || view.Image.H <= 0 || view.Area.W <= 0 || view.Area.H <= 0 {
+		return false
+	}
+	a, b := view.ImagePoint(start), view.ImagePoint(end)
+	left, right := math.Max(0, math.Min(a.X, b.X)), math.Min(view.Image.W, math.Max(a.X, b.X))
+	top, bottom := math.Max(0, math.Min(a.Y, b.Y)), math.Min(view.Image.H, math.Max(a.Y, b.Y))
+	if right-left < 1 || bottom-top < 1 {
+		return false
+	}
+	center := viewport.Point{X: (start.X + end.X) / 2, Y: (start.Y + end.Y) / 2}
+	factor := math.Min(view.Area.W/(right-left), view.Area.H/(bottom-top)) / view.Transform().Scale
+	view.ZoomAt(center, factor)
+	view.ClampPan()
+	return true
+}
+
+func shouldStartZoomSelection(hasImage, cropMode, redEyeMode bool, mouse goWidgets.MouseInfo) bool {
+	return hasImage && !cropMode && !redEyeMode && mouse.Button == goWidgets.MouseLeft && mouse.Mods&goWidgets.ModControl != 0
 }
 
 func zoomStepFactor(char rune) float64 {
