@@ -231,6 +231,56 @@ func TestMousePanStartsOnlyForLeftButtonWhenImageOverflows(t *testing.T) {
 	}
 }
 
+func TestCtrlDragZoomsSelectedImageRegion(t *testing.T) {
+	view := viewport.New(viewport.Size{W: 400, H: 300}, viewport.Size{W: 200, H: 150})
+	if !zoomToSelection(&view, viewport.Point{X: 50, Y: 40}, viewport.Point{X: 100, Y: 90}) {
+		t.Fatal("zoomToSelection() = false, want a valid drag selection")
+	}
+	if view.Zoom <= 1 {
+		t.Fatalf("selection zoom = %v, want greater than 1", view.Zoom)
+	}
+	transform := view.Transform()
+	if got := transform.Scale * 100; got != 150 {
+		t.Errorf("selected width after zoom = %v, want 150 (viewport height fit)", got)
+	}
+}
+
+func TestCtrlClickDoesNotZoom(t *testing.T) {
+	view := viewport.New(viewport.Size{W: 400, H: 300}, viewport.Size{W: 200, H: 150})
+	if zoomToSelection(&view, viewport.Point{X: 80, Y: 70}, viewport.Point{X: 80, Y: 70}) {
+		t.Fatal("zero-area selection was accepted")
+	}
+	if view.Zoom != 1 {
+		t.Fatalf("zoom after click = %v, want unchanged 1", view.Zoom)
+	}
+}
+
+func TestCtrlDragStartsOnlyInOrdinaryViewerMode(t *testing.T) {
+	controlLeft := goWidgets.MouseInfo{Button: goWidgets.MouseLeft, Mods: goWidgets.ModControl}
+	if !shouldStartZoomSelection(true, false, false, controlLeft) {
+		t.Fatal("Ctrl+left with an image should start selection zoom")
+	}
+	for _, tc := range []struct {
+		name   string
+		image  bool
+		crop   bool
+		redeye bool
+		mouse  goWidgets.MouseInfo
+	}{
+		{name: "without control", image: true, mouse: goWidgets.MouseInfo{Button: goWidgets.MouseLeft}},
+		{name: "right button", image: true, mouse: goWidgets.MouseInfo{Button: goWidgets.MouseRight, Mods: goWidgets.ModControl}},
+		{name: "no image", mouse: controlLeft},
+		{name: "crop mode", image: true, crop: true, mouse: controlLeft},
+		{name: "red eye mode", image: true, redeye: true, mouse: controlLeft},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if shouldStartZoomSelection(tc.image, tc.crop, tc.redeye, tc.mouse) {
+				t.Error("should not start selection zoom")
+			}
+		})
+	}
+}
+
 func TestZoomShortcutsMatchViewerControls(t *testing.T) {
 	for _, tt := range []struct {
 		key  rune
