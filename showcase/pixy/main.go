@@ -1249,7 +1249,9 @@ func main() {
 					canvas.Invalidate()
 					return
 				}
-				dragging, lastPointer = true, mouse
+				if shouldStartMousePan(viewState, mouse) {
+					dragging, lastPointer = true, mouse
+				}
 			}
 		})
 		canvas.MouseMove.On(app.Scope(), func(mouse goWidgets.MouseInfo) {
@@ -1533,6 +1535,10 @@ func panByArrow(view *viewport.Viewport, virtualKeyCode uint16) bool {
 func viewportOverflows(view viewport.Viewport) bool {
 	scale := view.Transform().Scale
 	return scale > 0 && (view.Image.W*scale > view.Area.W || view.Image.H*scale > view.Area.H)
+}
+
+func shouldStartMousePan(view viewport.Viewport, mouse goWidgets.MouseInfo) bool {
+	return mouse.Button == goWidgets.MouseLeft && viewportOverflows(view)
 }
 
 func decodeImage(path string) (image.Image, string, error) {
