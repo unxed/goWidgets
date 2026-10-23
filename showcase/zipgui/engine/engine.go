@@ -8,7 +8,10 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/unxed/zipper/archive"
@@ -87,6 +90,72 @@ func NewExtractor(filename, destination string, include []string, keepOld bool) 
 		return nil, err
 	}
 	return extractor{Extractor: inner}, nil
+}
+
+// Create writes the selected source files to a new archive. Files are stored
+// by their base names; duplicate names are rejected instead of overwriting an
+// entry silently. A zero level leaves zipper's format default in effect.
+func Create(ctx context.Context, destination string, sources []string, level int) error {
+	format, ok := WritableFormat(destination)
+	if !ok {
+		return fmt.Errorf("unsupported archive extension: %s", filepath.Ext(destination))
+	}
+	destination, err := filepath.Abs(destination)
+	if err != nil {
+		return err
+	}
+	if level != 0 && (!format.Level || level < 1 || level > 9) {
+		return fmt.Errorf("compression levels are not supported for %s", format.Ext)
+	}
+	if len(sources) == 0 {
+		return fmt.Errorf("select at least one file to add")
+	}
+
+	files := make(map[string]os.FileInfo, len(sources))
+	pathMapping := make(map[string]string, len(sources))
+	names := make(map[string]bool, len(sources))
+	for _, source := range sources {
+		path, err := filepath.Abs(source)
+		if err != nil {
+			return err
+		}
+		if path == destination {
+			return fmt.Errorf("archive destination is also a selected source file: %s", source)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("not a regular file: %s", source)
+		}
+		name := filepath.Base(path)
+		if names[name] {
+			return fmt.Errorf("two selected files have the same name: %s", name)
+		}
+		names[name] = true
+		files[path] = info
+		pathMapping[path] = name
+	}
+
+	archiver, err := archive.NewArchiver(destination, filepath.Dir(destination), archive.Options{
+		Level:       level,
+		PathMapping: pathMapping,
+	})
+	if err != nil {
+		return err
+	}
+	archiveErr := archiver.Archive(ctx, files)
+	closeErr := archiver.Close()
+	if archiveErr != nil {
+		_ = os.Remove(destination)
+		return archiveErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(destination)
+		return closeErr
+	}
+	return nil
 }
 
 // List returns every entry of the archive at path, directories included, in

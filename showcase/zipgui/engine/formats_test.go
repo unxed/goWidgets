@@ -42,6 +42,28 @@ func TestFormatsTableIsConsistent(t *testing.T) {
 	}
 }
 
+func TestWritableFormatUsesLongestExtension(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want string
+		ok   bool
+	}{
+		{"backup.tar.gz", ".tar.gz", true},
+		{"backup.TAR.XZ", ".tar.xz", true},
+		{"backup.tar.zst", ".tar.zst", true},
+		{"backup.zip", ".zip", true},
+		{"backup.7z", ".7z", true},
+		{"backup.tar.bz2", "", false},
+		{"backup.rar", "", false},
+		{"backup.txt", "", false},
+	} {
+		got, ok := WritableFormat(tc.name)
+		if ok != tc.ok || got.Ext != tc.want {
+			t.Errorf("WritableFormat(%q) = (%+v, %t), want extension %q, ok %t", tc.name, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
 // TestFormatsMatchReference keeps the table of docs/zipgui/REFERENCE.md and
 // Formats() the same.
 func TestFormatsMatchReference(t *testing.T) {
@@ -58,8 +80,8 @@ func TestFormatsMatchReference(t *testing.T) {
 			continue
 		}
 		cells := strings.Split(strings.Trim(line, "|"), "|")
-		if len(cells) != 5 {
-			t.Fatalf("REFERENCE.md: a format row needs 5 cells: %q", line)
+		if len(cells) != 6 {
+			t.Fatalf("REFERENCE.md: a format row needs 6 cells: %q", line)
 		}
 		yes := func(i int) bool {
 			switch v := strings.TrimSpace(cells[i]); v {
@@ -78,6 +100,7 @@ func TestFormatsMatchReference(t *testing.T) {
 			Write:    yes(2),
 			Update:   yes(3),
 			Password: yes(4),
+			Level:    yes(5),
 		})
 	}
 	if err := sc.Err(); err != nil {
