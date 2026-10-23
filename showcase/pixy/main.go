@@ -1512,7 +1512,7 @@ func zoomToSelection(view *viewport.Viewport, start, end viewport.Point) bool {
 		return false
 	}
 	center := viewport.Point{X: (start.X + end.X) / 2, Y: (start.Y + end.Y) / 2}
-	factor := math.Min(view.Area.W/(right-left), view.Area.H/(bottom-top))
+	factor := math.Min(view.Area.W/(right-left), view.Area.H/(bottom-top)) / view.Transform().Scale
 	view.ZoomAt(center, factor)
 	view.ClampPan()
 	return true
