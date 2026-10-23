@@ -45,6 +45,26 @@ type Extractor interface {
 	CurrentFile() string
 }
 
+// TestError identifies an archive member that failed integrity testing.
+type TestError struct {
+	Name string
+	Err  error
+}
+
+// Test reads every file in an archive without extracting it. Progress reports
+// cumulative uncompressed bytes and files tested.
+func Test(ctx context.Context, filename string, progress func(bytes, entries int64)) ([]TestError, error) {
+	failures, err := archive.Test(ctx, filename, archive.Options{}, progress)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]TestError, len(failures))
+	for i, failure := range failures {
+		result[i] = TestError{Name: failure.Name, Err: failure.Err}
+	}
+	return result, nil
+}
+
 type extractor struct {
 	archive.Extractor
 }
