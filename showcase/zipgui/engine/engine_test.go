@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"hash/crc32"
 	"os"
 	"path/filepath"
@@ -119,6 +120,50 @@ func TestListReportsZipperMetadata(t *testing.T) {
 func TestListMissingFile(t *testing.T) {
 	if _, err := List(context.Background(), filepath.Join(t.TempDir(), "absent.zip")); err == nil {
 		t.Fatal("List of a missing archive returned no error")
+	}
+}
+
+func TestExtractZipAnd7z(t *testing.T) {
+	for _, name := range []string{"sample.zip", "sample.7z"} {
+		t.Run(name, func(t *testing.T) {
+			archivePath := packSample(t, name)
+			destination := t.TempDir()
+			extractor, err := NewExtractor(archivePath, destination, nil, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer extractor.Close()
+			if err := extractor.Extract(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			for file, want := range map[string]string{"a.txt": "hello", filepath.Join("sub", "b.txt"): "world!"} {
+				got, err := os.ReadFile(filepath.Join(destination, file))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != want {
+					t.Errorf("%s = %q, want %q", file, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestExtractCanceledBeforeStart(t *testing.T) {
+	archivePath := packSample(t, "sample.zip")
+	destination := t.TempDir()
+	extractor, err := NewExtractor(archivePath, destination, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer extractor.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := extractor.Extract(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Extract error = %v, want context.Canceled", err)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "a.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cancelled extraction wrote a.txt: stat error = %v", err)
 	}
 }
 

@@ -11,10 +11,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/unxed/goWidgets"
 	_ "github.com/unxed/goWidgets/backends/cocoa"
@@ -62,13 +66,22 @@ func main() {
 }
 
 type zipGUI struct {
-	win    *goWidgets.Window
-	table  *goWidgets.Table
-	path   *goWidgets.Label
-	status *goWidgets.Label
+	app           *goWidgets.App
+	win           *goWidgets.Window
+	table         *goWidgets.Table
+	path          *goWidgets.Label
+	status        *goWidgets.Label
+	dest          *goWidgets.Edit
+	mode          *goWidgets.ComboBox
+	extractButton *goWidgets.Button
+	cancelButton  *goWidgets.Button
 
-	tree *listing.Tree
-	nav  listing.Nav
+	archivePath string
+	entries     []engine.Entry
+	totalSize   int64
+	tree        *listing.Tree
+	nav         listing.Nav
+	cancel      context.CancelFunc
 }
 
 func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
@@ -94,6 +107,28 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 	if err != nil {
 		return nil, err
 	}
+	destination, err := win.AddEdit("")
+	if err != nil {
+		return nil, err
+	}
+	browse, err := win.AddButton("Обзор…")
+	if err != nil {
+		return nil, err
+	}
+	mode, err := win.AddComboBox([]string{"Заменять", "Пропускать"}, true)
+	if err != nil {
+		return nil, err
+	}
+	mode.Select(0)
+	extractButton, err := win.AddButton("Извлечь")
+	if err != nil {
+		return nil, err
+	}
+	cancelButton, err := win.AddButton("Отмена")
+	if err != nil {
+		return nil, err
+	}
+	cancelButton.Enabled.Set(false)
 
 	const pad = 8
 	if err := win.Constrain(
@@ -107,18 +142,46 @@ func newZipGUI(app *goWidgets.App, win *goWidgets.Window) (*zipGUI, error) {
 		table.Left().Eq(pathLabel.Left()),
 		table.Right().Eq(status.Right()),
 		table.Top().Eq(pathLabel.Bottom().Plus(pad)),
-		table.Bottom().Eq(win.Bottom().Minus(pad)),
+		table.Bottom().Eq(destination.Top().Minus(pad)),
+		destination.Left().Eq(table.Left()),
+		destination.Right().Eq(browse.Left().Minus(pad)),
+		destination.Top().Eq(table.Bottom().Plus(pad)),
+		browse.Right().Eq(table.Right()),
+		browse.Top().Eq(destination.Top()),
+		mode.Left().Eq(table.Left()),
+		mode.Top().Eq(destination.Bottom().Plus(pad)),
+		extractButton.Left().Eq(mode.Right().Plus(pad)),
+		extractButton.Top().Eq(mode.Top()),
+		cancelButton.Left().Eq(extractButton.Right().Plus(pad)),
+		cancelButton.Right().Eq(table.Right()),
+		cancelButton.Top().Eq(mode.Top()),
+		cancelButton.Bottom().Eq(win.Bottom().Minus(pad)),
 	); err != nil {
 		return nil, err
 	}
 	open.HugWidth()
+	browse.HugWidth()
+	mode.HugWidth()
+	extractButton.HugWidth()
+	cancelButton.HugWidth()
 
-	ui := &zipGUI{win: win, table: table, path: pathLabel, status: status}
+	ui := &zipGUI{app: app, win: win, table: table, path: pathLabel, status: status, dest: destination, mode: mode, extractButton: extractButton, cancelButton: cancelButton}
 	open.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
 		if file, ok := win.OpenFile("Открыть архив", archiveFilter); ok {
 			if err := ui.open(file); err != nil {
 				status.Text.Set(err.Error())
 			}
+		}
+	})
+	browse.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if folder, ok := win.SelectFolder("Выберите папку для извлечения", destination.Text.Get()); ok {
+			destination.Text.Set(folder)
+		}
+	})
+	extractButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) { ui.extract() })
+	cancelButton.Clicked.On(app.Scope(), func(goWidgets.ClickInfo) {
+		if ui.cancel != nil {
+			ui.cancel()
 		}
 	})
 	table.Activated.On(app.Scope(), func(row int) {
@@ -156,11 +219,99 @@ func (ui *zipGUI) open(file string) error {
 		return fmt.Errorf("Не удалось открыть %s: %w", filepath.Base(file), err)
 	}
 	ui.tree = listing.NewTree(entries)
+	ui.archivePath = file
+	ui.entries = entries
+	ui.totalSize = 0
+	for _, entry := range entries {
+		if !entry.IsDir {
+			ui.totalSize += entry.Size
+		}
+	}
 	ui.nav = listing.Nav{}
 	ui.win.Title.Set("zipgui — " + filepath.Base(file))
 	ui.status.Text.Set(describe(filepath.Base(file), engine.SummaryOf(entries)))
 	ui.render()
 	return nil
+}
+
+func (ui *zipGUI) extract() {
+	if ui.archivePath == "" || ui.tree == nil {
+		ui.status.Text.Set("Сначала откройте архив")
+		return
+	}
+	destination := strings.TrimSpace(ui.dest.Text.Get())
+	if destination == "" {
+		ui.status.Text.Set("Укажите папку для извлечения")
+		return
+	}
+	var include []string
+	selected := ui.table.SelectedIndex()
+	visible := ui.visible()
+	if selected >= 0 && selected < len(visible) && visible[selected].Name != ".." {
+		name := visible[selected].Name
+		if dir := strings.TrimPrefix(ui.nav.Path(), "/"); dir != "" {
+			name = path.Join(dir, name)
+		}
+		include = []string{name}
+	}
+	keepOld := ui.mode.SelectedIndex() == 1
+	progressTotal := ui.totalSize
+	if len(include) > 0 {
+		progressTotal = 0
+		for _, entry := range ui.entries {
+			name := strings.Trim(entry.Name, "/")
+			if !entry.IsDir && (name == include[0] || strings.HasPrefix(name, include[0]+"/")) {
+				progressTotal += entry.Size
+			}
+		}
+	}
+	extractor, err := engine.NewExtractor(ui.archivePath, destination, include, keepOld)
+	if err != nil {
+		ui.status.Text.Set(err.Error())
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ui.cancel = cancel
+	ui.extractButton.Enabled.Set(false)
+	ui.cancelButton.Enabled.Set(true)
+	go func() {
+		defer extractor.Close()
+		done := make(chan error, 1)
+		go func() { done <- extractor.Extract(ctx) }()
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case err := <-done:
+				ui.app.QueueUpdate(func() {
+					ui.cancel = nil
+					ui.extractButton.Enabled.Set(true)
+					ui.cancelButton.Enabled.Set(false)
+					cancel()
+					if errors.Is(err, context.Canceled) {
+						ui.status.Text.Set("Извлечение отменено")
+					} else if err != nil {
+						ui.status.Text.Set("Ошибка извлечения: " + err.Error())
+					} else {
+						ui.status.Text.Set("Извлечение завершено")
+					}
+				})
+				return
+			case <-ticker.C:
+				written, _ := extractor.Written()
+				current := extractor.CurrentFile()
+				percent := 0
+				if progressTotal > 0 {
+					percent = int(written * 100 / progressTotal)
+					if percent > 100 {
+						percent = 100
+					}
+				}
+				message := fmt.Sprintf("%d%% — %s", percent, current)
+				ui.app.QueueUpdate(func() { ui.status.Text.Set(message) })
+			}
+		}
+	}()
 }
 
 func (ui *zipGUI) visible() []engine.Entry {

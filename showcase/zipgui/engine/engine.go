@@ -36,6 +36,39 @@ type Entry struct {
 	IsDir     bool      // a directory, stored or implied
 }
 
+// Extractor exposes an in-progress extraction without leaking zipper into the
+// window package.
+type Extractor interface {
+	Extract(context.Context) error
+	Close() error
+	Written() (bytes, entries int64)
+	CurrentFile() string
+}
+
+type extractor struct {
+	archive.Extractor
+}
+
+func (e extractor) CurrentFile() string {
+	if current, ok := e.Extractor.(archive.CurrentFiler); ok {
+		return current.CurrentFile()
+	}
+	return ""
+}
+
+// NewExtractor starts extracting archive paths into destination. An empty
+// include list means all entries; keepOld skips existing destination files.
+func NewExtractor(filename, destination string, include []string, keepOld bool) (Extractor, error) {
+	inner, err := archive.NewExtractor(filename, destination, archive.Options{
+		Include:      include,
+		KeepOldFiles: keepOld,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return extractor{Extractor: inner}, nil
+}
+
 // List returns every entry of the archive at path, directories included, in
 // lexical order within each directory (zipper archive.List, unxed/zipper#35 Z1).
 func List(ctx context.Context, path string) ([]Entry, error) {
