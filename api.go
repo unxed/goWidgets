@@ -633,6 +633,18 @@ func (t *Table) SetRows(rows [][]string) {
 	}
 }
 
+// SetPrefHeight fixes the table's height in DIP, overriding the height measured
+// from its rows (the same choice AddTextView takes). Without it a table with
+// few rows collapses to a few pixels in a window with other widgets. A value of
+// zero or less restores the measured height. Drivers that show the table as a
+// list accept the value too.
+func (t *Table) SetPrefHeight(h float64) {
+	if h < 0 {
+		h = 0
+	}
+	t.app.eng.SetPrefHeight(t.node, h)
+}
+
 // Rows returns a copy of the table contents.
 func (t *Table) Rows() [][]string { return cloneRows(t.rows) }
 
