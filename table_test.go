@@ -2,6 +2,7 @@ package goWidgets_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/unxed/goWidgets"
@@ -192,4 +193,37 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// A table's height is a choice, like a text view's: with SetPrefHeight it takes
+// that height in the layout and the widget below it is placed under it, instead
+// of the table collapsing to the height of its few rows.
+func TestTableTakesItsChosenHeight(t *testing.T) {
+	app := newHeadlessApp(t)
+	win, err := app.NewWindow("table", 400, 600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := win.AddTable([]goWidgets.TableColumn{{Title: "Name"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	table.SetRows([][]string{{"a.txt"}, {"b.txt"}})
+	table.SetPrefHeight(200)
+	if _, err := win.AddEdit("below"); err != nil {
+		t.Fatal(err)
+	}
+	pumpUntilIdle(t, app)
+
+	log := headless.Golden()
+	if !strings.Contains(log, "h=200.0") {
+		t.Errorf("table did not take its chosen height:\n%s", log)
+	}
+
+	table.SetPrefHeight(-5) // not an error: back to the measured height
+	pumpUntilIdle(t, app)
+	// The golden log only grows: look at what the second layout added.
+	if again := strings.TrimPrefix(headless.Golden(), log); !strings.Contains(again, "Table(") || strings.Contains(again, "h=200.0") {
+		t.Errorf("table kept the chosen height after it was cleared:\n%s", again)
+	}
 }
