@@ -222,7 +222,8 @@ func TestTableTakesItsChosenHeight(t *testing.T) {
 
 	table.SetPrefHeight(-5) // not an error: back to the measured height
 	pumpUntilIdle(t, app)
-	if strings.Contains(headless.Golden(), "h=200.0") {
-		t.Errorf("table kept the chosen height after it was cleared:\n%s", headless.Golden())
+	// The golden log only grows: look at what the second layout added.
+	if again := strings.TrimPrefix(headless.Golden(), log); !strings.Contains(again, "Table(") || strings.Contains(again, "h=200.0") {
+		t.Errorf("table kept the chosen height after it was cleared:\n%s", again)
 	}
 }
